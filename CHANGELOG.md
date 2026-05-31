@@ -1,5 +1,36 @@
 # Changelog / История изменений / Registro de cambios
 
+## [3.2.0] — 2026-05-31
+
+### Added / Добавлено / Añadido
+- **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine via Steam
+- Linux memory reader (`memory_reader_linux.py`) — reads WoW process memory via `/proc/<pid>/mem` and `os.pread()` with full 64-bit address support (Wine/Proton allocates above 4GB)
+- Linux hotkeys (`hotkeys_linux.py`) — global hotkeys via `pynput` with graceful fallback on pure Wayland
+- Platform dispatcher modules — `memory_reader.py` and `hotkeys.py` now auto-select the correct implementation based on `sys.platform`
+- `config.py`: Linux WoW path detection (`~/.steam/`, `/run/media/`) alongside Windows registry detection
+- `main.py`, `overlay.py`: all Windows-only calls (`ctypes.windll`, `X11BypassWindowManagerHint`) guarded by `sys.platform` checks
+- `overlay.py`: `X11BypassWindowManagerHint` flag on Linux for always-on-top and free `move()` via XWayland
+- `requirements.txt`: `pymem` is now Windows-only; `pynput` added for Linux
+- `build.spec`: excludes Linux modules from Windows `.exe` build
+
+### Notes / Примечания / Notas
+- Linux requires `ptrace_scope=0`: `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`
+- Run with `QT_QPA_PLATFORM=xcb` for overlay always-on-top and dragging on Wayland
+- Enable companion in WoW once: `/run BabelChatDB.companion = {enabled = true}`
+- Message latency on Linux is ~5–10s higher than Windows due to Lua GC buffer relocation; this is a known limitation of the `/proc/mem` approach
+
+— **Поддержка Linux/Proton** — приложение-компаньон теперь работает на Linux (CachyOS, Arch, Ubuntu и др.) с WoW под Proton/Wine через Steam
+— Linux memory reader — читает память WoW через `/proc/<pid>/mem` и `os.pread()` с полной поддержкой 64-bit адресов
+— Linux hotkeys — глобальные клавиши через `pynput` с автозаменой при чистом Wayland
+— Диспетчеры платформ — `memory_reader.py` и `hotkeys.py` автоматически выбирают реализацию по `sys.platform`
+— Требуется `ptrace_scope=0`; запуск с `QT_QPA_PLATFORM=xcb`; один раз в WoW: `/run BabelChatDB.companion = {enabled = true}`
+
+— **Soporte Linux/Proton** — la app acompañante ahora funciona en Linux (CachyOS, Arch, Ubuntu, etc.) con WoW bajo Proton/Wine via Steam
+— Linux memory reader — lee memoria de WoW via `/proc/<pid>/mem` y `os.pread()` con soporte completo de direcciones de 64 bits
+— Linux hotkeys — teclas globales via `pynput` con fallback automático en Wayland puro
+— Módulos despachadores de plataforma — `memory_reader.py` y `hotkeys.py` seleccionan automáticamente la implementación según `sys.platform`
+— Requiere `ptrace_scope=0`; ejecutar con `QT_QPA_PLATFORM=xcb`; una vez en WoW: `/run BabelChatDB.companion = {enabled = true}`
+
 ## [3.1.1] — 2026-03-25
 
 ### Changed / Изменено / Cambiado
