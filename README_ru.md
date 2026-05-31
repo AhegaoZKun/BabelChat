@@ -1,36 +1,19 @@
-<p align="center">
-  <img src="assets/icon.png" alt="BabelChat" width="80" />
-</p>
+![BabelChat](https://github.com/Yumash/BabelChat/raw/main/assets/icon.png)
 
-<h1 align="center">BabelChat</h1>
+# BabelChat
 
-<p align="center">
-  <b>Ломаем языковой барьер в World of Warcraft</b><br>
-  Переводчик чата в реальном времени — приложение-компаньон + аддон WoW
-</p>
+**Ломаем языковой барьер в World of Warcraft**  
+Переводчик чата в реальном времени — приложение-компаньон + аддон WoW
 
-<p align="center">
-  <a href="README.md">English version</a> |
-  <a href="README_es.md">Versión en español</a>
-</p>
+[English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Versión en español](https://github.com/Yumash/BabelChat/blob/main/README_es.md)
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" /></a>
-  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python" /></a>
-  <a href="https://github.com/Yumash/BabelChat/releases"><img src="https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases" alt="Release" /></a>
-</p>
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
 
-<p align="center">
-  <a href="https://buymeacoffee.com/franciscorb"><img src="https://img.shields.io/badge/Pirson_(Словарь)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white" alt="Buy Me a Coffee" /></a>
-  &nbsp;
-  <a href="https://yumatech.ru/donate/"><img src="https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white" alt="Donate" /></a>
-</p>
+[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Словарь)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
 ---
 
-<p align="center">
-  <img src="assets/demo.webp" alt="BabelChat Демо" width="700" />
-</p>
+![BabelChat Демо](https://github.com/Yumash/BabelChat/raw/main/assets/demo.webp)
 
 ## Проблема
 
@@ -67,7 +50,7 @@ BabelChat переводит чат WoW **в реальном времени**. 
 - **DeepL Free API** — 500 000 символов/месяц бесплатно (~10К сообщений)
 - **Кэш переводов** — потокобезопасный SQLite + LRU, одно и то же не переводится дважды
 - **Горячие клавиши** — переключай перевод, не выходя из игры
-- **Установка аддона в один клик** — мастер настройки всё сделает
+- **Кроссплатформенность** — поддерживаются Windows и Linux (через Proton/Wine)
 
 ## Почему перевод занимает 0.5–2 секунды?
 
@@ -99,10 +82,12 @@ BabelChat использует **progressive rendering** (стриминг):
 │  ├── Кольцевой буфер (50 сообщений)                     │
 │  └── Пишет в BabelChatDB.wctbuf (Lua SavedVariable)     │
 └──────────┬───────────────────────────────────────────────┘
-           │  ReadProcessMemory (каждые 250мс)
+           │  Чтение памяти (каждые 250мс)
+           │  Windows: ReadProcessMemory (pymem)
+           │  Linux:   /proc/<pid>/mem + os.pread
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│  Приложение-компаньон (Python, от админа)                │
+│  Приложение-компаньон (Python)                           │
 │                                                          │
 │  Memory Reader ──→ Парсер ──→ Детектор языка             │
 │       │                           │                      │
@@ -120,9 +105,7 @@ Lua-песочница WoW **не может делать HTTP-запросы**.
 
 BabelChat только **читает** память — никогда не пишет, не инъектирует, не автоматизирует. Warden (античит WoW) не реагирует на чтение.
 
-> **Почему не просто читать WoWChatLog.txt?** Мы пробовали. WoW буферизирует чат-лог с буфером ~4КБ и сбрасывает непредсказуемо — задержки от 1 до 5+ минут. Сообщения приходят пачками в случайном порядке, не в реальном времени. Для переводчика это бесполезно. Наш аддон пишет в Lua-строку в памяти, а компаньон читает через ReadProcessMemory каждые 250мс — задержка менее секунды.
->
-> Для сравнения: **WeakAuras Companion** читает SavedVariables с диска (задержка минуты, нужен `/reload`). **WarcraftLogs** тейлит combat log (быстро для боевых событий, но недоступно для чата). **Ни одно существующее приложение не читает чат в реальном времени** — подход BabelChat с чтением памяти уникален.
+> **Почему не просто читать WoWChatLog.txt?** Мы пробовали. WoW буферизирует чат-лог с буфером ~4КБ и сбрасывает непредсказуемо — задержки от 1 до 5+ минут. Наш аддон пишет в Lua-строку в памяти, а компаньон читает её каждые 250мс — задержка менее секунды.
 
 ## Обновление с ChatTranslatorHelper
 
@@ -130,14 +113,42 @@ BabelChat только **читает** память — никогда не п�
 
 ## Установка
 
-### Быстрый старт
+### Windows — Быстрый старт
 
 1. Скачай `BabelChat.zip` из [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Распакуй и запусти `BabelChat.exe` **от имени Администратора**
 3. Следуй мастеру настройки (получи [бесплатный ключ DeepL](https://www.deepl.com/pro-api), укажи путь к WoW, установи аддон)
 4. Запусти WoW, зайди в группу — переводы появятся автоматически
 
-### Из исходников
+### Linux (Proton/Wine) — Быстрый старт
+
+1. Включи ptrace для чтения памяти:
+   ```bash
+   echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+   # Для сохранения после перезагрузки:
+   echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-ptrace.conf
+   ```
+2. Клонируй и установи зависимости:
+   ```bash
+   git clone https://github.com/Yumash/BabelChat.git
+   cd BabelChat
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. Включи компаньон в WoW (один раз):
+   ```
+   /run BabelChatDB.companion = {enabled = true}
+   ```
+4. Запусти приложение-компаньон:
+   ```bash
+   QT_QPA_PLATFORM=xcb python -m app.main
+   ```
+5. Установи аддон WoW вручную (см. ниже) и запусти WoW через Proton/Steam
+
+> **Примечание:** На Linux оверлей требует `QT_QPA_PLATFORM=xcb` (XWayland) для корректной работы поверх других окон и перемещения на Wayland-композиторах.
+
+### Из исходников (Windows)
 
 ```bash
 git clone https://github.com/Yumash/BabelChat.git
@@ -154,19 +165,19 @@ python -m app.main  # запуск от Администратора
 
 BabelChat включает словарь **314 игровых терминов** на **14 языках**, по категориям:
 
-| Категория | Примеры | Кол-во |
-|-----------|---------|--------|
-| Социальные | ty, thx, np, gj, lol, gg, brb, omw | 71 |
-| Классы и спеки | warrior, dk, ret, bm, disc, resto | 59 |
-| Рейд и данж | trash, wipe, nerf, ninja, boe, cd | 54 |
-| Бой | aggro, aoe, cc, dps, heal, tank, dot | 33 |
-| Группы | lfm, lf1m, lf2m, premade | 29 |
-| Статы | hp, mana, crit, haste, mastery | 19 |
-| Профессии | jc, bs, enchant, herb, alch, tailor | 17 |
-| Статус | afk, oom, brb, omw | 11 |
-| Торговля | wtb, wts, wtt, cod, mats, bis | 8 |
-| Роли | tank, healer, dps | 7 |
-| Гильдия | gm, officer, recruit, gbank | 5 |
+| Категория      | Примеры                              | Кол-во |
+| -------------- | ------------------------------------ | ------ |
+| Социальные     | ty, thx, np, gj, lol, gg, brb, omw   | 71     |
+| Классы и спеки | warrior, dk, ret, bm, disc, resto    | 59     |
+| Рейд и данж    | trash, wipe, nerf, ninja, boe, cd    | 54     |
+| Бой            | aggro, aoe, cc, dps, heal, tank, dot | 33     |
+| Группы         | lfm, lf1m, lf2m, premade             | 29     |
+| Статы          | hp, mana, crit, haste, mastery       | 19     |
+| Профессии      | jc, bs, enchant, herb, alch, tailor  | 17     |
+| Статус         | afk, oom, brb, omw                   | 11     |
+| Торговля       | wtb, wts, wtt, cod, mats, bis        | 8      |
+| Роли           | tank, healer, dps                    | 7      |
+| Гильдия        | gm, officer, recruit, gbank          | 5      |
 
 Словарные переводы показываются как аннотация под оригиналом — чат остаётся читаемым.
 
@@ -187,18 +198,19 @@ BabelChat включает словарь **314 игровых терминов*
 
 ## Соответствие ToS Blizzard
 
-| Аспект | Статус |
-|--------|--------|
-| Чтение памяти | Только чтение. Без записи, без инъекций. Warden не реагирует |
-| Оверлей поверх игры | Разрешено. Как Discord Overlay |
-| Addon API | Стандартные хуки CHAT_MSG_*. Используются всеми чат-аддонами |
-| Нет инъекций | Нет DLL injection, нет hooking, нет записи в память WoW |
-| Нет автоматизации | Исходящий перевод через буфер обмена (ручная вставка Ctrl+V) |
+| Аспект              | Статус                                                          |
+| ------------------- | --------------------------------------------------------------- |
+| Чтение памяти       | Только чтение. Без записи, без инъекций. Warden не реагирует    |
+| Оверлей поверх игры | Разрешено. Как Discord Overlay                                  |
+| Addon API           | Стандартные хуки CHAT\_MSG\_\*. Используются всеми чат-аддонами |
+| Нет инъекций        | Нет DLL injection, нет hooking, нет записи в память WoW         |
+| Нет автоматизации   | Исходящий перевод через буфер обмена (ручная вставка Ctrl+V)    |
 
 ## Ограничения
 
-- **Только Windows** — ReadProcessMemory это Windows API
-- **Нужны права Администратора** — для чтения памяти
+- **Требуется расширенный доступ к памяти** — права Администратора на Windows; `ptrace_scope=0` на Linux
+- **Linux: задержка релокации ~5–10с** — при перемещении буфера сборщиком мусора Lua сканеру требуется время на поиск нового адреса
+- **Linux: оверлей требует XWayland** — запуск с `QT_QPA_PLATFORM=xcb`; чистый Wayland без XWayland не поддерживается
 - **Лимит DeepL Free** — 500К символов/месяц (~10К сообщений). Есть платные планы
 - **Исходящие сообщения** — копируй → вставляй в чат WoW (осознанно, для соответствия ToS)
 
@@ -206,15 +218,15 @@ BabelChat включает словарь **314 игровых терминов*
 
 Проект создан двумя авторами:
 
-| Компонент | Автор | Поддержать |
-|-----------|-------|------------|
-| **Словарь WoW** — 314 терминов на 14 языках, идея внутриигрового перевода | **Pirson** | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
-| **Приложение-компаньон** — оверлей, перевод DeepL, чтение памяти, стриминг | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/) |
+| Компонент                                                                  | Автор               | Поддержать                                              |
+| -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------- |
+| **Словарь WoW** — 314 терминов на 14 языках, идея внутриигрового перевода  | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
+| **Приложение-компаньон** — оверлей, перевод DeepL, чтение памяти, стриминг | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/)                   |
 
 ## Документация
 
-- **[Руководство пользователя](docs/user/README_ru.md)** — быстрый старт, настройка, FAQ
-- **[Техническая документация](docs/tech/README.md)** — архитектура, memory reader, pipeline, аддон (EN)
+- **[Руководство пользователя](https://github.com/Yumash/BabelChat/blob/main/docs/user/README_ru.md)** — быстрый старт, настройка, FAQ
+- **[Техническая документация](https://github.com/Yumash/BabelChat/blob/main/docs/tech/README.md)** — архитектура, memory reader, pipeline, аддон (EN)
 
 ## Благодарности
 
@@ -228,4 +240,4 @@ BabelChat включает словарь **314 игровых терминов*
 
 ## Лицензия
 
-[MIT License](LICENSE)
+[MIT License](https://github.com/Yumash/BabelChat/blob/main/LICENSE)

@@ -1,36 +1,19 @@
-<p align="center">
-  <img src="assets/icon.png" alt="BabelChat" width="80" />
-</p>
+![BabelChat](https://github.com/Yumash/BabelChat/raw/main/assets/icon.png)
 
-<h1 align="center">BabelChat</h1>
+# BabelChat
 
-<p align="center">
-  <b>Rompe la barrera del idioma en World of Warcraft</b><br>
-  Traducción de chat en tiempo real — app acompañante + addon de WoW
-</p>
+**Rompe la barrera del idioma en World of Warcraft**  
+Traducción de chat en tiempo real — app acompañante + addon de WoW
 
-<p align="center">
-  <a href="README.md">English version</a> |
-  <a href="README_ru.md">Русская версия</a>
-</p>
+[English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Русская версия](https://github.com/Yumash/BabelChat/blob/main/README_ru.md)
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" /></a>
-  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python" /></a>
-  <a href="https://github.com/Yumash/BabelChat/releases"><img src="https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases" alt="Release" /></a>
-</p>
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
 
-<p align="center">
-  <a href="https://buymeacoffee.com/franciscorb"><img src="https://img.shields.io/badge/Pirson_(Diccionario)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white" alt="Buy Me a Coffee" /></a>
-  &nbsp;
-  <a href="https://yumatech.ru/donate/"><img src="https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white" alt="Donate" /></a>
-</p>
+[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Diccionario)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
 ---
 
-<p align="center">
-  <img src="assets/demo.webp" alt="BabelChat Demo" width="700" />
-</p>
+![BabelChat Demo](https://github.com/Yumash/BabelChat/raw/main/assets/demo.webp)
 
 ## El Problema
 
@@ -59,15 +42,15 @@ Frases comunes como "gg", "ty", "ready?", "pull" se traducen al instante desde u
 - **Traducción streaming** — el original aparece al instante, la traducción sigue 0.5–2s después
 - **Detección automática de idioma** — offline, ~1ms por mensaje (lingua-py)
 - **22 idiomas** — EN, RU, DE, FR, ES, IT, PT, PL, NL, SV, DA, FI, CS, RO, HU, BG, EL, TR, UK, JA, KO, ZH
-- **Overlay inteligente** — tema oscuro WoW, colores de canal, transparente al clic
-- **Traducción bidireccional** — traduce chat entrante Y compone mensajes salientes
+- **Overlay inteligente** — tema oscuro WoW, colores de canal, transparente al clic, arrastrable
+- **Traducción bidireccional** — traduce chat entrante Y compone mensajes salientes en cualquier idioma
 - **Frasario integrado** — 45 frases + 30 abreviaturas gaming sin API
 - **Glosario WoW** — 314 términos gaming (lfm, wts, dps, tank, etc.) en 14 idiomas
 - **Filtros de canal** — Grupo, Banda, Hermandad, Decir/Gritar, Susurro, Mazmorra
 - **API DeepL gratuita** — 500.000 caracteres/mes gratis (~10K mensajes)
-- **Caché de traducciones** — SQLite thread-safe + LRU
+- **Caché de traducciones** — SQLite thread-safe + LRU, el mismo texto nunca se traduce dos veces
 - **Teclas de acceso rápido** — activa/desactiva sin salir del juego
-- **Instalación del addon en un clic**
+- **Multiplataforma** — compatible con Windows y Linux (via Proton/Wine)
 
 ## ¿Por qué la traducción tarda 0.5–2 segundos?
 
@@ -80,7 +63,7 @@ La demora viene del round-trip a los servidores de DeepL — tu texto viaja, se 
 
 **Instantáneo (sin demora):**
 - Abreviaturas gaming: `gg`, `ty`, `brb`, `afk`, `wp`, `lol` — del frasario
-- Frases comunes: "hello", "thanks", "ready?" — del frasario
+- Frases comunes: "hello", "thanks", "ready?", "good game" — del frasario
 - Mensajes repetidos — del caché
 - Mensajes en tu propio idioma — se muestran sin traducción
 
@@ -99,10 +82,12 @@ La demora viene del round-trip a los servidores de DeepL — tu texto viaja, se 
 │  ├── Buffer circular (50 mensajes)                       │
 │  └── Escribe en BabelChatDB.wctbuf (Lua SavedVariable)  │
 └──────────┬───────────────────────────────────────────────┘
-           │  ReadProcessMemory (cada 250ms)
+           │  Lectura de memoria (cada 250ms)
+           │  Windows: ReadProcessMemory (pymem)
+           │  Linux:   /proc/<pid>/mem + os.pread
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│  App acompañante (Python, como admin)                    │
+│  App acompañante (Python)                                │
 │                                                          │
 │  Memory Reader ──→ Parser ──→ Detector de idioma         │
 │       │                           │                      │
@@ -120,9 +105,7 @@ El sandbox Lua de WoW **no puede hacer peticiones HTTP**. El addon captura el ch
 
 BabelChat solo **lee** memoria — nunca escribe, inyecta ni automatiza nada. Warden (anti-cheat de WoW) no detecta acceso de solo lectura.
 
-> **¿Por qué no leer WoWChatLog.txt?** Lo intentamos. WoW almacena el log de chat con un buffer de ~4KB y lo vacía de forma impredecible — retrasos de 1 a 5+ minutos. Los mensajes llegan en ráfagas desordenadas, no en tiempo real. Para un traductor, es inútil. Nuestro addon escribe en una cadena Lua en memoria, y la app la lee via ReadProcessMemory cada 250ms — latencia inferior a un segundo.
->
-> Para comparar: **WeakAuras Companion** lee archivos SavedVariables del disco (minutos de retraso, necesita `/reload`). **WarcraftLogs** lee el combat log (rápido para eventos de combate, pero no disponible para chat). **Ninguna app existente lee el chat en tiempo real** — el enfoque de lectura de memoria de BabelChat es único.
+> **¿Por qué no leer WoWChatLog.txt?** Lo intentamos. WoW almacena el log de chat con un buffer de ~4KB y lo vacía de forma impredecible — retrasos de 1 a 5+ minutos. Nuestro addon escribe en una cadena Lua en memoria, y la app la lee cada 250ms — latencia inferior a un segundo.
 
 ## Actualización desde ChatTranslatorHelper
 
@@ -130,14 +113,42 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 
 ## Instalación
 
-### Inicio rápido
+### Windows — Inicio rápido
 
 1. Descarga `BabelChat.zip` de [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Extrae y ejecuta `BabelChat.exe` **como Administrador**
 3. Sigue el asistente (obtén una [clave API gratuita de DeepL](https://www.deepl.com/pro-api), configura la ruta de WoW, instala el addon)
 4. Abre WoW, entra a un grupo — las traducciones aparecerán automáticamente
 
-### Desde el código fuente
+### Linux (Proton/Wine) — Inicio rápido
+
+1. Habilita ptrace para la lectura de memoria:
+   ```bash
+   echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+   # Para que persista tras reinicios:
+   echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-ptrace.conf
+   ```
+2. Clona e instala las dependencias:
+   ```bash
+   git clone https://github.com/Yumash/BabelChat.git
+   cd BabelChat
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. Activa el acompañante en WoW (una sola vez):
+   ```
+   /run BabelChatDB.companion = {enabled = true}
+   ```
+4. Ejecuta la app acompañante:
+   ```bash
+   QT_QPA_PLATFORM=xcb python -m app.main
+   ```
+5. Instala el addon de WoW manualmente (ver abajo) y lanza WoW via Proton/Steam
+
+> **Nota:** En Linux, el overlay requiere `QT_QPA_PLATFORM=xcb` (XWayland) para que el modo siempre-encima y el arrastre funcionen correctamente en compositores Wayland.
+
+### Desde el código fuente (Windows)
 
 ```bash
 git clone https://github.com/Yumash/BabelChat.git
@@ -154,19 +165,19 @@ Copia `addon/BabelChat/` a `World of Warcraft/_retail_/Interface/AddOns/BabelCha
 
 BabelChat incluye un diccionario de **314 términos gaming** en **14 idiomas**:
 
-| Categoría | Ejemplos | Cantidad |
-|-----------|----------|----------|
-| Social | ty, thx, np, gj, lol, gg, brb, omw | 71 |
-| Clases y specs | warrior, dk, ret, bm, disc, resto | 59 |
-| Banda y mazmorra | trash, wipe, nerf, ninja, boe, cd | 54 |
-| Combate | aggro, aoe, cc, dps, heal, tank, dot | 33 |
-| Grupos | lfm, lf1m, lf2m, premade | 29 |
-| Estadísticas | hp, mana, crit, haste, mastery | 19 |
-| Profesiones | jc, bs, enchant, herb, alch, tailor | 17 |
-| Estado | afk, oom, brb, omw | 11 |
-| Comercio | wtb, wts, wtt, cod, mats, bis | 8 |
-| Roles | tank, healer, dps | 7 |
-| Hermandad | gm, officer, recruit, gbank | 5 |
+| Categoría        | Ejemplos                              | Cantidad |
+| ---------------- | ------------------------------------- | -------- |
+| Social           | ty, thx, np, gj, lol, gg, brb, omw   | 71       |
+| Clases y specs   | warrior, dk, ret, bm, disc, resto     | 59       |
+| Banda y mazmorra | trash, wipe, nerf, ninja, boe, cd     | 54       |
+| Combate          | aggro, aoe, cc, dps, heal, tank, dot  | 33       |
+| Grupos           | lfm, lf1m, lf2m, premade              | 29       |
+| Estadísticas     | hp, mana, crit, haste, mastery        | 19       |
+| Profesiones      | jc, bs, enchant, herb, alch, tailor   | 17       |
+| Estado           | afk, oom, brb, omw                    | 11       |
+| Comercio         | wtb, wts, wtt, cod, mats, bis         | 8        |
+| Roles            | tank, healer, dps                     | 7        |
+| Hermandad        | gm, officer, recruit, gbank           | 5        |
 
 ### Contribuir términos
 
@@ -177,24 +188,27 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
     enUS = "English translation",
     esES = "Traducción española",
     ruRU = "Русский перевод",
+    deDE = "Deutsche Übersetzung",
+    frFR = "Traduction française",
     -- ... (14 idiomas)
 },
 ```
 
 ## Cumplimiento con ToS de Blizzard
 
-| Aspecto | Estado |
-|---------|--------|
+| Aspecto            | Estado                                                           |
+| ------------------ | ---------------------------------------------------------------- |
 | Lectura de memoria | Solo lectura. Sin escritura, sin inyección. Warden no lo detecta |
-| Overlay | Permitido. Como Discord Overlay |
-| API del addon | Hooks estándar CHAT_MSG_*. Usado por todos los addons de chat |
-| Sin inyección | Sin DLL injection, sin hooking, sin escritura en memoria de WoW |
-| Sin automatización | Traducción saliente via portapapeles (pegado manual Ctrl+V) |
+| Overlay            | Permitido. Como Discord Overlay                                  |
+| API del addon      | Hooks estándar CHAT\_MSG\_\*. Usado por todos los addons de chat |
+| Sin inyección      | Sin DLL injection, sin hooking, sin escritura en memoria de WoW  |
+| Sin automatización | Traducción saliente via portapapeles (pegado manual Ctrl+V)      |
 
 ## Limitaciones
 
-- **Solo Windows** — ReadProcessMemory es una API de Windows
-- **Requiere Administrador** — la lectura de memoria necesita privilegios elevados
+- **Requiere acceso elevado a la memoria** — Administrador en Windows; `ptrace_scope=0` en Linux
+- **Linux: retraso de relocalización ~5–10s** — cuando el GC de Lua mueve el buffer, el escáner necesita encontrar la nueva dirección
+- **Linux: el overlay requiere XWayland** — ejecutar con `QT_QPA_PLATFORM=xcb`; Wayland puro sin XWayland no está soportado
 - **Límite DeepL Free** — 500K caracteres/mes (~10K mensajes). Hay planes de pago
 - **Mensajes salientes** — copiar → pegar en chat WoW (por diseño, cumplimiento ToS)
 
@@ -202,15 +216,15 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 
 Proyecto creado por dos autores:
 
-| Componente | Autor | Apoyar |
-|------------|-------|--------|
-| **Glosario WoW** — 314 términos en 14 idiomas, idea de traducción en el juego | **Pirson** | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
-| **App acompañante** — overlay, traducción DeepL, lectura de memoria, streaming | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/) |
+| Componente                                                                     | Autor               | Apoyar                                                  |
+| ------------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------- |
+| **Glosario WoW** — 314 términos en 14 idiomas, idea de traducción en el juego  | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
+| **App acompañante** — overlay, traducción DeepL, lectura de memoria, streaming | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/)                   |
 
 ## Documentación
 
-- **[User Guide](docs/user/README.md)** — quick start, configuration, FAQ (EN)
-- **[Technical Docs](docs/tech/README.md)** — architecture, memory reader, pipeline (EN)
+- **[User Guide](https://github.com/Yumash/BabelChat/blob/main/docs/user/README.md)** — quick start, configuration, FAQ (EN)
+- **[Technical Docs](https://github.com/Yumash/BabelChat/blob/main/docs/tech/README.md)** — architecture, memory reader, pipeline (EN)
 
 ## Reconocimientos
 
@@ -224,4 +238,4 @@ Proyecto creado por dos autores:
 
 ## Licencia
 
-[MIT License](LICENSE)
+[MIT License](https://github.com/Yumash/BabelChat/blob/main/LICENSE)
