@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPoint, QRunnable, Qt, QThreadPool, QTimer, pyqtSignal, pyqtSlot
@@ -264,11 +265,20 @@ class ChatOverlay(QWidget):
 
     def _setup_window(self) -> None:
         """Configure window flags for overlay behavior."""
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
+        if sys.platform == "win32":
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowStaysOnTopHint
+                | Qt.WindowType.Tool
+            )
+        else:
+            # X11BypassWindowManagerHint routes through XWayland, giving us
+            # true always-on-top and free move() positioning on KDE/Wayland.
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.X11BypassWindowManagerHint
+                | Qt.WindowType.WindowStaysOnTopHint
+            )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(_MIN_WIDTH, _MIN_HEIGHT)
         self.resize(450, 300)

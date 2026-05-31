@@ -2,7 +2,12 @@
 watchdog>=6.0.0
 lingua-language-detector>=2.1.0
 deepl>=1.18.0
-pymem>=1.14.0
+
+# Windows only
+pymem>=1.14.0; sys_platform == "win32"
+
+# Linux only (global hotkeys — optional, gracefully skipped if absent)
+pynput>=1.7.0; sys_platform != "win32"
 
 # GUI
 PyQt6>=6.8.0

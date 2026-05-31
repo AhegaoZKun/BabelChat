@@ -141,37 +141,44 @@ _console_initialized = False
 
 
 def _setup_console(visible: bool) -> None:
-    """Show or hide a debug console window (Windows only).
+    """Show or hide a debug console window.
 
-    When the .exe is built with console=False (windowed mode), there is no
-    console by default.  AllocConsole() creates one on demand and we redirect
-    stdout/stderr so that logging output appears there.
-    Also switches all logging to DEBUG level.
+    On Windows: allocates a Win32 console window and redirects stdout/stderr.
+    On Linux: adds a StreamHandler to logging and switches to DEBUG level.
+    Also switches all logging to DEBUG level on both platforms.
     """
     global _console_initialized
-    kernel32 = ctypes.windll.kernel32
-    if visible and not _console_initialized:
-        # AllocConsole returns 0 if console already exists — that's OK
-        kernel32.AllocConsole()
-        try:
-            sys.stdout = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
-            sys.stderr = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
-        except OSError:
-            # Fallback: console handle not available (rare edge case)
-            return
-        # Add console stream handler (file handler was set up in basicConfig)
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(logging.Formatter(_LOG_FMT))
-        root = logging.getLogger()
-        root.addHandler(console_handler)
-        # Switch everything to DEBUG
-        root.setLevel(logging.DEBUG)
-        for h in root.handlers:
-            h.setLevel(logging.DEBUG)
-        _console_initialized = True
-    hwnd = kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        if visible and not _console_initialized:
+            kernel32.AllocConsole()
+            try:
+                sys.stdout = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
+                sys.stderr = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
+            except OSError:
+                return
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(logging.Formatter(_LOG_FMT))
+            root = logging.getLogger()
+            root.addHandler(console_handler)
+            root.setLevel(logging.DEBUG)
+            for h in root.handlers:
+                h.setLevel(logging.DEBUG)
+            _console_initialized = True
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
+    else:
+        # Linux: just attach a StreamHandler (terminal is already available)
+        if visible and not _console_initialized:
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(logging.Formatter(_LOG_FMT))
+            root = logging.getLogger()
+            root.addHandler(console_handler)
+            root.setLevel(logging.DEBUG)
+            for h in root.handlers:
+                h.setLevel(logging.DEBUG)
+            _console_initialized = True
 
 
 _LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "babelchat.lock")
@@ -180,27 +187,36 @@ _LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bab
 def _ensure_single_instance() -> None:
     """Ensure only one instance is running. Kill the old one if found."""
     lock_path = os.path.abspath(_LOCK_FILE)
-    # Check if old instance is running
     if os.path.exists(lock_path):
         try:
             with open(lock_path) as f:
                 old_pid = int(f.read().strip())
-            # Try to kill old process
-            kernel32 = ctypes.windll.kernel32
-            PROCESS_TERMINATE = 0x0001
-            SYNCHRONIZE = 0x00100000
-            handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, old_pid)
-            if handle:
-                kernel32.TerminateProcess(handle, 0)
-                # Wait up to 2 seconds for it to die
-                kernel32.WaitForSingleObject(handle, 2000)
-                kernel32.CloseHandle(handle)
-                logger.info("Killed old instance PID %d", old_pid)
+            if sys.platform == "win32":
+                kernel32 = ctypes.windll.kernel32
+                PROCESS_TERMINATE = 0x0001
+                SYNCHRONIZE = 0x00100000
+                handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, old_pid)
+                if handle:
+                    kernel32.TerminateProcess(handle, 0)
+                    kernel32.WaitForSingleObject(handle, 2000)
+                    kernel32.CloseHandle(handle)
+                    logger.info("Killed old instance PID %d", old_pid)
+                else:
+                    logger.info("Old PID %d no longer running", old_pid)
             else:
-                logger.info("Old PID %d no longer running", old_pid)
+                # Linux: check /proc, send SIGTERM
+                if os.path.exists(f"/proc/{old_pid}"):
+                    try:
+                        os.kill(old_pid, 15)  # SIGTERM
+                        import time as _time
+                        _time.sleep(0.5)
+                        logger.info("Sent SIGTERM to old instance PID %d", old_pid)
+                    except ProcessLookupError:
+                        logger.info("Old PID %d already gone", old_pid)
+                else:
+                    logger.info("Old PID %d no longer running", old_pid)
         except Exception as e:
             logger.warning("Failed to kill old instance: %s", e)
-    # Write our PID
     with open(lock_path, "w") as f:
         f.write(str(os.getpid()))
 

@@ -5,21 +5,31 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import tempfile
-import winreg
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+if sys.platform == "win32":
+    import winreg
 
 logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.json"
 
-# Standard WoW install locations
-_WOW_PATHS = [
+# Standard WoW install locations (Windows)
+_WOW_PATHS_WINDOWS = [
     Path("C:/Program Files (x86)/World of Warcraft"),
     Path("C:/Program Files/World of Warcraft"),
     Path("D:/World of Warcraft"),
     Path("D:/Games/World of Warcraft"),
+]
+
+# Standard WoW install locations under Proton/Steam (Linux)
+_WOW_PATHS_LINUX = [
+    Path.home() / ".steam/steam/steamapps/common/World of Warcraft",
+    Path.home() / ".local/share/Steam/steamapps/common/World of Warcraft",
+    Path("/run/media") / os.environ.get("USER", "") / "Fast Game/World of Warcraft",
 ]
 
 # WoW Chat Log relative path inside WoW install
@@ -122,23 +132,27 @@ class AppConfig:
 
 def detect_wow_path() -> str:
     """Try to find WoW installation path."""
-    # Try registry first (Battle.net launcher)
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft",
-        )
-        install_path, _ = winreg.QueryValueEx(key, "InstallPath")
-        winreg.CloseKey(key)
-        if Path(install_path).exists():
-            return str(install_path)
-    except (FileNotFoundError, OSError):
-        pass
+    if sys.platform == "win32":
+        # Try registry first (Battle.net launcher)
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft",
+            )
+            install_path, _ = winreg.QueryValueEx(key, "InstallPath")
+            winreg.CloseKey(key)
+            if Path(install_path).exists():
+                return str(install_path)
+        except (FileNotFoundError, OSError):
+            pass
 
-    # Try standard paths
-    for p in _WOW_PATHS:
-        if p.exists():
-            return str(p)
+        for p in _WOW_PATHS_WINDOWS:
+            if p.exists():
+                return str(p)
+    else:
+        for p in _WOW_PATHS_LINUX:
+            if p.exists():
+                return str(p)
 
     return ""
 
