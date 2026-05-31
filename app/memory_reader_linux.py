@@ -47,7 +47,7 @@ _NEIGHBORHOOD_RADIUS = 16 * 1024 * 1024
 _REGION_HISTORY_SIZE = 16
 
 # Adaptive rescan intervals
-_RESCAN_INTERVALS = [10.0, 15.0, 20.0, 30.0]
+_RESCAN_INTERVALS = [5.0, 10.0, 15.0, 20.0]
 
 # Max region size to scan (100MB)
 _MAX_REGION_SIZE = 512 * 1024 * 1024
