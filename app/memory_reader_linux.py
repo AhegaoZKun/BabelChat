@@ -47,10 +47,10 @@ _NEIGHBORHOOD_RADIUS = 16 * 1024 * 1024
 _REGION_HISTORY_SIZE = 16
 
 # Adaptive rescan intervals
-_RESCAN_INTERVALS = [2.0, 3.0, 5.0, 10.0]
+_RESCAN_INTERVALS = [10.0, 15.0, 20.0, 30.0]
 
 # Max region size to scan (100MB)
-_MAX_REGION_SIZE = 100 * 1024 * 1024
+_MAX_REGION_SIZE = 512 * 1024 * 1024
 
 # Max delivered payloads for seq reset dedup
 _MAX_DELIVERED_PAYLOADS = 200
@@ -140,7 +140,10 @@ def _find_wow_pid() -> int | None:
                 with open(cmdline_path, "rb") as f:
                     cmdline = f.read().replace(b"\x00", b" ").decode("utf-8", errors="replace")
                 for name in WOW_PROCESS_NAMES:
-                    if name.lower() in cmdline.lower():
+                    # Use word-boundary match to avoid matching WowVoiceProxy.exe etc.
+                    # Split cmdline on spaces/nulls and check if any token ends with the name
+                    tokens = cmdline.lower().split()
+                    if any(token == name.lower() or token.endswith(f"/{name.lower()}") or token.endswith(f"\\{name.lower()}") for token in tokens):
                         return int(entry.name)
             except (OSError, ValueError):
                 continue
@@ -190,15 +193,30 @@ def _get_readable_regions(pid: int) -> list[tuple[int, int]]:
 
 
 def _read_process_memory(pid: int, address: int, size: int) -> bytes | None:
-    """Read memory from /proc/<pid>/mem at the given address."""
-    mem_path = f"/proc/{pid}/mem"
+    """Read memory from /proc/<pid>/mem using os.pread() for 64-bit address support.
+
+    Opens a fresh fd on every call to avoid stale handle issues.
+    """
     try:
-        with open(mem_path, "rb") as f:
-            f.seek(address)
-            data = f.read(size)
+        fd = os.open(f"/proc/{pid}/mem", os.O_RDONLY)
+        try:
+            data = os.pread(fd, size, address)
             return data if data else None
-    except (OSError, OverflowError):
+        finally:
+            os.close(fd)
+    except (OSError, OverflowError) as e:
+        pass  # EIO on unreadable regions is expected
         return None
+
+
+def _close_mem_fd(pid: int) -> None:
+    """No-op: kept for API compatibility."""
+    pass
+
+
+# Yield interval: sleep every N regions during scan to avoid starving WoW's CPU
+_SCAN_YIELD_INTERVAL = 50
+_SCAN_YIELD_SLEEP = 0.002  # 2ms yield every 50 regions
 
 
 def _scan_region_batch(
@@ -210,12 +228,25 @@ def _scan_region_batch(
     best_addr = 0
     best_seq = -1
 
-    for base, size in regions:
+    for i, (base, size) in enumerate(regions):
+        # Yield CPU every N regions to avoid starving WoW
+        if i > 0 and i % _SCAN_YIELD_INTERVAL == 0:
+            time.sleep(_SCAN_YIELD_SLEEP)
+        # Two-phase: read 4KB to find marker, then full buffer only if found
+        probe = _read_process_memory(pid, base, min(size, 4096))
+        if probe is None:
+            continue
+        has_marker = MARKER_START in probe or MARKER_START_LEGACY in probe
+        if not has_marker:
+            continue
+        # Marker found in probe — read full region
         raw = _read_process_memory(pid, base, size)
         if raw is None:
             continue
 
-        for match in _MARKER_PATTERN.finditer(raw):
+        matches = list(_MARKER_PATTERN.finditer(raw))
+
+        for match in matches:
             content_start = match.start()
             remaining = len(raw) - content_start
             chunk = raw[content_start:content_start + min(remaining, MAX_BUF_READ)]
@@ -241,33 +272,15 @@ def _scan_regions_for_marker(
     regions: list[tuple[int, int]],
     min_seq: int = 0,
 ) -> int:
-    """Scan memory regions for the best marker. Parallel for large region lists."""
-    if len(regions) <= 100:
-        addr, _seq = _scan_region_batch(pid, regions, min_seq)
-        return addr
+    """Scan memory regions for the best marker (single-threaded).
 
-    n_workers = min(8, max(2, len(regions) // 500))
-    chunk_size = (len(regions) + n_workers - 1) // n_workers
-    chunks = [regions[i:i + chunk_size] for i in range(0, len(regions), chunk_size)]
-
-    best_addr = 0
-    best_seq = -1
-
-    with ThreadPoolExecutor(max_workers=n_workers) as pool:
-        futures = [
-            pool.submit(_scan_region_batch, pid, chunk, min_seq)
-            for chunk in chunks
-        ]
-        for fut in as_completed(futures):
-            try:
-                addr, seq = fut.result()
-                if seq > best_seq:
-                    best_seq = seq
-                    best_addr = addr
-            except Exception:
-                continue
-
-    return best_addr
+    Parallel scanning is avoided on Linux because each thread opens its own
+    /proc/<pid>/mem fd, which causes race conditions and EIO errors under
+    some kernel configurations. The two-phase probe (4KB first) makes
+    single-threaded scanning fast enough.
+    """
+    addr, _seq = _scan_region_batch(pid, regions, min_seq)
+    return addr
 
 
 class WoWAddonBufReader:
@@ -306,7 +319,7 @@ class WoWAddonBufReader:
         self._pre_reset_expire: float = 0.0
 
         self._last_rescan: float = 0.0
-        self._rescan_interval: float = 2.0
+        self._rescan_interval: float = 10.0
         self._same_addr_count: int = 0
 
         self._last_new_msg_time: float = 0.0
@@ -403,6 +416,12 @@ class WoWAddonBufReader:
 
         self._pid = pid
         self._attached = True
+        # Verify we can open /proc/<pid>/mem
+        try:
+            fd = os.open(f"/proc/{pid}/mem", os.O_RDONLY)
+            os.close(fd)
+        except OSError as e:
+            raise RuntimeError(f"Cannot open /proc/{pid}/mem: {e}") from e
         self._all_regions = _get_readable_regions(pid)
         logger.info(
             "Attached to WoW PID %d (%d readable regions)",
@@ -410,6 +429,8 @@ class WoWAddonBufReader:
         )
 
     def _detach(self) -> None:
+        if self._pid is not None:
+            _close_mem_fd(self._pid)
         self._pid = None
         self._attached = False
         self._buf_addr = 0
@@ -430,9 +451,14 @@ class WoWAddonBufReader:
     # ------------------------------------------------------------------
 
     def _get_memory_regions(self) -> list[tuple[int, int]]:
+        """Return cached memory regions. Use _refresh_regions() to update."""
+        return self._all_regions
+
+    def _refresh_regions(self) -> None:
+        """Re-read /proc/<pid>/maps and update the cached region list."""
         if self._pid is None:
-            return []
-        return _get_readable_regions(self._pid)
+            return
+        self._all_regions = _get_readable_regions(self._pid)
 
     def _find_region_for_addr(self, addr: int) -> tuple[int, int, int] | None:
         for i, (base, size) in enumerate(self._all_regions):
@@ -510,6 +536,8 @@ class WoWAddonBufReader:
         return 0
 
     def _find_marker(self, min_seq: int = 0) -> bool:
+        if min_seq == 0 and self._last_seq > 0:
+            min_seq = max(0, self._last_seq - 10)
         if self._pid is None:
             return False
 
@@ -536,7 +564,7 @@ class WoWAddonBufReader:
                 return True
             logger.info("Neighborhood scan MISS (%.0fms)", elapsed * 1000)
 
-        self._all_regions = self._get_memory_regions()
+        self._refresh_regions()
         t0 = time.monotonic()
         addr = self._scan_heap_regions(min_seq=min_seq)
         elapsed = time.monotonic() - t0
@@ -631,7 +659,7 @@ class WoWAddonBufReader:
             self._rescan_interval = _RESCAN_INTERVALS[0]
         else:
             self._same_addr_count += 1
-            if self._same_addr_count >= 2 and self._same_addr_count % 2 == 0:
+            if self._same_addr_count >= 20 and self._same_addr_count % 10 == 0:
                 self._check_for_newer_buffer()
             else:
                 tier = min(self._same_addr_count // 3, len(_RESCAN_INTERVALS) - 1)
@@ -665,7 +693,7 @@ class WoWAddonBufReader:
             scan_type = "neighborhood"
 
         if not new_addr:
-            self._all_regions = self._get_memory_regions()
+            self._refresh_regions()
             new_addr = self._scan_heap_regions()
             if _is_rejected(new_addr):
                 new_addr = 0
@@ -696,12 +724,12 @@ class WoWAddonBufReader:
         best_addr = 0
         best_seq = -1
 
-        for region in self._get_memory_regions():
+        for region in self._all_regions:
             base, size = region
             region_end = base + size
             if region_end < start or base > end:
                 continue
-            if size > 8 * 1024 * 1024:
+            if size > 128 * 1024 * 1024:
                 continue
             raw = _read_process_memory(self._pid, base, min(size, MAX_BUF_READ))
             if raw is None:
@@ -732,8 +760,11 @@ class WoWAddonBufReader:
     def _scan_heap_regions(self, min_seq: int = 0) -> int:
         if self._pid is None:
             return 0
-        heap_regions = [(b, s) for b, s in self._all_regions if s <= 8 * 1024 * 1024]
-        return _scan_regions_for_marker(self._pid, heap_regions, min_seq=min_seq)
+        heap_regions = [(b, s) for b, s in self._all_regions if s <= 128 * 1024 * 1024]
+        logger.debug("Heap scan: %d regions (of %d total), min_seq=%d", len(heap_regions), len(self._all_regions), min_seq)
+        result = _scan_regions_for_marker(self._pid, heap_regions, min_seq=min_seq)
+        logger.debug("Heap scan result: %s", hex(result) if result else "none")
+        return result
 
     # ------------------------------------------------------------------
     # Buffer reading and polling
@@ -765,6 +796,8 @@ class WoWAddonBufReader:
         if content is None:
             self._stale_count += 1
             if self._stale_count == 1:
+                self._refresh_regions()
+                self._refresh_regions()
                 logger.info("Marker gone at 0x%X, trying fast relocate...", self._buf_addr)
                 old_addr = self._buf_addr
                 new_addr = self._fast_relocate_buffer(min_seq=self._last_seq)
@@ -818,7 +851,7 @@ class WoWAddonBufReader:
         now = time.monotonic()
         time_since_new_msg = now - self._last_new_msg_time if self._last_new_msg_time else float("inf")
         if (
-            time_since_new_msg > 1.5
+            time_since_new_msg > 999999.0
             and now - self._last_rescan >= self._rescan_interval
         ):
             self._last_rescan = now
@@ -841,7 +874,7 @@ class WoWAddonBufReader:
                 except ValueError:
                     pass
 
-        if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq:
+        if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq and (self._last_seq - max_seq_in_buf) > 50:
             logger.info(
                 "Seq reset detected (buf max=%d, last_seq=%d) — saving texts & resetting",
                 max_seq_in_buf, self._last_seq,
