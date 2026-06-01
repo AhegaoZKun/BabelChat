@@ -25,13 +25,6 @@ _WOW_PATHS_WINDOWS = [
     Path("D:/Games/World of Warcraft"),
 ]
 
-# Standard WoW install locations under Proton/Steam (Linux)
-_WOW_PATHS_LINUX = [
-    Path.home() / ".steam/steam/steamapps/common/World of Warcraft",
-    Path.home() / ".local/share/Steam/steamapps/common/World of Warcraft",
-    Path("/run/media") / os.environ.get("USER", "") / "Fast Game/World of Warcraft",
-]
-
 # WoW Chat Log relative path inside WoW install
 _CHATLOG_RELATIVE = "_retail_/Logs/WoWChatLog.txt"
 
@@ -150,9 +143,9 @@ def detect_wow_path() -> str:
             if p.exists():
                 return str(p)
     else:
-        for p in _WOW_PATHS_LINUX:
-            if p.exists():
-                return str(p)
+        # On Linux, WoW can be installed anywhere (Steam library, NTFS drive, etc.)
+        # Auto-detection is unreliable — return empty and let the user set it via GUI.
+        return ""
 
     return ""
 
