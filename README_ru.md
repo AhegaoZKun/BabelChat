@@ -115,46 +115,40 @@ BabelChat только **читает** память — никогда не п�
 
 ### Windows — Быстрый старт
 
-1. Скачай `BabelChat.zip` из [Releases](https://github.com/Yumash/BabelChat/releases)
+1. Скачай `BabelChatWindows.zip` из [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
 2. Распакуй и запусти `BabelChat.exe` **от имени Администратора**
 3. Следуй мастеру настройки (получи [бесплатный ключ DeepL](https://www.deepl.com/pro-api), укажи путь к WoW, установи аддон)
 4. Запусти WoW, зайди в группу — переводы появятся автоматически
 
 ### Linux (Proton/Wine) — Быстрый старт
 
-1. Включи ptrace для чтения памяти:
-   ```bash
-   echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
-   # Для сохранения после перезагрузки:
-   echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-ptrace.conf
-   ```
-2. Клонируй и установи зависимости:
-   ```bash
-   git clone https://github.com/Yumash/BabelChat.git
-   cd BabelChat
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-3. Включи компаньон в WoW (один раз):
-   ```
-   /run BabelChatDB.companion = {enabled = true}
-   ```
-4. Запусти приложение-компаньон:
-   ```bash
-   QT_QPA_PLATFORM=xcb python -m app.main
-   ```
-5. Установи аддон WoW вручную (см. ниже) и запусти WoW через Proton/Steam
+1. Скачай `BabelChatLinux.zip` из [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+2. Распакуй и запусти приложение
+3. Следуй мастеру настройки (получи [бесплатный ключ DeepL](https://www.deepl.com/pro-api), укажи путь к WoW, установи аддон)
+4. Запусти WoW, зайди в группу — переводы появятся автоматически
 
 > **Примечание:** На Linux оверлей требует `QT_QPA_PLATFORM=xcb` (XWayland) для корректной работы поверх других окон и перемещения на Wayland-композиторах.
 
 ### Из исходников (Windows)
 
 ```bash
-git clone https://github.com/Yumash/BabelChat.git
+git clone https://github.com/AhegaoZKun/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
 python -m app.main  # запуск от Администратора
+```
+
+### Из исходников (Linux)
+
+```bash
+git clone https://github.com/AhegaoZKun/BabelChat.git
+cd BabelChat
+echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# В WoW (один раз): /run BabelChatDB.companion = {enabled = true}
+QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### Аддон WoW (ручная установка)
