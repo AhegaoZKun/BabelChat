@@ -143,8 +143,7 @@ def detect_wow_path() -> str:
             if p.exists():
                 return str(p)
     else:
-        # On Linux, WoW can be installed anywhere (Steam library, NTFS drive, etc.)
-        # Auto-detection is unreliable — return empty and let the user set it via GUI.
+        # Auto-detection is generally more variable on linux — return empty and let the user set it via GUI.
         return ""
 
     return ""
