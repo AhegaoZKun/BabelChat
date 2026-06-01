@@ -1,6 +1,6 @@
 # Changelog / История изменений / Registro de cambios
 
-## [3.2.0] — 2026-05-31
+## [3.1.2] — 2026-05-31
 
 ### Added / Добавлено / Añadido
 - **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine (Tested under CachyOS)
