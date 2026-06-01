@@ -115,36 +115,18 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 
 ### Windows — Quick Start
 
-1. Download `BabelChat.zip` from [Releases](https://github.com/Yumash/BabelChat/releases)
+1. Download `BabelChatWindows.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
 2. Extract and run `BabelChat.exe` **as Administrator**
 3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
 4. Launch WoW, join a group — translations appear automatically
 
 ### Linux (Proton/Wine) — Quick Start
 
-1. Enable ptrace for memory reading:
-   ```bash
-   echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
-   # To persist across reboots:
-   echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/99-ptrace.conf
-   ```
-2. Clone and install:
-   ```bash
-   git clone https://github.com/Yumash/BabelChat.git
-   cd BabelChat
-   python -m venv .venv
-   source .venv/bin/activate  # or .venv/bin/activate.fish
-   pip install -r requirements.txt
-   ```
-3. Enable the companion in WoW (one-time setup):
-   ```
-   /run BabelChatDB.companion = {enabled = true}
-   ```
-4. Run the companion app:
-   ```bash
-   QT_QPA_PLATFORM=xcb python -m app.main
-   ```
-5. Install the WoW addon manually (see below) and launch WoW via Proton/Steam
+
+1. Download `BabelChatLinux.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+2. Extract and run `BabelChat.exe` **as Administrator**
+3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
+4. Launch WoW, join a group — translations appear automatically
 
 > **Note:** On Linux, the overlay requires `QT_QPA_PLATFORM=xcb` (XWayland) for always-on-top and dragging to work correctly on Wayland compositors.
 
@@ -155,6 +137,19 @@ git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
 python -m app.main  # run as Administrator
+```
+
+### From Source (Linux)
+
+```bash
+git clone https://github.com/Yumash/BabelChat.git
+cd BabelChat
+echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# In WoW (once): /run BabelChatDB.companion = {enabled = true}
+QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### WoW Addon (Manual)
