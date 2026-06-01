@@ -3,7 +3,7 @@
 ## [3.2.0] — 2026-05-31
 
 ### Added / Добавлено / Añadido
-- **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine via Steam (Tested under CachyOS)
+- **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine (Tested under CachyOS)
 - Linux memory reader (`memory_reader_linux.py`) — reads WoW process memory via `/proc/<pid>/mem` and `os.pread()` with full 64-bit address support (Wine/Proton allocates above 4GB)
 - Linux hotkeys (`hotkeys_linux.py`) — global hotkeys via `pynput` with graceful fallback on pure Wayland
 - Platform dispatcher modules — `memory_reader.py` and `hotkeys.py` now auto-select the correct implementation based on `sys.platform`
