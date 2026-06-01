@@ -133,7 +133,7 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 ### From Source (Windows)
 
 ```bash
-git clone https://github.com/Yumash/BabelChat.git
+git clone https://github.com/AhegaoZKun/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
 python -m app.main  # run as Administrator
@@ -142,7 +142,7 @@ python -m app.main  # run as Administrator
 ### From Source (Linux)
 
 ```bash
-git clone https://github.com/Yumash/BabelChat.git
+git clone https://github.com/AhegaoZKun/BabelChat.git
 cd BabelChat
 echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
 python -m venv .venv
