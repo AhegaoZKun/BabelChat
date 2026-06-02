@@ -395,6 +395,11 @@ class SetupWizard(QDialog):
         return page
 
     def _auto_detect_wow(self) -> None:
+        import sys
+        if sys.platform != "win32":
+            # On Linux, auto-detection is unreliable — open the file browser directly
+            self._browse_wow_path()
+            return
         detected = detect_wow_path()
         if detected:
             self._wow_path_input.setText(detected)

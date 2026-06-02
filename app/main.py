@@ -227,6 +227,11 @@ def main() -> int:
     # Single instance guard — kill old instance if running
     _ensure_single_instance()
 
+    # On Linux, force XCB (XWayland) backend so the overlay works correctly
+    # on Wayland compositors — enables always-on-top and free window positioning.
+    if sys.platform != "win32" and "QT_QPA_PLATFORM" not in os.environ:
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
@@ -256,6 +261,7 @@ def main() -> int:
             break
 
     # Create overlay
+    print("DEBUG: creating overlay", flush=True)
     overlay = ChatOverlay(config)
     overlay.update_channel_filters(_enabled_filter_names(config))
 
@@ -266,6 +272,7 @@ def main() -> int:
     overlay.set_translator(reply_translator, reply_lang)
 
     overlay.show()
+    print("DEBUG: overlay shown", flush=True)
 
     # Create system tray
     tray = TrayIcon()
