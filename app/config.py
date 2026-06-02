@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import shutil
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -15,7 +16,18 @@ if sys.platform == "win32":
 
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = "config.json"
+import sys as _sys
+
+def _get_config_path() -> str:
+    """Return config path — user home dir when frozen (AppImage/exe), else CWD."""
+    import pathlib
+    if getattr(_sys, "frozen", False):
+        config_dir = pathlib.Path.home() / ".config" / "BabelChat"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return str(config_dir / "config.json")
+    return "config.json"
+
+CONFIG_FILE = _get_config_path()
 
 # Standard WoW install locations (Windows)
 _WOW_PATHS_WINDOWS = [
@@ -88,15 +100,16 @@ class AppConfig:
                 logger.warning("Could not create config backup")
 
         # Atomic write: temp file in same directory, then rename
+        # Use system temp dir — target.parent may be read-only (e.g. AppImage mount)
         fd, tmp_path = tempfile.mkstemp(
-            dir=str(target.parent), suffix=".tmp", prefix="config_"
+            dir=tempfile.gettempdir(), suffix=".tmp", prefix="config_"
         )
         closed = False
         try:
             os.write(fd, content.encode("utf-8"))
             os.close(fd)
             closed = True
-            os.replace(tmp_path, str(target))
+            shutil.move(tmp_path, str(target))
         except OSError:
             if not closed:
                 os.close(fd)
@@ -143,7 +156,8 @@ def detect_wow_path() -> str:
             if p.exists():
                 return str(p)
     else:
-        # Auto-detection is generally more variable on linux — return empty and let the user set it via GUI.
+        # On Linux, WoW can be installed anywhere (Steam library, NTFS drive, etc.)
+        # Auto-detection is unreliable — return empty and let the user set it via GUI.
         return ""
 
     return ""

@@ -46,3 +46,11 @@ dist/
 # Source media (originals)
 babelchat.jpg
 20260319-*.mp4
+BabelChat-x86_64.AppImage
+BabelChat.AppDir/AppRun
+.gitignore
+BabelChat.AppDir/BabelChat.png
+.gitignore
+BabelChat.AppDir/BabelChat.desktop
+BabelChat.AppDir/.DirIcon
+BabelChat.AppDir/usr/bin/BabelChat

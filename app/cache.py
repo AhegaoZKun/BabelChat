@@ -27,7 +27,12 @@ CacheKey = tuple[str, str, str]  # (source_text, source_lang, target_lang)
 
 DEFAULT_TTL = 7 * 24 * 3600  # 7 days
 DEFAULT_MEMORY_SIZE = 1000
-DEFAULT_DB_PATH = "translations.db"
+import sys as _sys, os as _os
+DEFAULT_DB_PATH = (
+    _os.path.join(_os.path.expanduser("~"), ".config", "BabelChat", "translations.db")
+    if getattr(_sys, "frozen", False)
+    else "translations.db"
+)
 
 
 class TranslationCache:
@@ -48,6 +53,13 @@ class TranslationCache:
         self._memory: OrderedDict[CacheKey, tuple[str, float]] = OrderedDict()
         self._db_path = str(db_path)
         self._lock = threading.Lock()
+
+        # Ensure parent directory exists (needed when frozen as AppImage)
+        import os as _os
+        _db_dir = _os.path.dirname(self._db_path)
+        if _db_dir:
+            _os.makedirs(_db_dir, exist_ok=True)
+
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.executescript(_SCHEMA)
 

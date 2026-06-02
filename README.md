@@ -124,11 +124,9 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 
 
 1. Download `BabelChatLinux.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
-2. Extract and run `BabelChat.exe` **as Administrator**
+2. Extract and Run `BabelChat`
 3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
 4. Launch WoW, join a group — translations appear automatically
-
-> **Note:** On Linux, the overlay requires `QT_QPA_PLATFORM=xcb` (XWayland) for always-on-top and dragging to work correctly on Wayland compositors.
 
 ### From Source (Windows)
 
@@ -149,7 +147,6 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # In WoW (once): /run BabelChatDB.companion = {enabled = true}
-QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### WoW Addon (Manual)

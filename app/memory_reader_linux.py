@@ -32,7 +32,12 @@ ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
 MAX_BUF_READ = 65536
 
-RAW_LOG_FILE = "babelchat_raw.log"
+import sys as _sys, pathlib as _pathlib
+RAW_LOG_FILE = str(
+    (_pathlib.Path.home() / "babelchat_raw.log")
+    if getattr(_sys, "frozen", False)
+    else _pathlib.Path("babelchat_raw.log")
+)
 
 # WoW process names under Wine/Proton
 WOW_PROCESS_NAMES = ["Wow.exe", "WowT.exe", "WowB.exe"]
@@ -47,7 +52,7 @@ _NEIGHBORHOOD_RADIUS = 16 * 1024 * 1024
 _REGION_HISTORY_SIZE = 16
 
 # Adaptive rescan intervals
-_RESCAN_INTERVALS = [2.0, 3.0, 5.0, 10.0]
+_RESCAN_INTERVALS = [10.0, 15.0, 20.0, 30.0]
 
 # Max region size to scan (100MB)
 _MAX_REGION_SIZE = 512 * 1024 * 1024
@@ -205,7 +210,7 @@ def _read_process_memory(pid: int, address: int, size: int) -> bytes | None:
         finally:
             os.close(fd)
     except (OSError, OverflowError) as e:
-        pass  # EIO on unreadable regions is expected
+        logger.debug("_read_process_memory: failed addr=0x%X size=%d pid=%d: %s", address, size, pid, e)
         return None
 
 
@@ -237,14 +242,18 @@ def _scan_region_batch(
         if probe is None:
             continue
         has_marker = MARKER_START in probe or MARKER_START_LEGACY in probe
+        if base in (0xff430000, 0x129900000):
+            logger.debug("TRACE base=0x%X probe_len=%d has_marker=%s", base, len(probe), has_marker)
         if not has_marker:
             continue
-        # Marker found in probe — read full region
-        raw = _read_process_memory(pid, base, size)
+        # Marker found in probe — read full buffer
+        raw = _read_process_memory(pid, base, min(size, MAX_BUF_READ))
         if raw is None:
             continue
 
         matches = list(_MARKER_PATTERN.finditer(raw))
+        if base in (0xff430000, 0x129900000):
+            logger.debug("TRACE base=0x%X full_read_len=%d matches=%d min_seq=%d", base, len(raw), len(matches), min_seq)
 
         for match in matches:
             content_start = match.start()
@@ -536,8 +545,6 @@ class WoWAddonBufReader:
         return 0
 
     def _find_marker(self, min_seq: int = 0) -> bool:
-        if min_seq == 0 and self._last_seq > 0:
-            min_seq = max(0, self._last_seq - 10)
         if self._pid is None:
             return False
 
@@ -659,7 +666,7 @@ class WoWAddonBufReader:
             self._rescan_interval = _RESCAN_INTERVALS[0]
         else:
             self._same_addr_count += 1
-            if self._same_addr_count >= 20 and self._same_addr_count % 10 == 0:
+            if self._same_addr_count >= 2 and self._same_addr_count % 2 == 0:
                 self._check_for_newer_buffer()
             else:
                 tier = min(self._same_addr_count // 3, len(_RESCAN_INTERVALS) - 1)
@@ -796,8 +803,6 @@ class WoWAddonBufReader:
         if content is None:
             self._stale_count += 1
             if self._stale_count == 1:
-                self._refresh_regions()
-                self._refresh_regions()
                 logger.info("Marker gone at 0x%X, trying fast relocate...", self._buf_addr)
                 old_addr = self._buf_addr
                 new_addr = self._fast_relocate_buffer(min_seq=self._last_seq)
@@ -851,7 +856,7 @@ class WoWAddonBufReader:
         now = time.monotonic()
         time_since_new_msg = now - self._last_new_msg_time if self._last_new_msg_time else float("inf")
         if (
-            time_since_new_msg > 999999.0
+            time_since_new_msg > 10.0
             and now - self._last_rescan >= self._rescan_interval
         ):
             self._last_rescan = now
@@ -874,7 +879,7 @@ class WoWAddonBufReader:
                 except ValueError:
                     pass
 
-        if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq and (self._last_seq - max_seq_in_buf) > 50:
+        if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq:
             logger.info(
                 "Seq reset detected (buf max=%d, last_seq=%d) — saving texts & resetting",
                 max_seq_in_buf, self._last_seq,

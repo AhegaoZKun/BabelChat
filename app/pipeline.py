@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lingua import Language
 
-from app.cache import TranslationCache
+from app.cache import TranslationCache, DEFAULT_DB_PATH
 from app.dedup import DeduplicationBuffer
 from app.detector import ChatLanguageDetector
 from app.glossary import expand_wow_terms
@@ -103,7 +103,7 @@ class PipelineConfig:
     })
     skip_own_messages: bool = True
     translation_enabled: bool = True
-    db_path: str = "translations.db"
+    db_path: str = field(default_factory=lambda: DEFAULT_DB_PATH)
     use_memory_reader: bool = True  # Reads addon buffer from WoW process memory
 
 

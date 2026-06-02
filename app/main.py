@@ -27,11 +27,22 @@ from app.tray import TrayIcon
 # Configure logging: file only at startup (no StreamHandler — console may not exist
 # in windowed exe). Console handler added later by _setup_console() if enabled.
 _LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+# Write log next to the executable when possible, fall back to user home dir
+# (AppImage mounts are read-only so we can't write next to the binary there)
+def _get_log_path() -> str:
+    import sys as _sys
+    if getattr(_sys, "frozen", False):
+        # PyInstaller bundle — use home dir to avoid read-only AppImage mount
+        import pathlib
+        return str(pathlib.Path.home() / "babelchat.log")
+    return "babelchat.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format=_LOG_FMT,
     handlers=[
-        logging.FileHandler("babelchat.log", encoding="utf-8", mode="w"),
+        logging.FileHandler(_get_log_path(), encoding="utf-8", mode="w"),
     ],
 )
 logger = logging.getLogger(__name__)
@@ -181,7 +192,14 @@ def _setup_console(visible: bool) -> None:
             _console_initialized = True
 
 
-_LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "babelchat.lock")
+def _get_lock_file() -> str:
+    if getattr(__import__("sys"), "frozen", False):
+        lock_dir = os.path.join(os.path.expanduser("~"), ".config", "BabelChat")
+        os.makedirs(lock_dir, exist_ok=True)
+        return os.path.join(lock_dir, "babelchat.lock")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "babelchat.lock")
+
+_LOCK_FILE = _get_lock_file()
 
 
 def _ensure_single_instance() -> None:
@@ -231,6 +249,8 @@ def main() -> int:
     # on Wayland compositors — enables always-on-top and free window positioning.
     if sys.platform != "win32" and "QT_QPA_PLATFORM" not in os.environ:
         os.environ["QT_QPA_PLATFORM"] = "xcb"
+        # Suppress Qt's "Ignoring icon" warning — it's a cosmetic XCB tray limitation
+        os.environ.setdefault("QT_LOGGING_RULES", "*.warning=false")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)

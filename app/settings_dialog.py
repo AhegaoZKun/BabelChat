@@ -349,8 +349,18 @@ class HotkeyEdit(QWidget):
 def _create_dialog_icon() -> QIcon:
     """Load icon from .ico file, or generate programmatically as fallback."""
     candidates = [
-        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
-        Path(__file__).parent.parent / "assets" / "icon.ico",
+        *(
+            [
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
+                Path(__file__).parent.parent / "assets" / "icon.ico",
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+                Path(__file__).parent.parent / "assets" / "icon.png",
+            ] if sys.platform == "win32" else [
+                # Linux: only PNG — .ico causes "Ignoring icon" warning
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+                Path(__file__).parent.parent / "assets" / "icon.png",
+            ]
+        ),
     ]
     for path in candidates:
         if path.is_file():

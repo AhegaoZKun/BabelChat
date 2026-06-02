@@ -17,7 +17,7 @@ Traducción de chat en tiempo real — app acompañante + addon de WoW
 
 ## El Problema
 
-Entras a una banda PUG. El tanque explica tácticas — en ruso. El sanador pregunta algo — en alemán. Tú hablas español. Nadie se entiende. Comienza el pull, la gente muere, y alguien escribe "gg noob" — la única frase que todos conocen.
+Entras a una banda PUG. El tanque explica tácticas — en ruso. El sanador pregunta algo — en alemán. Tú hablas español (o inglés, o francés). Nadie se entiende. Comienza el pull, la gente muere, y alguien escribe "gg noob" — la única frase que todos conocen.
 
 **Esto pasa constantemente** en los grupos cross-realm y cross-región de WoW. La barrera del idioma arruina la coordinación, causa wipes y hace el juego menos divertido.
 
@@ -123,11 +123,9 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 ### Linux (Proton/Wine) — Inicio rápido
 
 1. Descarga `BabelChatLinux.zip` de [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
-2. Extrae y ejecuta la app
+2. Extrae y ejecuta `BabelChat`
 3. Sigue el asistente (obtén una [clave API gratuita de DeepL](https://www.deepl.com/pro-api), configura la ruta de WoW, instala el addon)
 4. Abre WoW, entra a un grupo — las traducciones aparecerán automáticamente
-
-> **Nota:** En Linux, el overlay requiere `QT_QPA_PLATFORM=xcb` (XWayland) para que el modo siempre-encima y el arrastre funcionen correctamente en compositores Wayland.
 
 ### Desde el código fuente (Windows)
 
@@ -148,7 +146,6 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # En WoW (una vez): /run BabelChatDB.companion = {enabled = true}
-QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### Addon WoW (manual)
@@ -206,6 +203,28 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 - **Límite DeepL Free** — 500K caracteres/mes (~10K mensajes). Hay planes de pago
 - **Mensajes salientes** — copiar → pegar en chat WoW (por diseño, cumplimiento ToS)
 
+## Tecnologías
+
+| Componente         | Tecnología                                                              |
+| ------------------ | ----------------------------------------------------------------------- |
+| App                | Python 3.12, PyQt6                                                      |
+| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: /proc/\<pid\>/mem + os.pread |
+| Detección de idioma| lingua-py (offline)                                                     |
+| Traducción         | DeepL API                                                               |
+| Caché              | SQLite + LRU                                                            |
+| Compilación        | PyInstaller → .exe único (solo Windows)                                 |
+| Addon              | Lua 5.1, WoW API                                                        |
+| Tests              | 133 tests (pytest)                                                      |
+
+## Desarrollo
+
+```bash
+python -m app.main    # Ejecutar
+pytest                # Tests (133 tests)
+ruff check app/       # Linter
+pyinstaller build.spec  # Compilar .exe (solo Windows)
+```
+
 ## Apoyar el proyecto
 
 Proyecto creado por dos autores:
@@ -217,8 +236,8 @@ Proyecto creado por dos autores:
 
 ## Documentación
 
-- **[User Guide](https://github.com/Yumash/BabelChat/blob/main/docs/user/README.md)** — quick start, configuration, FAQ (EN)
-- **[Technical Docs](https://github.com/Yumash/BabelChat/blob/main/docs/tech/README.md)** — architecture, memory reader, pipeline (EN)
+- **[User Guide](https://github.com/Yumash/BabelChat/blob/main/docs/user/README.md)** — quick start, configuration, FAQ
+- **[Technical Docs](https://github.com/Yumash/BabelChat/blob/main/docs/tech/README.md)** — architecture, memory reader, pipeline, addon internals
 
 ## Reconocimientos
 
