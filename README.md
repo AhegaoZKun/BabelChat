@@ -120,7 +120,7 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
 4. Launch WoW, join a group — translations appear automatically
 
-### Linux (Proton/Wine) — Quick Start
+### Linux  — Quick Start
 
 1. Download `BabelChatLinux.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
 2. Extract and run `BabelChat`
