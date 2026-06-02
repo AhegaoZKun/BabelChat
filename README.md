@@ -7,7 +7,7 @@ Real-time chat translation with a smart overlay — companion app + WoW addon
 
 [Русская версия](https://github.com/Yumash/BabelChat/blob/main/README_ru.md) | [Versión en español](https://github.com/Yumash/BabelChat/blob/main/README_es.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/AhegaoZKun/BabelChat/releases)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Dictionary)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
@@ -79,17 +79,17 @@ The delay comes from the DeepL API round-trip — your text travels to DeepL's s
 │                                                          │
 │  BabelChat addon                                         │
 │  ├── Hooks CHAT_MSG_* events via standard WoW API        │
-│  ├── Ring buffer (50 messages)                           │
+│  ├── Ring buffer (50 messages, flushed every 250ms)      │
 │  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)   │
 └──────────┬───────────────────────────────────────────────┘
            │  Memory read (every 250ms)
            │  Windows: ReadProcessMemory (pymem)
-           │  Linux:   /proc/<pid>/mem + os.pread
+           │  Linux:   process_vm_readv via Rust scanner
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│  Companion App (Python)                                  │
+│  Companion App (Python + Rust)                           │
 │                                                          │
-│  Memory Reader ──→ Parser ──→ Language Detector          │
+│  Rust Scanner ──→ Parser ──→ Language Detector           │
 │       │                           │                      │
 │       │    Phrasebook (instant) ──┤                      │
 │       │    Cache (instant)  ──────┤                      │
@@ -122,9 +122,8 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 
 ### Linux (Proton/Wine) — Quick Start
 
-
 1. Download `BabelChatLinux.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
-2. Extract and Run `BabelChat`
+2. Extract and run `BabelChat`
 3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
 4. Launch WoW, join a group — translations appear automatically
 
@@ -143,10 +142,18 @@ python -m app.main  # run as Administrator
 git clone https://github.com/AhegaoZKun/BabelChat.git
 cd BabelChat
 echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+
+# Build the Rust scanner (required for Linux)
+cd babelchat_scanner
+cargo build --release
+cp target/release/libbabelchat_scanner.so ../app/
+cd ..
+
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # In WoW (once): /run BabelChatDB.companion = {enabled = true}
+QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### WoW Addon (Manual)
@@ -201,23 +208,23 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 ## Limitations
 
 - **Requires elevated memory access** — Administrator on Windows; `ptrace_scope=0` on Linux
-- **Linux: ~5–10s relocation delay** — when Lua GC moves the buffer, the scanner needs to find the new address; this typically takes 5–10 seconds
 - **Linux: overlay requires XWayland** — run with `QT_QPA_PLATFORM=xcb`; pure Wayland without XWayland is not supported
 - **DeepL Free limit** — 500K chars/month (~10K messages). Paid plans available
 - **Outgoing messages** — copy → paste in WoW chat (by design, ToS compliance)
 
 ## Tech Stack
 
-| Component          | Technology                                        |
-| ------------------ | ------------------------------------------------- |
-| App                | Python 3.12, PyQt6                                |
-| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: /proc/<pid>/mem + os.pread |
-| Language Detection | lingua-py (offline)                               |
-| Translation        | DeepL API                                         |
-| Cache              | SQLite + LRU                                      |
-| Build              | PyInstaller → single .exe (Windows)               |
-| Addon              | Lua 5.1, WoW API                                  |
-| Tests              | 133 tests (pytest)                                |
+| Component          | Technology                                                                 |
+| ------------------ | -------------------------------------------------------------------------- |
+| App                | Python 3.12, PyQt6                                                         |
+| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: Rust (`process_vm_readv`)     |
+| Rust Scanner       | Rayon (parallel scan), `SCHED_IDLE` threads, address cache                |
+| Language Detection | lingua-py (offline)                                                        |
+| Translation        | DeepL API                                                                  |
+| Cache              | SQLite + LRU                                                               |
+| Build              | PyInstaller → single binary (Windows .exe / Linux ELF)                    |
+| Addon              | Lua 5.1, WoW API                                                           |
+| Tests              | 133 tests (pytest)                                                         |
 
 ## Development
 
@@ -225,7 +232,13 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 python -m app.main    # Run
 pytest                # Test (133 tests)
 ruff check app/       # Lint
-pyinstaller build.spec  # Build .exe (Windows only)
+
+# Linux: build Rust scanner before running
+cd babelchat_scanner && cargo build --release && cp target/release/libbabelchat_scanner.so ../app/
+
+# Build binaries
+pyinstaller build.spec          # Windows .exe
+pyinstaller build-linux.spec    # Linux binary
 ```
 
 ## Support the Project

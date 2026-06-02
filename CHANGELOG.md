@@ -1,5 +1,57 @@
 # Changelog / История изменений / Registro de cambios
 
+## [3.2.0] — 2026-06-02
+
+### Performance / Производительность / Rendimiento
+
+**Linux memory scanner rewritten in Rust** — the single biggest performance improvement since Linux support was added.
+
+- **Rust scanner library** (`libbabelchat_scanner.so`) replaces the pure-Python `/proc/<pid>/mem` scanner
+- Uses `process_vm_readv` instead of `/proc/<pid>/mem` — a dedicated cross-process memory syscall that does not go through the VFS layer, requires no file descriptor, and does not pause the target process. Eliminates the WoW frame-time stutters caused by the old approach
+- **Address cache** — steady-state polling (every 250ms) is now a single `process_vm_readv` call at the cached address, costing ~microseconds and near-zero CPU
+- Full parallel heap scan (Rayon, 2 threads) only runs on cache miss, which happens approximately every 14s when Lua GC relocates the buffer
+- Scanner threads run at `SCHED_IDLE` — the lowest Linux scheduling class, below `nice +19`. WoW, the compositor, and all other processes take absolute scheduling priority over the scanner
+- **Initial scan time**: 10–13s → ~2.5s
+- **GC relocation detection**: 14–17s gaps → ~2s
+- **End-to-end overlay latency**: many seconds → ~1s (floor is DeepL API round-trip)
+- **Game stutters**: eliminated
+
+**Addon flush interval** reduced from 1.5s → 0.25s — messages are written to memory within one poll cycle of arriving, cutting the addon-side contribution to latency from up to 1.5s to ~250ms.
+
+**Python scanner overhaul** (retained as fallback if `.so` not found):
+- Persistent `/proc/<pid>/mem` fd — eliminates `open`/`close` syscall overhead on every read
+- Regions scanned smallest-first — active Lua strings live in smaller allocations; buffer found faster
+- Early exit on first valid marker — no longer scans all remaining regions after finding a hit
+- Ghost buffer blacklisting — stale old copies that cause seq resets are immediately blacklisted
+- All rescan paths pass `min_seq` — only buffers newer than already-delivered messages are accepted
+- Rescan interval no longer backs off exponentially when no newer buffer is found
+- Background scanner thread correctly validates seq before committing a new address
+
+### Added / Добавлено / Añadido
+- `babelchat_scanner/` — Rust crate producing `libbabelchat_scanner.so` for Linux
+- `build-linux.spec` — bundles `libbabelchat_scanner.so` into the Linux binary via PyInstaller
+
+### Changed / Изменено / Cambiado
+- `memory_reader_linux.py` — now a thin Python wrapper around the Rust scanner; falls back to pure-Python on missing `.so`
+- Linux architecture diagram in README updated to reflect Rust scanner
+- Limitations section updated: 5–10s relocation delay note removed (no longer applicable)
+
+---
+
+— **Rust-сканер памяти для Linux** — `libbabelchat_scanner.so` заменяет чистый Python-сканер
+— Использует `process_vm_readv` вместо `/proc/<pid>/mem` — без VFS, без дескриптора файла, без паузы целевого процесса. Устраняет фризы WoW
+— Кэш адреса — опрос в устойчивом состоянии стоит ~микросекунд; полное сканирование только при промахе кэша (~раз в 14с)
+— Потоки сканера работают в режиме `SCHED_IDLE` — WoW никогда не вытесняется сканером
+— Интервал сброса аддона: 1.5с → 0.25с
+
+— **Escáner de memoria en Rust para Linux** — `libbabelchat_scanner.so` reemplaza el escáner Python puro
+— Usa `process_vm_readv` en lugar de `/proc/<pid>/mem` — sin VFS, sin descriptor de archivo, sin pausar el proceso objetivo. Elimina los stutters de WoW
+— Caché de dirección — el sondeo en estado estable cuesta ~microsegundos; escaneo completo solo en fallo de caché (~cada 14s)
+— Hilos del escáner corren en modo `SCHED_IDLE` — WoW nunca es desalojado por el escáner
+— Intervalo de flush del addon: 1.5s → 0.25s
+
+# Changelog / История изменений / Registro de cambios
+
 ## [3.1.2] — 2026-05-31
 
 ### Added / Добавлено / Añadido

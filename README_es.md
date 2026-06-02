@@ -7,7 +7,7 @@ Traducción de chat en tiempo real — app acompañante + addon de WoW
 
 [English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Русская версия](https://github.com/Yumash/BabelChat/blob/main/README_ru.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/AhegaoZKun/BabelChat/releases)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Diccionario)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
@@ -79,17 +79,17 @@ La demora viene del round-trip a los servidores de DeepL — tu texto viaja, se 
 │                                                          │
 │  Addon BabelChat                                         │
 │  ├── Intercepta eventos CHAT_MSG_* via WoW API           │
-│  ├── Buffer circular (50 mensajes)                       │
+│  ├── Buffer circular (50 mensajes, flush cada 250ms)     │
 │  └── Escribe en BabelChatDB.wctbuf (Lua SavedVariable)  │
 └──────────┬───────────────────────────────────────────────┘
            │  Lectura de memoria (cada 250ms)
            │  Windows: ReadProcessMemory (pymem)
-           │  Linux:   /proc/<pid>/mem + os.pread
+           │  Linux:   process_vm_readv via escáner Rust
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│  App acompañante (Python)                                │
+│  App acompañante (Python + Rust)                         │
 │                                                          │
-│  Memory Reader ──→ Parser ──→ Detector de idioma         │
+│  Escáner Rust ──→ Parser ──→ Detector de idioma          │
 │       │                           │                      │
 │       │    Frasario (instantáneo) ┤                      │
 │       │    Caché (instantáneo) ───┤                      │
@@ -142,10 +142,18 @@ python -m app.main  # ejecutar como Administrador
 git clone https://github.com/AhegaoZKun/BabelChat.git
 cd BabelChat
 echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+
+# Compilar el escáner Rust (requerido en Linux)
+cd babelchat_scanner
+cargo build --release
+cp target/release/libbabelchat_scanner.so ../app/
+cd ..
+
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # En WoW (una vez): /run BabelChatDB.companion = {enabled = true}
+QT_QPA_PLATFORM=xcb python -m app.main
 ```
 
 ### Addon WoW (manual)
@@ -198,23 +206,23 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 ## Limitaciones
 
 - **Requiere acceso elevado a la memoria** — Administrador en Windows; `ptrace_scope=0` en Linux
-- **Linux: retraso de relocalización ~5–10s** — cuando el GC de Lua mueve el buffer, el escáner necesita encontrar la nueva dirección
 - **Linux: el overlay requiere XWayland** — ejecutar con `QT_QPA_PLATFORM=xcb`; Wayland puro sin XWayland no está soportado
 - **Límite DeepL Free** — 500K caracteres/mes (~10K mensajes). Hay planes de pago
 - **Mensajes salientes** — copiar → pegar en chat WoW (por diseño, cumplimiento ToS)
 
 ## Tecnologías
 
-| Componente         | Tecnología                                                              |
-| ------------------ | ----------------------------------------------------------------------- |
-| App                | Python 3.12, PyQt6                                                      |
-| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: /proc/\<pid\>/mem + os.pread |
-| Detección de idioma| lingua-py (offline)                                                     |
-| Traducción         | DeepL API                                                               |
-| Caché              | SQLite + LRU                                                            |
-| Compilación        | PyInstaller → .exe único (solo Windows)                                 |
-| Addon              | Lua 5.1, WoW API                                                        |
-| Tests              | 133 tests (pytest)                                                      |
+| Componente          | Tecnología                                                              |
+| ------------------- | ----------------------------------------------------------------------- |
+| App                 | Python 3.12, PyQt6                                                      |
+| Memory Reader       | Windows: pymem (ReadProcessMemory) / Linux: Rust (`process_vm_readv`)  |
+| Escáner Rust        | Rayon (escaneo paralelo), hilos SCHED\_IDLE, caché de dirección         |
+| Detección de idioma | lingua-py (offline)                                                     |
+| Traducción          | DeepL API                                                               |
+| Caché               | SQLite + LRU                                                            |
+| Compilación         | PyInstaller → binario único (Windows .exe / Linux ELF)                  |
+| Addon               | Lua 5.1, WoW API                                                        |
+| Tests               | 133 tests (pytest)                                                      |
 
 ## Desarrollo
 
@@ -222,7 +230,13 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 python -m app.main    # Ejecutar
 pytest                # Tests (133 tests)
 ruff check app/       # Linter
-pyinstaller build.spec  # Compilar .exe (solo Windows)
+
+# Linux: compilar escáner Rust antes de ejecutar
+cd babelchat_scanner && cargo build --release && cp target/release/libbabelchat_scanner.so ../app/
+
+# Compilar binarios
+pyinstaller build.spec          # Windows .exe
+pyinstaller build-linux.spec    # Linux binario
 ```
 
 ## Apoyar el proyecto

@@ -3,7 +3,7 @@
 a = Analysis(
     ["app/main.py"],
     pathex=["."],
-    binaries=[],
+    binaries=[('app/libbabelchat_scanner.so', '.')],
     datas=[
         ("assets/icon.png", "assets"),
         ("addon/BabelChat", "addon/BabelChat"),

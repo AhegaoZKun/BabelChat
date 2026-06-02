@@ -37,6 +37,10 @@ AutoChatLog/
 build/
 dist/
 
+# Rust build artifacts
+babelchat_scanner/target/
+app/libbabelchat_scanner.so
+
 # Environment
 .env
 
@@ -54,3 +58,4 @@ BabelChat.AppDir/BabelChat.png
 BabelChat.AppDir/BabelChat.desktop
 BabelChat.AppDir/.DirIcon
 BabelChat.AppDir/usr/bin/BabelChat
+addon/BabelChat.zip
