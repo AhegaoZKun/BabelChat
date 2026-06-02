@@ -80,7 +80,7 @@ The delay comes from the DeepL API round-trip — your text travels to DeepL's s
 │  BabelChat addon                                         │
 │  ├── Hooks CHAT_MSG_* events via standard WoW API        │
 │  ├── Ring buffer (50 messages, flushed every 250ms)      │
-│  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)   │
+│  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)    │
 └──────────┬───────────────────────────────────────────────┘
            │  Memory read (every 250ms)
            │  Windows: ReadProcessMemory (pymem)
