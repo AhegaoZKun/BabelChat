@@ -4,7 +4,7 @@
 a = Analysis(
     ["app/main.py"],
     pathex=["."],
-    binaries=[],
+    binaries=[('app/babelchat_scanner_win.dll', '.')],
     datas=[
         ("assets/icon.ico", "assets"),
         ("assets/icon.png", "assets"),
@@ -47,6 +47,7 @@ a = Analysis(
         "app.i18n",
         "app.phrasebook",
         "app.slang",
+        "requests",
     ],
     hookspath=[],
     hooksconfig={},

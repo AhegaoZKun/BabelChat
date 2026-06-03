@@ -1,0 +1,26 @@
+[package]
+name = "babelchat_scanner_win"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "babelchat_scanner_win"
+crate-type = ["cdylib"]
+
+[dependencies]
+rayon = "1.10"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Threading",
+    "Win32_System_Memory",
+    "Win32_System_ProcessStatus",
+] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

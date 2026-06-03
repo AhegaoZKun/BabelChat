@@ -47,6 +47,9 @@ class AppConfig:
 
     # API
     deepl_api_key: str = ""
+    microsoft_api_key: str = ""
+    microsoft_region: str = ""
+    translator_priority: str = "deepl"  # "deepl" or "microsoft"
 
     # Paths
     wow_path: str = ""

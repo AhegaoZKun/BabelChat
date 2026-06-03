@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import deepl
+from app.translator import validate_deepl_key, validate_microsoft_key
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
@@ -58,7 +59,9 @@ class SetupWizard(QDialog):
     ) -> None:
         super().__init__(parent)
         self._config = config
-        self._key_validated = False
+        self._deepl_validated = False
+        self._ms_validated = False
+        self._key_validated = False  # at least one validated
         self.setWindowTitle(tr("wizard.title"))
         self.setWindowIcon(_create_dialog_icon())
         self.setMinimumSize(550, 480)
@@ -226,125 +229,194 @@ class SetupWizard(QDialog):
         layout = QVBoxLayout(page)
 
         title = QLabel(tr("wizard.api.title"))
-        title.setStyleSheet(
-            "color: #FFD200; font-size: 16px; font-weight: bold;"
-        )
+        title.setStyleSheet("color: #FFD200; font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
 
         layout.addSpacing(4)
 
-        explain = QLabel(tr("wizard.api.explain"))
+        explain = QLabel(
+            "Configure at least one translation provider. "
+            "If both are provided, you can choose which takes priority."
+        )
         explain.setStyleSheet("color: #ccc; font-size: 12px;")
         explain.setWordWrap(True)
         layout.addWidget(explain)
 
-        layout.addSpacing(8)
+        layout.addSpacing(10)
 
-        steps = QLabel(tr("wizard.api.steps"))
-        steps.setStyleSheet("color: #e0e0e0; font-size: 12px;")
-        steps.setWordWrap(True)
-        layout.addWidget(steps)
+        # ── DeepL ──────────────────────────────────────────────────
+        deepl_group = QGroupBox("DeepL")
+        deepl_group.setStyleSheet("QGroupBox { color: #FFD200; font-weight: bold; }")
+        deepl_layout = QVBoxLayout(deepl_group)
 
-        layout.addSpacing(8)
-
-        # Links
+        deepl_link_row = QHBoxLayout()
         signup = QLabel(
             '<a href="https://www.deepl.com/pro-api" '
-            'style="color: #FFD200; font-size: 12px;">'
-            f'{tr("wizard.api.signup")}</a>'
+            'style="color: #FFD200; font-size: 11px;">'
+            'Get free API key (1M chars, one-time)</a>'
         )
         signup.setOpenExternalLinks(True)
-        layout.addWidget(signup)
+        deepl_link_row.addWidget(signup)
+        deepl_link_row.addStretch()
+        deepl_layout.addLayout(deepl_link_row)
 
-        keys_link = QLabel(
-            '<a href="https://www.deepl.com/your-account/keys" '
-            'style="color: #FFD200; font-size: 12px;">'
-            f'{tr("wizard.api.keys_link")}</a>'
-        )
-        keys_link.setOpenExternalLinks(True)
-        layout.addWidget(keys_link)
-
-        layout.addSpacing(12)
-
-        # API Key input (always visible)
         self._api_key_input = QLineEdit(self._config.deepl_api_key)
-        self._api_key_input.setPlaceholderText(tr("wizard.api.placeholder"))
+        self._api_key_input.setPlaceholderText("Translator API key (ends with :fx for free tier)")
         self._api_key_input.textChanged.connect(self._on_api_key_changed)
-        layout.addWidget(self._api_key_input)
+        deepl_layout.addWidget(self._api_key_input)
 
-        # Validate + status
-        action_row = QHBoxLayout()
-        self._validate_btn = QPushButton(tr("wizard.api.validate"))
-        self._validate_btn.clicked.connect(self._validate_api_key)
-        action_row.addWidget(self._validate_btn)
-
+        deepl_action = QHBoxLayout()
+        self._validate_btn = QPushButton("Validate")
+        self._validate_btn.clicked.connect(self._validate_deepl_key)
+        deepl_action.addWidget(self._validate_btn)
         self._api_status_label = QLabel("")
         self._api_status_label.setWordWrap(True)
-        action_row.addWidget(self._api_status_label, stretch=1)
-        layout.addLayout(action_row)
+        deepl_action.addWidget(self._api_status_label, stretch=1)
+        deepl_layout.addLayout(deepl_action)
+        layout.addWidget(deepl_group)
+
+        layout.addSpacing(8)
+
+        # ── Microsoft Translator ───────────────────────────────────
+        ms_group = QGroupBox("Microsoft Translator")
+        ms_group.setStyleSheet("QGroupBox { color: #FFD200; font-weight: bold; }")
+        ms_layout = QVBoxLayout(ms_group)
+
+        ms_link_row = QHBoxLayout()
+        ms_link = QLabel(
+            '<a href="https://portal.azure.com/" '
+            'style="color: #FFD200; font-size: 11px;">'
+            'Get free key (2M chars/month, Azure — more setup required)</a>'
+        )
+        ms_link.setOpenExternalLinks(True)
+        ms_link_row.addWidget(ms_link)
+        ms_link_row.addStretch()
+        ms_layout.addLayout(ms_link_row)
+
+        self._ms_key_input = QLineEdit(self._config.microsoft_api_key)
+        self._ms_key_input.setPlaceholderText("Microsoft Translator API key")
+        self._ms_key_input.textChanged.connect(self._on_ms_key_changed)
+        ms_layout.addWidget(self._ms_key_input)
+
+        self._ms_region_input = QLineEdit(getattr(self._config, "microsoft_region", ""))
+        self._ms_region_input.setPlaceholderText("Azure region (e.g. germanywestcentral, eastus, westeurope)")
+        ms_layout.addWidget(self._ms_region_input)
+
+        ms_action = QHBoxLayout()
+        self._ms_validate_btn = QPushButton("Validate")
+        self._ms_validate_btn.clicked.connect(self._validate_ms_key)
+        ms_action.addWidget(self._ms_validate_btn)
+        self._ms_status_label = QLabel("")
+        self._ms_status_label.setWordWrap(True)
+        ms_action.addWidget(self._ms_status_label, stretch=1)
+        ms_layout.addLayout(ms_action)
+        layout.addWidget(ms_group)
+
+        layout.addSpacing(8)
+
+        # ── Priority (shown only when both validated) ──────────────
+        self._priority_widget = QWidget()
+        priority_layout = QHBoxLayout(self._priority_widget)
+        priority_layout.setContentsMargins(0, 0, 0, 0)
+        priority_label = QLabel("Priority:")
+        priority_label.setStyleSheet("color: #ccc;")
+        priority_layout.addWidget(priority_label)
+        self._priority_combo = QComboBox()
+        self._priority_combo.addItem("DeepL first", "deepl")
+        self._priority_combo.addItem("Microsoft first", "microsoft")
+        idx = self._priority_combo.findData(
+            getattr(self._config, "translator_priority", "deepl")
+        )
+        if idx >= 0:
+            self._priority_combo.setCurrentIndex(idx)
+        priority_layout.addWidget(self._priority_combo)
+        priority_note = QLabel("— the other acts as fallback")
+        priority_note.setStyleSheet("color: #888; font-size: 11px;")
+        priority_layout.addWidget(priority_note)
+        priority_layout.addStretch()
+        self._priority_widget.hide()
+        layout.addWidget(self._priority_widget)
 
         layout.addStretch()
         return page
 
     def _on_api_key_changed(self, text: str) -> None:
-        self._key_validated = False
+        self._deepl_validated = False
+        self._key_validated = self._ms_validated
+        self._api_status_label.setText("")
         if self._stack.currentIndex() == PAGE_API_KEY:
-            self._next_btn.setEnabled(False)
+            self._next_btn.setEnabled(self._key_validated)
 
-    def _validate_api_key(self) -> None:
+    def _on_ms_key_changed(self, text: str) -> None:
+        self._ms_validated = False
+        self._key_validated = self._deepl_validated
+        self._ms_status_label.setText("")
+        if self._stack.currentIndex() == PAGE_API_KEY:
+            self._next_btn.setEnabled(self._key_validated)
+
+    def _validate_deepl_key(self) -> None:
         key = self._api_key_input.text().strip()
         if not key:
-            self._set_api_status("unconfigured", tr("wizard.api.no_key"))
+            self._set_api_status("unconfigured", "Enter a DeepL API key first")
             return
-
         self._validate_btn.setEnabled(False)
-        self._validate_btn.setText(tr("wizard.api.validating"))
+        self._validate_btn.setText("Validating...")
         QApplication.processEvents()
+        valid, msg = validate_deepl_key(key)
+        self._validate_btn.setEnabled(True)
+        self._validate_btn.setText("Validate")
+        if valid:
+            self._deepl_validated = True
+            detail = f" — {msg}" if msg not in ("valid",) else ""
+            self._set_api_status("valid", f"✓ Valid{detail}")
+        else:
+            self._deepl_validated = False
+            msgs = {"auth_failed": "Invalid key", "no_key": "No key entered"}
+            self._set_api_status("invalid", f"✗ {msgs.get(msg, msg)}")
+        self._update_api_page_state()
 
-        try:
-            translator = deepl.Translator(key)
-            usage = translator.get_usage()
+    def _validate_ms_key(self) -> None:
+        key = self._ms_key_input.text().strip()
+        if not key:
+            self._set_ms_status("unconfigured", "Enter a Microsoft Translator key first")
+            return
+        self._ms_validate_btn.setEnabled(False)
+        self._ms_validate_btn.setText("Validating...")
+        QApplication.processEvents()
+        region = self._ms_region_input.text().strip()
+        valid, msg = validate_microsoft_key(key, region)
+        self._ms_validate_btn.setEnabled(True)
+        self._ms_validate_btn.setText("Validate")
+        if valid:
+            self._ms_validated = True
+            self._set_ms_status("valid", "✓ Valid — 2M chars/month free")
+        else:
+            self._ms_validated = False
+            msgs = {"auth_failed": "Invalid key", "no_key": "No key entered"}
+            self._set_ms_status("invalid", f"✗ {msgs.get(msg, msg)}")
+        self._update_api_page_state()
 
-            if usage.character and usage.character.valid:
-                count = usage.character.count
-                limit = usage.character.limit
-                pct = int((count / limit) * 100) if limit else 0
-                self._set_api_status(
-                    "valid",
-                    tr("wizard.api.valid_usage",
-                       count=f"{count:,}", limit=f"{limit:,}", pct=pct),
-                )
-            else:
-                self._set_api_status("valid", tr("wizard.api.valid"))
-            self._key_validated = True
-            self._next_btn.setEnabled(True)
-        except deepl.AuthorizationException:
-            self._set_api_status("invalid", tr("wizard.api.invalid"))
-        except Exception as e:
-            self._set_api_status("error", tr("wizard.api.error", e=e))
-        finally:
-            self._validate_btn.setEnabled(True)
-            self._validate_btn.setText(tr("wizard.api.validate"))
+    def _update_api_page_state(self) -> None:
+        self._key_validated = self._deepl_validated or self._ms_validated
+        self._next_btn.setEnabled(self._key_validated)
+        # Show priority selector only when both are validated
+        if self._deepl_validated and self._ms_validated:
+            self._priority_widget.show()
+        else:
+            self._priority_widget.hide()
+
+    def _validate_api_key(self) -> None:
+        self._validate_deepl_key()
 
     def _set_api_status(self, state: str, message: str) -> None:
-        colors = {
-            "unconfigured": "#999",
-            "valid": "#40FF40",
-            "invalid": "#FF4040",
-            "error": "#FF7F00",
-        }
-        icons = {
-            "unconfigured": "\u2022",
-            "valid": "\u2713",
-            "invalid": "\u2717",
-            "error": "\u26A0",
-        }
-        color = colors.get(state, "#999")
-        icon = icons.get(state, "")
-        self._api_status_label.setText(f"{icon} {message}")
-        self._api_status_label.setStyleSheet(
-            f"color: {color}; font-weight: bold;"
-        )
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        self._api_status_label.setText(message)
+        self._api_status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
+
+    def _set_ms_status(self, state: str, message: str) -> None:
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        self._ms_status_label.setText(message)
+        self._ms_status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
 
     # ── Page 3: WoW Path ─────────────────────────────────────────
 
@@ -588,14 +660,28 @@ class SetupWizard(QDialog):
             )
 
     def _update_summary(self) -> None:
-        key = self._api_key_input.text().strip()
-        masked = f"****{key[-4:]}" if len(key) >= 4 else "****"
+        deepl_key = self._api_key_input.text().strip()
+        ms_key = self._ms_key_input.text().strip()
         own = LANGUAGES.get(self._own_lang.currentData(), "?")
         target = LANGUAGES.get(self._target_lang.currentData(), "?")
         wow = self._wow_path_input.text() or tr("wizard.ready.not_configured")
 
+        backends = []
+        if deepl_key:
+            masked = f"****{deepl_key[-4:]}" if len(deepl_key) >= 4 else "****"
+            backends.append(f"DeepL ({masked})")
+        if ms_key:
+            masked = f"****{ms_key[-4:]}" if len(ms_key) >= 4 else "****"
+            backends.append(f"Microsoft ({masked})")
+        backend_str = ", ".join(backends) if backends else "None"
+
+        priority_str = ""
+        if deepl_key and ms_key:
+            p = self._priority_combo.currentData()
+            priority_str = f"<br><b>Priority:</b> {'DeepL' if p == 'deepl' else 'Microsoft'} (other as fallback)"
+
         self._summary_label.setText(
-            f"<b>{tr('wizard.ready.api_key')}</b> {masked}<br>"
+            f"<b>Translation:</b> {backend_str}{priority_str}<br>"
             f"<b>{tr('wizard.ready.wow_path')}</b> {wow}<br>"
             f"<b>{tr('wizard.ready.own_lang')}</b> {own}<br>"
             f"<b>{tr('wizard.ready.target_lang')}</b> {target}"
@@ -656,6 +742,9 @@ class SetupWizard(QDialog):
             self._next_btn.setEnabled(self._key_validated)
         else:
             self._next_btn.setEnabled(True)
+        # Update summary on ready page if navigating back
+        if current == PAGE_READY:
+            self._update_summary()
 
         self._update_step_indicator()
 
@@ -663,6 +752,9 @@ class SetupWizard(QDialog):
 
     def _finish(self) -> None:
         self._config.deepl_api_key = self._api_key_input.text().strip()
+        self._config.microsoft_api_key = self._ms_key_input.text().strip()
+        self._config.microsoft_region = self._ms_region_input.text().strip()
+        self._config.translator_priority = self._priority_combo.currentData()
         self._config.wow_path = self._wow_path_input.text().strip()
         self._config.own_language = self._own_lang.currentData()
         self._config.target_language = self._target_lang.currentData()

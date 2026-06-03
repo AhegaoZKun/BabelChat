@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import deepl
+from app.translator import validate_deepl_key, validate_microsoft_key
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QKeyEvent, QPainter, QPixmap
 from PyQt6.QtWidgets import (
@@ -527,35 +528,31 @@ class SettingsDialog(QDialog):
         api_group = QGroupBox(tr("settings.api_group"))
         api_layout = QVBoxLayout(api_group)
 
-        # Row 1: API Key input (always visible)
+        # ── DeepL ──────────────────────────────────────────────────
+        deepl_label = QLabel("DeepL")
+        deepl_label.setStyleSheet("color: #FFD200; font-weight: bold; font-size: 12px;")
+        api_layout.addWidget(deepl_label)
+
+        deepl_row = QHBoxLayout()
         self._api_key_input = QLineEdit(self._config.deepl_api_key)
-        self._api_key_input.setPlaceholderText(tr("settings.api.placeholder"))
-        api_layout.addWidget(self._api_key_input)
-
-        # Row 2: Validate + status + signup link
-        action_row = QHBoxLayout()
-
+        self._api_key_input.setPlaceholderText("DeepL API key (ends with :fx for free)")
+        deepl_row.addWidget(self._api_key_input, stretch=1)
         self._validate_btn = QPushButton(tr("settings.api.validate"))
         self._validate_btn.clicked.connect(self._validate_api_key)
-        action_row.addWidget(self._validate_btn)
+        deepl_row.addWidget(self._validate_btn)
+        deepl_key_link = QLabel('<a href="https://www.deepl.com/your-account/keys" style="color: #FFD200; font-size: 11px;">Get key</a>')
+        deepl_key_link.setOpenExternalLinks(True)
+        deepl_row.addWidget(deepl_key_link)
+        api_layout.addLayout(deepl_row)
 
         self._api_status_label = QLabel("")
-        self._api_status_label.setWordWrap(True)
-        action_row.addWidget(self._api_status_label, stretch=1)
+        self._api_status_label.setStyleSheet("font-size: 11px;")
+        api_layout.addWidget(self._api_status_label)
 
-        keys_link = QLabel(
-            '<a href="https://www.deepl.com/your-account/keys" '
-            f'style="color: #FFD200;">{tr("settings.api.get_key")}</a>'
-        )
-        keys_link.setOpenExternalLinks(True)
-        action_row.addWidget(keys_link)
-        api_layout.addLayout(action_row)
-
-        # Row 3: Usage bar (hidden until validated)
+        # Usage bar (DeepL only)
         self._usage_widget = QWidget()
         usage_layout = QVBoxLayout(self._usage_widget)
-        usage_layout.setContentsMargins(0, 4, 0, 0)
-
+        usage_layout.setContentsMargins(0, 2, 0, 0)
         usage_header = QHBoxLayout()
         usage_title = QLabel(tr("settings.api.usage"))
         usage_title.setStyleSheet("color: #999; font-size: 11px;")
@@ -565,95 +562,139 @@ class SettingsDialog(QDialog):
         self._usage_detail_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         usage_header.addWidget(self._usage_detail_label)
         usage_layout.addLayout(usage_header)
-
         self._usage_bar = QProgressBar()
         self._usage_bar.setRange(0, 100)
         self._usage_bar.setValue(0)
         usage_layout.addWidget(self._usage_bar)
-
         self._usage_widget.hide()
         api_layout.addWidget(self._usage_widget)
 
-        # Initial state
-        self._update_api_status_indicator()
+        api_layout.addSpacing(8)
 
+        # ── Microsoft Translator ───────────────────────────────────
+        ms_label = QLabel("Microsoft Translator")
+        ms_label.setStyleSheet("color: #FFD200; font-weight: bold; font-size: 12px;")
+        api_layout.addWidget(ms_label)
+
+        ms_row = QHBoxLayout()
+        self._ms_key_input = QLineEdit(self._config.microsoft_api_key)
+        self._ms_key_input.setPlaceholderText("Microsoft Translator API key")
+        ms_row.addWidget(self._ms_key_input, stretch=1)
+        self._ms_validate_btn = QPushButton(tr("settings.api.validate"))
+        self._ms_validate_btn.clicked.connect(self._validate_ms_key)
+        ms_row.addWidget(self._ms_validate_btn)
+        ms_key_link = QLabel('<a href="https://portal.azure.com/" style="color: #FFD200; font-size: 11px;">Azure portal</a>')
+        ms_key_link.setOpenExternalLinks(True)
+        ms_row.addWidget(ms_key_link)
+        api_layout.addLayout(ms_row)
+
+        self._ms_region_input = QLineEdit(getattr(self._config, "microsoft_region", ""))
+        self._ms_region_input.setPlaceholderText("Azure region (e.g. germanywestcentral, eastus, westeurope)")
+        api_layout.addWidget(self._ms_region_input)
+
+        self._ms_status_label = QLabel("")
+        self._ms_status_label.setStyleSheet("font-size: 11px;")
+        api_layout.addWidget(self._ms_status_label)
+
+        api_layout.addSpacing(8)
+
+        # ── Priority ───────────────────────────────────────────────
+        priority_row = QHBoxLayout()
+        priority_lbl = QLabel("Priority:")
+        priority_lbl.setStyleSheet("color: #ccc;")
+        priority_row.addWidget(priority_lbl)
+        self._priority_combo = QComboBox()
+        self._priority_combo.addItem("DeepL first", "deepl")
+        self._priority_combo.addItem("Microsoft first", "microsoft")
+        idx = self._priority_combo.findData(getattr(self._config, "translator_priority", "deepl"))
+        if idx >= 0:
+            self._priority_combo.setCurrentIndex(idx)
+        priority_row.addWidget(self._priority_combo)
+        priority_note = QLabel("(other acts as fallback)")
+        priority_note.setStyleSheet("color: #888; font-size: 11px;")
+        priority_row.addWidget(priority_note)
+        priority_row.addStretch()
+        api_layout.addLayout(priority_row)
+
+        self._update_api_status_indicator()
         return api_group
 
     def _validate_api_key(self) -> None:
-        """Test the API key and show usage stats."""
+        """Test the DeepL API key and show usage stats."""
         key = self._api_key_input.text().strip()
         if not key:
             self._set_api_status("unconfigured", tr("settings.api.no_key"))
             self._usage_widget.hide()
             return
-
         self._validate_btn.setEnabled(False)
         self._validate_btn.setText(tr("settings.api.validating"))
         QApplication.processEvents()
-
-        try:
-            translator = deepl.Translator(key)
-            usage = translator.get_usage()
-
-            if usage.character and usage.character.valid:
-                count = usage.character.count
-                limit = usage.character.limit
-                pct = int((count / limit) * 100) if limit else 0
-
-                self._usage_bar.setValue(pct)
-                self._usage_detail_label.setText(
-                    f"{count:,} / {limit:,} ({pct}%)"
-                )
-
-                if pct >= 90:
-                    bar_color = "#FF4040"
-                elif pct >= 70:
-                    bar_color = "#FF7F00"
-                else:
-                    bar_color = "#FFD200"
-                self._usage_bar.setStyleSheet(
-                    f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}"
-                )
-
-                self._usage_widget.show()
-                self._set_api_status("valid", tr("settings.api.valid"))
+        valid, msg = validate_deepl_key(key)
+        self._validate_btn.setEnabled(True)
+        self._validate_btn.setText(tr("settings.api.validate"))
+        if valid:
+            self._set_api_status("valid", tr("settings.api.valid"))
+            # Show usage bar if we got usage data
+            if "/" in msg:
+                parts = msg.split("/")
+                try:
+                    count_str = parts[0].replace(",", "")
+                    rest = parts[1].split("(")
+                    limit_str = rest[0].strip().replace(",", "")
+                    pct = int(rest[1].rstrip("%)"))
+                    self._usage_bar.setValue(pct)
+                    self._usage_detail_label.setText(f"{int(count_str):,} / {int(limit_str):,} ({pct}%)")
+                    bar_color = "#FF4040" if pct >= 90 else "#FF7F00" if pct >= 70 else "#FFD200"
+                    self._usage_bar.setStyleSheet(f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}")
+                    self._usage_widget.show()
+                except Exception:
+                    self._usage_widget.hide()
             else:
-                self._set_api_status("valid", tr("settings.api.valid_no_data"))
                 self._usage_widget.hide()
+        else:
+            msgs = {"auth_failed": tr("settings.api.invalid"), "no_key": tr("settings.api.no_key")}
+            self._set_api_status("invalid", msgs.get(msg, tr("settings.api.error", e=msg)))
+            self._usage_widget.hide()
 
-        except deepl.AuthorizationException:
-            self._set_api_status("invalid", tr("settings.api.invalid"))
-            self._usage_widget.hide()
-        except Exception as e:
-            self._set_api_status("error", tr("settings.api.error", e=e))
-            self._usage_widget.hide()
-        finally:
-            self._validate_btn.setEnabled(True)
-            self._validate_btn.setText(tr("settings.api.validate"))
+    def _validate_ms_key(self) -> None:
+        """Test the Microsoft Translator API key."""
+        key = self._ms_key_input.text().strip()
+        if not key:
+            self._set_ms_status("unconfigured", "Enter a key first")
+            return
+        self._ms_validate_btn.setEnabled(False)
+        self._ms_validate_btn.setText(tr("settings.api.validating"))
+        QApplication.processEvents()
+        region = self._ms_region_input.text().strip()
+        valid, msg = validate_microsoft_key(key, region)
+        self._ms_validate_btn.setEnabled(True)
+        self._ms_validate_btn.setText(tr("settings.api.validate"))
+        if valid:
+            self._set_ms_status("valid", "✓ Valid — 2M chars/month free")
+        else:
+            msgs = {"auth_failed": "✗ Invalid key", "no_key": "Enter a key first"}
+            self._set_ms_status("invalid", msgs.get(msg, f"✗ {msg}"))
 
     def _set_api_status(self, state: str, message: str) -> None:
-        colors = {
-            "unconfigured": "#999",
-            "valid": "#40FF40",
-            "invalid": "#FF4040",
-            "error": "#FF7F00",
-        }
-        icons = {
-            "unconfigured": "\u2022",
-            "valid": "\u2713",
-            "invalid": "\u2717",
-            "error": "\u26A0",
-        }
-        color = colors.get(state, "#999")
-        icon = icons.get(state, "")
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        icon = {"unconfigured": "•", "valid": "✓", "invalid": "✗", "error": "⚠"}.get(state, "")
         self._api_status_label.setText(f"{icon} {message}")
-        self._api_status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+        self._api_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
+
+    def _set_ms_status(self, state: str, message: str) -> None:
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        self._ms_status_label.setText(message)
+        self._ms_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
 
     def _update_api_status_indicator(self) -> None:
         if self._config.deepl_api_key:
             self._set_api_status("unconfigured", tr("settings.api.saved_hint"))
         else:
             self._set_api_status("unconfigured", tr("settings.api.not_configured"))
+        if self._config.microsoft_api_key:
+            self._set_ms_status("unconfigured", "Key saved — click Validate to check")
+        else:
+            self._set_ms_status("unconfigured", "Not configured")
 
     # ── Overlay Tab ──────────────────────────────────────────────
 
@@ -908,6 +949,9 @@ class SettingsDialog(QDialog):
 
     def _save_and_accept(self) -> None:
         self._config.deepl_api_key = self._api_key_input.text().strip()
+        self._config.microsoft_api_key = self._ms_key_input.text().strip()
+        self._config.microsoft_region = self._ms_region_input.text().strip()
+        self._config.translator_priority = self._priority_combo.currentData()
         self._config.wow_path = self._wow_path_input.text().strip()
         self._config.ui_language = self._ui_lang.currentData()
         self._config.own_language = self._own_lang.currentData()

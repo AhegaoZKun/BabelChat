@@ -122,6 +122,9 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     return PipelineConfig(
         chatlog_path=chatlog,
         deepl_api_key=config.deepl_api_key,
+        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
+        microsoft_region=getattr(config, "microsoft_region", ""),
+        translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
         enabled_channels=enabled_channels,
@@ -266,7 +269,7 @@ def main() -> int:
     tr.set_language(config.ui_language)
 
     # First run — setup wizard if no API key
-    if not config.deepl_api_key:
+    if not config.deepl_api_key and not getattr(config, "microsoft_api_key", ""):
         from app.setup_wizard import SetupWizard
 
         while True:
@@ -287,7 +290,12 @@ def main() -> int:
 
     # Provide translator for the reply panel.
     # Reply translates outgoing messages — default to EN unless own language is EN.
-    reply_translator = TranslatorService(api_key=config.deepl_api_key)
+    reply_translator = TranslatorService(
+        api_key=config.deepl_api_key,
+        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
+        microsoft_region=getattr(config, "microsoft_region", ""),
+        priority=getattr(config, "translator_priority", "deepl"),
+    )
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
     overlay.set_translator(reply_translator, reply_lang)
 

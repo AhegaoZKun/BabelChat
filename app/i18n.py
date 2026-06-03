@@ -89,9 +89,9 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # API Key page
     "wizard.api.title": {
-        "RU": "Ключ DeepL API",
-        "EN": "DeepL API Key",
-        "ES": "Clave API de DeepL",
+        "RU": "Ключ API",
+        "EN": "Translator API Key",
+        "ES": "Clave API del Traductor",
     },
     "wizard.api.explain": {
         "RU": (
