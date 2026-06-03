@@ -80,7 +80,7 @@ The delay comes from the DeepL API round-trip — your text travels to DeepL's s
 │  BabelChat addon                                         │
 │  ├── Hooks CHAT_MSG_* events via standard WoW API        │
 │  ├── Ring buffer (50 messages, flushed every 250ms)      │
-│  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)   │
+│  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)    │
 └──────────┬───────────────────────────────────────────────┘
            │  Memory read (every 250ms)
            │  Windows: ReadProcessMemory (pymem)
@@ -120,7 +120,7 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
 4. Launch WoW, join a group — translations appear automatically
 
-### Linux (Proton/Wine) — Quick Start
+### Linux  — Quick Start
 
 1. Download `BabelChatLinux.zip` from [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
 2. Extract and run `BabelChat`
