@@ -223,6 +223,157 @@ class ReplyTranslateWorker(QRunnable):
         self.signals.finished.emit(result.translated, result.success)
 
 
+
+class ReplyDialog(QWidget):
+    """Floating reply translator panel — separate window for Linux keyboard input.
+
+    On Linux with X11BypassWindowManagerHint, child QLineEdit widgets don't
+    receive keyboard events. This panel lives in a separate normal window
+    that does receive keyboard input, positioned to float below the overlay.
+    """
+
+    translate_requested = pyqtSignal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent,
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._translator: TranslatorService | None = None
+        self._target_lang: str = "EN"
+        self._thread_pool = QThreadPool.globalInstance()
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        panel = QWidget()
+        panel.setStyleSheet("background: rgba(0, 0, 0, 180); border-top: 1px solid #333; border-radius: 0px 0px 4px 4px;")
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(4, 4, 4, 4)
+        panel_layout.setSpacing(3)
+
+        # Input row
+        input_row = QHBoxLayout()
+        input_row.setSpacing(4)
+        self._reply_input = QLineEdit()
+        self._reply_input.setPlaceholderText(tr("overlay.reply.input_hint"))
+        self._reply_input.setMaxLength(255)
+        self._reply_input.setStyleSheet(
+            "QLineEdit { background: #111; color: #e0e0e0; border: 1px solid #555; "
+            "border-radius: 3px; padding: 4px 6px; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #FFD200; }"
+        )
+        self._reply_input.returnPressed.connect(self._do_translate)
+        input_row.addWidget(self._reply_input)
+
+        enter_btn = QPushButton("\u23CE")
+        enter_btn.setFixedSize(24, 24)
+        enter_btn.setStyleSheet(
+            "QPushButton { color: #555; font-size: 14px; background: transparent; "
+            "border: 1px solid transparent; border-radius: 3px; }"
+            "QPushButton:hover { color: #FFD200; border-color: #FFD200; }"
+        )
+        enter_btn.clicked.connect(self._do_translate)
+        input_row.addWidget(enter_btn)
+
+        self._reply_lang_combo = QComboBox()
+        _reply_langs = [
+            ("EN","EN"),("RU","RU"),("DE","DE"),("FR","FR"),("ES","ES"),
+            ("IT","IT"),("PT","PT"),("PL","PL"),("UK","UK"),("TR","TR"),
+            ("ZH","ZH"),("JA","JA"),("KO","KO"),("NL","NL"),("CS","CS"),("SV","SV"),
+        ]
+        for code, label in _reply_langs:
+            self._reply_lang_combo.addItem(f"\u2192 {label}", code)
+        self._reply_lang_combo.setStyleSheet(
+            "QComboBox { background: #222; color: #FFD200; border: 1px solid #555; "
+            "border-radius: 3px; padding: 2px 4px; font-size: 10px; font-weight: bold; "
+            "min-width: 60px; }"
+            "QComboBox:focus { border-color: #FFD200; }"
+            "QComboBox::drop-down { border: none; background: #333; width: 16px; }"
+            "QComboBox QAbstractItemView { background: #1a1a1a; color: #e0e0e0; "
+            "selection-background-color: #FFD200; selection-color: #000; "
+            "border: 1px solid #555; }"
+        )
+        self._reply_lang_combo.setFixedHeight(24)
+        input_row.addWidget(self._reply_lang_combo)
+        panel_layout.addLayout(input_row)
+
+        # Result row
+        result_row = QHBoxLayout()
+        result_row.setSpacing(4)
+        self._reply_output = QLineEdit()
+        self._reply_output.setReadOnly(True)
+        self._reply_output.setStyleSheet(
+            "QLineEdit { background: #0a0a0a; color: #FFD200; border: 1px solid #444; "
+            "border-radius: 3px; padding: 4px 6px; font-size: 11px; }"
+        )
+        result_row.addWidget(self._reply_output)
+
+        self._copy_btn = QPushButton(tr("overlay.reply.copy"))
+        self._copy_btn.setFixedHeight(24)
+        self._copy_btn.setStyleSheet(
+            "QPushButton { background: rgba(60,60,60,200); color: #ccc; "
+            "border: 1px solid #555; border-radius: 3px; font-size: 10px; }"
+            "QPushButton:hover { color: #FFD200; border-color: #FFD200; }"
+        )
+        self._copy_btn.clicked.connect(self._copy_result)
+        result_row.addWidget(self._copy_btn)
+        panel_layout.addLayout(result_row)
+
+        self._status = QLabel("")
+        self._status.setStyleSheet("color: #40FF40; font-size: 10px; font-weight: bold;")
+        self._status.setAlignment(Qt.AlignmentFlag.AlignRight)
+        panel_layout.addWidget(self._status)
+
+        layout.addWidget(panel)
+
+    def set_translator(self, translator: "TranslatorService", target_lang: str) -> None:
+        self._translator = translator
+        self._target_lang = target_lang
+        idx = self._reply_lang_combo.findData(target_lang)
+        if idx >= 0:
+            self._reply_lang_combo.setCurrentIndex(idx)
+
+    def _do_translate(self) -> None:
+        text = self._reply_input.text().strip()
+        if not text or self._translator is None:
+            return
+        self._reply_output.setText(tr("overlay.reply.translating"))
+        self._reply_input.setEnabled(False)
+        lang = self._reply_lang_combo.currentData() or self._target_lang
+        worker = ReplyTranslateWorker(self._translator, text, lang)
+        worker.signals.finished.connect(self._on_translated)
+        self._thread_pool.start(worker)
+
+    @pyqtSlot(str, bool)
+    def _on_translated(self, translated: str, success: bool) -> None:
+        self._reply_input.setEnabled(True)
+        if success:
+            self._reply_output.setText(translated)
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(translated)
+            self._status.setText(tr("overlay.reply.copied"))
+            QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._status.setText(""))
+        else:
+            self._reply_output.setText(tr("overlay.reply.error"))
+
+    def _copy_result(self) -> None:
+        text = self._reply_output.text()
+        if text:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+            self._status.setText(tr("overlay.reply.copied"))
+            QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._status.setText(""))
+
+
 class ChatOverlay(QWidget):
     """WoW-styled smart overlay chat window.
 
@@ -253,6 +404,10 @@ class ChatOverlay(QWidget):
         self._max_messages = _MAX_MESSAGES
         self._minimized = False
         self._restored_size: tuple[int, int] | None = None
+        # On Linux, use a separate window for the reply panel to get keyboard input
+        self._reply_dialog: ReplyDialog | None = None
+        if sys.platform != "win32":
+            self._reply_dialog = ReplyDialog()
 
         self._setup_window()
         self._setup_ui()
@@ -434,6 +589,11 @@ class ChatOverlay(QWidget):
             "QLineEdit:focus { border-color: #FFD200; }"
         )
         self._reply_input.returnPressed.connect(self._do_reply_translate)
+        # On Linux with X11BypassWindowManagerHint, temporarily drop the bypass
+        # flag when the input has focus so keyboard events are routed correctly
+        if sys.platform != "win32":
+            self._reply_input.focusInEvent = self._on_reply_focus_in
+            self._reply_input.focusOutEvent = self._on_reply_focus_out
         input_row.addWidget(self._reply_input)
 
         # Enter button
@@ -516,6 +676,9 @@ class ChatOverlay(QWidget):
         reply_layout.addWidget(self._reply_status)
 
         container_layout.addWidget(self._reply_panel)
+        # On Linux, the reply dialog is a separate window — hide the embedded panel
+        if sys.platform != "win32":
+            self._reply_panel.hide()
 
         # Resize grip in bottom-right corner
         grip_row = QHBoxLayout()
@@ -697,6 +860,8 @@ class ChatOverlay(QWidget):
             self._filter_bar.hide()
             self._chat_area.hide()
             self._reply_panel.hide()
+            if self._reply_dialog is not None:
+                self._reply_dialog.hide()
             self._resize_grip.hide()
             self._toggle_btn.hide()
             self._minimize_btn.setText("+")
@@ -709,6 +874,9 @@ class ChatOverlay(QWidget):
             self._filter_bar.show()
             self._chat_area.show()
             self._reply_panel.show()
+            if self._reply_dialog is not None:
+                self._position_reply_dialog()
+                self._reply_dialog.show()
             self._resize_grip.show()
             self._toggle_btn.show()
             self._minimize_btn.setText("─")
@@ -767,11 +935,35 @@ class ChatOverlay(QWidget):
         idx = self._reply_lang_combo.findData(target_lang)
         if idx >= 0:
             self._reply_lang_combo.setCurrentIndex(idx)
+        if self._reply_dialog is not None:
+            self._reply_dialog.set_translator(translator, target_lang)
 
     def _on_reply_lang_changed(self, index: int) -> None:
         code = self._reply_lang_combo.currentData()
         if code:
             self._target_lang = code
+
+    def _on_reply_focus_in(self, event: object) -> None:
+        """Temporarily remove X11BypassWindowManagerHint so keyboard input works."""
+        pos = self.pos()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.move(pos)
+        self.show()
+        self._reply_input.setFocus()
+
+    def _on_reply_focus_out(self, event: object) -> None:
+        """Restore X11BypassWindowManagerHint when input loses focus."""
+        pos = self.pos()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.X11BypassWindowManagerHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.move(pos)
+        self.show()
 
     def _do_reply_translate(self) -> None:
         text = self._reply_input.text().strip()
@@ -850,7 +1042,25 @@ class ChatOverlay(QWidget):
             hasattr(event, 'button')
             and event.button() == Qt.MouseButton.LeftButton  # type: ignore[union-attr]
         ):
+            # Don't intercept clicks on interactive child widgets
+            # (reply input, buttons, combos) — let Qt route them normally
             pos = event.position().toPoint()  # type: ignore[union-attr]
+            child = self.childAt(pos)
+            if child is not None:
+                from PyQt6.QtWidgets import QLineEdit, QPushButton, QComboBox, QAbstractScrollArea
+                if isinstance(child, (QLineEdit, QPushButton, QComboBox, QAbstractScrollArea)):
+                    child.setFocus()
+                    self.activateWindow()
+                    return
+                # Also check parent chain — click may land on child of QLineEdit etc.
+                parent = child.parent()
+                while parent is not None and parent is not self:
+                    if isinstance(parent, (QLineEdit, QPushButton, QComboBox, QAbstractScrollArea)):
+                        parent.setFocus()
+                        self.activateWindow()
+                        return
+                    parent = parent.parent()
+
             edge = self._hit_edge(pos)
             if edge:
                 self._resize_edge = edge
@@ -907,6 +1117,34 @@ class ChatOverlay(QWidget):
         self._save_overlay_state()
 
     # -- Settings persistence --
+
+    def _position_reply_dialog(self) -> None:
+        """Position the reply dialog flush below the overlay's visible content."""
+        if self._reply_dialog is None:
+            return
+        geo = self.geometry()
+        # Subtract edge margin so dialog sits flush against the visible container
+        self._reply_dialog.move(geo.left() + _EDGE_MARGIN, geo.bottom() - _EDGE_MARGIN)
+        self._reply_dialog.resize(geo.width() - _EDGE_MARGIN * 2, self._reply_dialog.sizeHint().height())
+
+    def showEvent(self, event: object) -> None:
+        super().showEvent(event)  # type: ignore[misc]
+        if self._reply_dialog is not None and not self._minimized:
+            self._position_reply_dialog()
+            self._reply_dialog.show()
+
+    def hideEvent(self, event: object) -> None:
+        super().hideEvent(event)  # type: ignore[misc]
+        if self._reply_dialog is not None:
+            self._reply_dialog.hide()
+
+    def moveEvent(self, event: object) -> None:
+        super().moveEvent(event)  # type: ignore[misc]
+        self._position_reply_dialog()
+
+    def resizeEvent(self, event: object) -> None:
+        super().resizeEvent(event)  # type: ignore[misc]
+        self._position_reply_dialog()
 
     def _save_overlay_state(self) -> None:
         """Save overlay position, size, and opacity to AppConfig."""
