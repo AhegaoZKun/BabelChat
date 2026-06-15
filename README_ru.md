@@ -7,7 +7,7 @@
 
 [English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Versión en español](https://github.com/Yumash/BabelChat/blob/main/README_es.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/AhegaoZKun/BabelChat/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Словарь)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
@@ -115,14 +115,14 @@ BabelChat только **читает** память — никогда не п�
 
 ### Windows — Быстрый старт
 
-1. Скачай `BabelChatWindows.zip` из [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+1. Скачай `BabelChatWindows.zip` из [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Распакуй и запусти `BabelChat.exe` **от имени Администратора**
 3. Следуй мастеру настройки (получи [бесплатный ключ DeepL](https://www.deepl.com/pro-api), укажи путь к WoW, установи аддон)
 4. Запусти WoW, зайди в группу — переводы появятся автоматически
 
 ### Linux (Proton/Wine) — Быстрый старт
 
-1. Скачай `BabelChatLinux.zip` из [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+1. Скачай `BabelChatLinux.zip` из [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Распакуй и запусти `BabelChat`
 3. Следуй мастеру настройки (получи [бесплатный ключ DeepL](https://www.deepl.com/pro-api), укажи путь к WoW, установи аддон)
 4. Запусти WoW, зайди в группу — переводы появятся автоматически
@@ -130,7 +130,7 @@ BabelChat только **читает** память — никогда не п�
 ### Из исходников (Windows)
 
 ```bash
-git clone https://github.com/AhegaoZKun/BabelChat.git
+git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
 python -m app.main  # запуск от Администратора
@@ -139,7 +139,7 @@ python -m app.main  # запуск от Администратора
 ### Из исходников (Linux)
 
 ```bash
-git clone https://github.com/AhegaoZKun/BabelChat.git
+git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
 
@@ -263,6 +263,7 @@ pyinstaller build-linux.spec    # Linux бинарник
 
 - **Andrey Yumashev** — [@Yumash](https://github.com/Yumash) — приложение-компаньон, оверлей, чтение памяти
 - **Pirson** — [CurseForge](https://www.curseforge.com/wow/addons/wow-translator) — словарь WoW и движок перевода
+- **AhegaoZKun** — [@AhegaoZKun](https://github.com/AhegaoZKun) — поддержка Linux/Wayland, Rust-сканеры памяти, бэкенд Microsoft Translator
 - **Claude** (Anthropic) — AI-соавтор
 
 ## Лицензия

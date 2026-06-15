@@ -7,7 +7,7 @@ Traducción de chat en tiempo real — app acompañante + addon de WoW
 
 [English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Русская версия](https://github.com/Yumash/BabelChat/blob/main/README_ru.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/AhegaoZKun/BabelChat/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Diccionario)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
@@ -115,14 +115,14 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 
 ### Windows — Inicio rápido
 
-1. Descarga `BabelChatWindows.zip` de [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+1. Descarga `BabelChatWindows.zip` de [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Extrae y ejecuta `BabelChat.exe` **como Administrador**
 3. Sigue el asistente (obtén una [clave API gratuita de DeepL](https://www.deepl.com/pro-api), configura la ruta de WoW, instala el addon)
 4. Abre WoW, entra a un grupo — las traducciones aparecerán automáticamente
 
 ### Linux (Proton/Wine) — Inicio rápido
 
-1. Descarga `BabelChatLinux.zip` de [Releases](https://github.com/AhegaoZKun/BabelChat/releases)
+1. Descarga `BabelChatLinux.zip` de [Releases](https://github.com/Yumash/BabelChat/releases)
 2. Extrae y ejecuta `BabelChat`
 3. Sigue el asistente (obtén una [clave API gratuita de DeepL](https://www.deepl.com/pro-api), configura la ruta de WoW, instala el addon)
 4. Abre WoW, entra a un grupo — las traducciones aparecerán automáticamente
@@ -130,7 +130,7 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 ### Desde el código fuente (Windows)
 
 ```bash
-git clone https://github.com/AhegaoZKun/BabelChat.git
+git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
 python -m app.main  # ejecutar como Administrador
@@ -139,7 +139,7 @@ python -m app.main  # ejecutar como Administrador
 ### Desde el código fuente (Linux)
 
 ```bash
-git clone https://github.com/AhegaoZKun/BabelChat.git
+git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
 
@@ -261,6 +261,7 @@ Proyecto creado por dos autores:
 
 - **Andrey Yumashev** — [@Yumash](https://github.com/Yumash) — app acompañante, overlay, lectura de memoria
 - **Pirson** — [CurseForge](https://www.curseforge.com/wow/addons/wow-translator) — diccionario WoW y motor de traducción
+- **AhegaoZKun** — [@AhegaoZKun](https://github.com/AhegaoZKun) — soporte Linux/Wayland, escáneres de memoria en Rust, backend de Microsoft Translator
 - **Claude** (Anthropic) — Co-autor IA
 
 ## Licencia
