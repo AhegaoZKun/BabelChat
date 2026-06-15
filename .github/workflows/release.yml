@@ -29,6 +29,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Build Rust scanner DLL
+        run: |
+          cargo build --release --manifest-path babelchat_scanner_win/Cargo.toml
+          Copy-Item babelchat_scanner_win/target/release/babelchat_scanner_win.dll app/babelchat_scanner_win.dll
+
       - name: Build .exe
         run: pyinstaller build.spec
 
