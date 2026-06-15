@@ -1,3 +1,7 @@
+# Upload credentials (CurseForge / Wago API tokens — NEVER commit)
+.wago
+.curseforge
+
 # Claude Code / Tausik (local dev tools)
 .claude/
 .tausik-lib/
@@ -65,3 +69,6 @@ app/babelchat_scanner_win.dll
 # Local config backups (never commit — may contain API keys)
 config.json
 *.bak
+
+# Rust scanner build artifacts
+babelchat_scanner_*/target/
