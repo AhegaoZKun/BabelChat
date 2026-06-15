@@ -33,6 +33,7 @@ local DEFAULTS = {
             showRoles = true,
             showEstado = true,
             showSlang = true,
+            showEndgame = true,
             showZones = true,
             showSets = true,
             skipSameLanguage = true,

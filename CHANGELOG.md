@@ -2,6 +2,11 @@
 
 ## [3.2.0] — 2026-06-15
 
+### Added / Добавлено / Añadido
+
+- **Endgame & Midnight dictionary category** — 22 current terms across all 14 client languages (delves, Bountiful, Brann, Mythic+/keystone/affixes, gear tracks Champion/Hero/Myth, Gilded/Runed crests, Warband, catalyst, spark, renown, Raider.IO, KSM, Manaforge Omega, Undermine). The in-game dictionary now keeps up with The War Within / Midnight chat.
+- **Dictionary engine**: LibBabble zone/item-set lookups are pre-indexed at rebuild time instead of re-scanned on every chat line; single-word matching now resolves the correct token position when a word repeats in a message.
+
 ### Fixed / Исправлено / Corregido
 
 - **Discord invite links no longer mistranslated** — schemeless links like `discord.gg/xyz` were reaching DeepL, which read `.gg` as the gaming abbreviation and rendered it as "good game" / "хорошая игра". URL tokenization now also protects known link/invite domains (`discord.gg`, `t.me`, `bit.ly`, …) and any `domain.tld/path`.

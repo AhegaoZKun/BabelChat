@@ -46,6 +46,7 @@ L["CAT_ZONES"] = "Zones (World)"
 L["CAT_SETS"] = "Item Sets"
 L["CAT_STATUS"] = "Status / States"
 L["CAT_SLANG"] = "Slang & Shortcuts"
+L["CAT_ENDGAME"] = "Endgame & Midnight"
 L["GEN_HEADER"] = "General"
 
 -- Channels
@@ -78,6 +79,7 @@ L["TT_CAT_ZONES"] = "Translate zone and location names."
 L["TT_CAT_SETS"] = "Translate item set names."
 L["TT_CAT_STATUS"] = "Translate statuses and states (AFK, OOM, etc)."
 L["TT_CAT_SLANG"] = "Gaming slang, chat shortcuts, M+ and raid callouts."
+L["TT_CAT_ENDGAME"] = "Current endgame terms: delves, Mythic+, gear tracks, crests, Warbands."
 
 L["TT_CH_SAY"] = "Translate messages from /say and /yell."
 L["TT_CH_PARTY"] = "Translate messages from Party and Instance chat."
@@ -154,6 +156,7 @@ if locale == "ruRU" then
     L["CAT_SETS"] = "Комплекты предметов"
     L["CAT_STATUS"] = "Статусы и состояния"
     L["CAT_SLANG"] = "Сленг и сокращения"
+    L["CAT_ENDGAME"] = "Эндгейм и Midnight"
     L["GEN_HEADER"] = "Основные"
 
     L["CH_SAY"] = "Сказать"
@@ -184,6 +187,7 @@ if locale == "ruRU" then
     L["TT_CAT_SETS"] = "Перевод названий комплектов предметов."
     L["TT_CAT_STATUS"] = "Перевод статусов и состояний (AFK, OOM и т.д.)."
     L["TT_CAT_SLANG"] = "Игровой сленг, сокращения в чате, коллауты М+ и рейда."
+    L["TT_CAT_ENDGAME"] = "Актуальные термины эндгейма: вылазки, Мифик+, треки экипировки, гербы, отряды."
 
     L["TT_CH_SAY"] = "Переводить сообщения из /сказать и /крик."
     L["TT_CH_PARTY"] = "Переводить сообщения группы и подземелья."
@@ -256,6 +260,7 @@ elseif locale == "esES" or locale == "esMX" then
     L["CAT_SETS"] = "Conjuntos de Objetos"
     L["CAT_STATUS"] = "Estados"
     L["CAT_SLANG"] = "Jerga y atajos"
+    L["CAT_ENDGAME"] = "Endgame y Midnight"
     L["GEN_HEADER"] = "General"
 
     L["CH_SAY"] = "Decir"
@@ -286,6 +291,7 @@ elseif locale == "esES" or locale == "esMX" then
     L["TT_CAT_SETS"] = "Traducir nombres de conjuntos de objetos."
     L["TT_CAT_STATUS"] = "Traducir estados y condiciones (AFK, OOM, etc)."
     L["TT_CAT_SLANG"] = "Jerga gaming, atajos de chat, callouts de M+ y banda."
+    L["TT_CAT_ENDGAME"] = "Términos actuales de endgame: cavernas, Mítica+, vías de equipo, blasones, tropas."
 
     L["TT_CH_SAY"] = "Traducir mensajes de /decir y /gritar."
     L["TT_CH_PARTY"] = "Traducir mensajes de Grupo e Instancia."

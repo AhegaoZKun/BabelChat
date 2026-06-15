@@ -10,6 +10,10 @@ local ADDON_NAME, addonTable = ...
 local MasterDict = {}
 local MultiWordPatterns = {}
 local SortedDictKeys = {}
+-- Prebuilt LibBabble (zones / item-sets) index: { {lowerEng, eng, loc}, ... }.
+-- Built once per RebuildMasterDict so the per-message translator does not
+-- re-lowercase thousands of entries on every chat line.
+local BabbleIndex = {}
 
 local ipairs, pairs = ipairs, pairs
 local string_format, string_gsub, string_find, string_lower = string.format, string.gsub, string.find, string.lower
@@ -47,6 +51,7 @@ function addonTable.RebuildMasterDict()
         { key = "showRoles",       dict = addonTable.RolesDict },
         { key = "showEstado",      dict = addonTable.EstadoDict },
         { key = "showSlang",       dict = addonTable.SlangDict },
+        { key = "showEndgame",     dict = addonTable.EndgameDict },
     }
 
     local target = db.dict.targetLocale or "enUS"
@@ -70,6 +75,23 @@ function addonTable.RebuildMasterDict()
     end
 
     table_sort(SortedDictKeys, function(a, b) return #a > #b end)
+
+    -- Rebuild the LibBabble index (gated by showZones / showSets). Lowercasing
+    -- and the length filter happen here, once, instead of per chat message.
+    BabbleIndex = {}
+    local babbleSources = {
+        { data = BZ, active = db.dict.settings.showZones },
+        { data = BI, active = db.dict.settings.showSets },
+    }
+    for _, b in ipairs(babbleSources) do
+        if b.data and b.active then
+            for eng, loc in pairs(b.data) do
+                if #eng > 3 then
+                    table_insert(BabbleIndex, { string_lower(eng), eng, loc })
+                end
+            end
+        end
+    end
 end
 
 -- ==========================================
@@ -157,50 +179,37 @@ function addonTable.TranslateChat(text)
         end
     end
 
-    -- 2. Single-word translation (skip hyperlinks and already-matched ranges)
-    for word in text:gmatch("([%a%d']+)") do
+    -- 2. Single-word translation (skip hyperlinks and already-matched ranges).
+    -- The leading "()" capture yields each token's real start position, so a
+    -- word repeated in the message resolves to the correct occurrence (the old
+    -- string_find always returned the first match).
+    for startPos, word in text:gmatch("()([%a%d']+)") do
         local translation = MasterDict[string_lower(word)]
         if translation then
-            local startPos = string_find(textLower, string_lower(word), 1, true)
-            local overlaps = false
-            if startPos then
-                local endPos = startPos + #word - 1
-                -- Skip if inside hyperlink
-                if IsInsideHyperlink(startPos, endPos, linkRanges) then
-                    overlaps = true
-                else
-                    for _, r in ipairs(matched) do
-                        if startPos <= r[2] and endPos >= r[1] then
-                            overlaps = true
-                            break
-                        end
-                    end
-                    if not overlaps then
-                        table_insert(matched, { startPos, endPos })
+            local endPos = startPos + #word - 1
+            local overlaps = IsInsideHyperlink(startPos, endPos, linkRanges)
+            if not overlaps then
+                for _, r in ipairs(matched) do
+                    if startPos <= r[2] and endPos >= r[1] then
+                        overlaps = true
+                        break
                     end
                 end
             end
             if not overlaps then
+                table_insert(matched, { startPos, endPos })
                 table_insert(translations, word .. " → " .. translation)
             end
         end
     end
 
-    -- 3. LibBabble zone & item set translations
-    local babbleData = {
-        { data = BZ, active = db.dict.settings.showZones },
-        { data = BI, active = db.dict.settings.showSets }
-    }
-    for _, b in ipairs(babbleData) do
-        if b.data and b.active then
-            for eng, loc in pairs(b.data) do
-                if #eng > 3 then
-                    local bStart = string_find(textLower, string_lower(eng), 1, true)
-                    if bStart and not IsInsideHyperlink(bStart, bStart + #eng - 1, linkRanges) then
-                        table_insert(translations, eng .. " → " .. loc)
-                    end
-                end
-            end
+    -- 3. LibBabble zone & item set translations (prebuilt index — see
+    -- RebuildMasterDict; no per-message lowercasing of thousands of entries).
+    for _, b in ipairs(BabbleIndex) do
+        local lowerEng, eng, loc = b[1], b[2], b[3]
+        local bStart = string_find(textLower, lowerEng, 1, true)
+        if bStart and not IsInsideHyperlink(bStart, bStart + #eng - 1, linkRanges) then
+            table_insert(translations, eng .. " → " .. loc)
         end
     end
 

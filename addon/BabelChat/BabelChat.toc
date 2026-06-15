@@ -55,6 +55,7 @@ Data\Estadisticas.lua
 Data\Estado.lua
 Data\Mazz_Raid.lua
 Data\Slang.lua
+Data\Endgame.lua
 
 # Engine
 DictEngine.lua
