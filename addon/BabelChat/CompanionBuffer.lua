@@ -5,7 +5,7 @@ local ADDON_NAME, addonTable = ...
 
 -- ── Constants ────────────────────────────────────────────────
 local MSG_LIMIT = 50           -- ring buffer size
-local FLUSH_INTERVAL = 1.5    -- seconds between buffer flushes
+local FLUSH_INTERVAL = 0.25   -- match companion poll rate (was 1.5s)
 
 -- ── State ────────────────────────────────────────────────────
 local wctBuf = {}              -- accumulator table

@@ -27,11 +27,22 @@ from app.tray import TrayIcon
 # Configure logging: file only at startup (no StreamHandler — console may not exist
 # in windowed exe). Console handler added later by _setup_console() if enabled.
 _LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+# Write log next to the executable when possible, fall back to user home dir
+# (AppImage mounts are read-only so we can't write next to the binary there)
+def _get_log_path() -> str:
+    import sys as _sys
+    if getattr(_sys, "frozen", False):
+        # PyInstaller bundle — use home dir to avoid read-only AppImage mount
+        import pathlib
+        return str(pathlib.Path.home() / "babelchat.log")
+    return "babelchat.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format=_LOG_FMT,
     handlers=[
-        logging.FileHandler("babelchat.log", encoding="utf-8", mode="w"),
+        logging.FileHandler(_get_log_path(), encoding="utf-8", mode="w"),
     ],
 )
 logger = logging.getLogger(__name__)
@@ -111,6 +122,9 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     return PipelineConfig(
         chatlog_path=chatlog,
         deepl_api_key=config.deepl_api_key,
+        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
+        microsoft_region=getattr(config, "microsoft_region", ""),
+        translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
         enabled_channels=enabled_channels,
@@ -141,66 +155,89 @@ _console_initialized = False
 
 
 def _setup_console(visible: bool) -> None:
-    """Show or hide a debug console window (Windows only).
+    """Show or hide a debug console window.
 
-    When the .exe is built with console=False (windowed mode), there is no
-    console by default.  AllocConsole() creates one on demand and we redirect
-    stdout/stderr so that logging output appears there.
-    Also switches all logging to DEBUG level.
+    On Windows: allocates a Win32 console window and redirects stdout/stderr.
+    On Linux: adds a StreamHandler to logging and switches to DEBUG level.
+    Also switches all logging to DEBUG level on both platforms.
     """
     global _console_initialized
-    kernel32 = ctypes.windll.kernel32
-    if visible and not _console_initialized:
-        # AllocConsole returns 0 if console already exists — that's OK
-        kernel32.AllocConsole()
-        try:
-            sys.stdout = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
-            sys.stderr = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
-        except OSError:
-            # Fallback: console handle not available (rare edge case)
-            return
-        # Add console stream handler (file handler was set up in basicConfig)
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(logging.Formatter(_LOG_FMT))
-        root = logging.getLogger()
-        root.addHandler(console_handler)
-        # Switch everything to DEBUG
-        root.setLevel(logging.DEBUG)
-        for h in root.handlers:
-            h.setLevel(logging.DEBUG)
-        _console_initialized = True
-    hwnd = kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        if visible and not _console_initialized:
+            kernel32.AllocConsole()
+            try:
+                sys.stdout = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
+                sys.stderr = open("CONOUT$", "w", encoding="utf-8")  # noqa: SIM115
+            except OSError:
+                return
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(logging.Formatter(_LOG_FMT))
+            root = logging.getLogger()
+            root.addHandler(console_handler)
+            root.setLevel(logging.DEBUG)
+            for h in root.handlers:
+                h.setLevel(logging.DEBUG)
+            _console_initialized = True
+        hwnd = kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 5 if visible else 0)
+    else:
+        # Linux: just attach a StreamHandler (terminal is already available)
+        if visible and not _console_initialized:
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(logging.Formatter(_LOG_FMT))
+            root = logging.getLogger()
+            root.addHandler(console_handler)
+            root.setLevel(logging.DEBUG)
+            for h in root.handlers:
+                h.setLevel(logging.DEBUG)
+            _console_initialized = True
 
 
-_LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "babelchat.lock")
+def _get_lock_file() -> str:
+    if getattr(__import__("sys"), "frozen", False):
+        lock_dir = os.path.join(os.path.expanduser("~"), ".config", "BabelChat")
+        os.makedirs(lock_dir, exist_ok=True)
+        return os.path.join(lock_dir, "babelchat.lock")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "babelchat.lock")
+
+_LOCK_FILE = _get_lock_file()
 
 
 def _ensure_single_instance() -> None:
     """Ensure only one instance is running. Kill the old one if found."""
     lock_path = os.path.abspath(_LOCK_FILE)
-    # Check if old instance is running
     if os.path.exists(lock_path):
         try:
             with open(lock_path) as f:
                 old_pid = int(f.read().strip())
-            # Try to kill old process
-            kernel32 = ctypes.windll.kernel32
-            PROCESS_TERMINATE = 0x0001
-            SYNCHRONIZE = 0x00100000
-            handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, old_pid)
-            if handle:
-                kernel32.TerminateProcess(handle, 0)
-                # Wait up to 2 seconds for it to die
-                kernel32.WaitForSingleObject(handle, 2000)
-                kernel32.CloseHandle(handle)
-                logger.info("Killed old instance PID %d", old_pid)
+            if sys.platform == "win32":
+                kernel32 = ctypes.windll.kernel32
+                PROCESS_TERMINATE = 0x0001
+                SYNCHRONIZE = 0x00100000
+                handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, old_pid)
+                if handle:
+                    kernel32.TerminateProcess(handle, 0)
+                    kernel32.WaitForSingleObject(handle, 2000)
+                    kernel32.CloseHandle(handle)
+                    logger.info("Killed old instance PID %d", old_pid)
+                else:
+                    logger.info("Old PID %d no longer running", old_pid)
             else:
-                logger.info("Old PID %d no longer running", old_pid)
+                # Linux: check /proc, send SIGTERM
+                if os.path.exists(f"/proc/{old_pid}"):
+                    try:
+                        os.kill(old_pid, 15)  # SIGTERM
+                        import time as _time
+                        _time.sleep(0.5)
+                        logger.info("Sent SIGTERM to old instance PID %d", old_pid)
+                    except ProcessLookupError:
+                        logger.info("Old PID %d already gone", old_pid)
+                else:
+                    logger.info("Old PID %d no longer running", old_pid)
         except Exception as e:
             logger.warning("Failed to kill old instance: %s", e)
-    # Write our PID
     with open(lock_path, "w") as f:
         f.write(str(os.getpid()))
 
@@ -210,6 +247,13 @@ def main() -> int:
 
     # Single instance guard — kill old instance if running
     _ensure_single_instance()
+
+    # On Linux, force XCB (XWayland) backend so the overlay works correctly
+    # on Wayland compositors — enables always-on-top and free window positioning.
+    if sys.platform != "win32" and "QT_QPA_PLATFORM" not in os.environ:
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        # Suppress Qt's "Ignoring icon" warning — it's a cosmetic XCB tray limitation
+        os.environ.setdefault("QT_LOGGING_RULES", "*.warning=false")
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -225,7 +269,7 @@ def main() -> int:
     tr.set_language(config.ui_language)
 
     # First run — setup wizard if no API key
-    if not config.deepl_api_key:
+    if not config.deepl_api_key and not getattr(config, "microsoft_api_key", ""):
         from app.setup_wizard import SetupWizard
 
         while True:
@@ -240,16 +284,23 @@ def main() -> int:
             break
 
     # Create overlay
+    print("DEBUG: creating overlay", flush=True)
     overlay = ChatOverlay(config)
     overlay.update_channel_filters(_enabled_filter_names(config))
 
     # Provide translator for the reply panel.
     # Reply translates outgoing messages — default to EN unless own language is EN.
-    reply_translator = TranslatorService(api_key=config.deepl_api_key)
+    reply_translator = TranslatorService(
+        api_key=config.deepl_api_key,
+        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
+        microsoft_region=getattr(config, "microsoft_region", ""),
+        priority=getattr(config, "translator_priority", "deepl"),
+    )
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
     overlay.set_translator(reply_translator, reply_lang)
 
     overlay.show()
+    print("DEBUG: overlay shown", flush=True)
 
     # Create system tray
     tray = TrayIcon()

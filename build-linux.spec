@@ -1,12 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for BabelChat single .exe build."""
-
+"""PyInstaller spec for BabelChat single binary (Linux)."""
 a = Analysis(
     ["app/main.py"],
     pathex=["."],
-    binaries=[('app/babelchat_scanner_win.dll', '.')],
+    binaries=[('app/libbabelchat_scanner.so', '.')],
     datas=[
-        ("assets/icon.ico", "assets"),
         ("assets/icon.png", "assets"),
         ("addon/BabelChat", "addon/BabelChat"),
     ],
@@ -37,17 +35,15 @@ a = Analysis(
         "app.reply_widget",
         "app.lang_selector",
         "app.hotkeys",
-        "app.hotkeys_windows",
+        "app.hotkeys_linux",
         "app.text_utils",
         "app.memory_reader",
-        "app.memory_reader_windows",
-        "pymem",
-        "pymem.process",
-        "pymem.exception",
+        "app.memory_reader_linux",
         "app.i18n",
         "app.phrasebook",
         "app.slang",
-        "requests",
+        "pynput",
+        "pynput.keyboard",
     ],
     hookspath=[],
     hooksconfig={},
@@ -58,15 +54,15 @@ a = Analysis(
         "numpy",
         "scipy",
         "PIL",
-        "pynput",
-        "app.memory_reader_linux",
-        "app.hotkeys_linux",
+        "pymem",
+        "pymem.process",
+        "pymem.exception",
+        "app.memory_reader_windows",
+        "app.hotkeys_windows",
     ],
     noarchive=False,
 )
-
 pyz = PYZ(a.pure)
-
 exe = EXE(
     pyz,
     a.scripts,
@@ -83,7 +79,6 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    icon="assets/icon.ico",
+    icon="assets/icon.png",
     onefile=True,
-    uac_admin=True,
 )

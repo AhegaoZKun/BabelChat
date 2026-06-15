@@ -69,10 +69,19 @@ class AboutDialog(QDialog):
 
         # Window icon — load from .ico, fallback to programmatic
         icon_set = False
-        for icon_path in [
-            Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
-            Path(__file__).parent.parent / "assets" / "icon.ico",
-        ]:
+        _candidates = (
+            [
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
+                Path(__file__).parent.parent / "assets" / "icon.ico",
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+                Path(__file__).parent.parent / "assets" / "icon.png",
+            ] if sys.platform == "win32" else [
+                # Linux: only PNG — .ico causes "Ignoring icon" warning
+                Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+                Path(__file__).parent.parent / "assets" / "icon.png",
+            ]
+        )
+        for icon_path in _candidates:
             if icon_path.is_file():
                 self.setWindowIcon(QIcon(str(icon_path)))
                 icon_set = True

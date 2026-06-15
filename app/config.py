@@ -5,17 +5,32 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
+import shutil
 import tempfile
-import winreg
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+if sys.platform == "win32":
+    import winreg
+
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = "config.json"
+import sys as _sys
 
-# Standard WoW install locations
-_WOW_PATHS = [
+def _get_config_path() -> str:
+    """Return config path — user home dir when frozen (AppImage/exe), else CWD."""
+    import pathlib
+    if getattr(_sys, "frozen", False):
+        config_dir = pathlib.Path.home() / ".config" / "BabelChat"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return str(config_dir / "config.json")
+    return "config.json"
+
+CONFIG_FILE = _get_config_path()
+
+# Standard WoW install locations (Windows)
+_WOW_PATHS_WINDOWS = [
     Path("C:/Program Files (x86)/World of Warcraft"),
     Path("C:/Program Files/World of Warcraft"),
     Path("D:/World of Warcraft"),
@@ -32,6 +47,9 @@ class AppConfig:
 
     # API
     deepl_api_key: str = ""
+    microsoft_api_key: str = ""
+    microsoft_region: str = ""
+    translator_priority: str = "deepl"  # "deepl" or "microsoft"
 
     # Paths
     wow_path: str = ""
@@ -85,15 +103,16 @@ class AppConfig:
                 logger.warning("Could not create config backup")
 
         # Atomic write: temp file in same directory, then rename
+        # Use system temp dir — target.parent may be read-only (e.g. AppImage mount)
         fd, tmp_path = tempfile.mkstemp(
-            dir=str(target.parent), suffix=".tmp", prefix="config_"
+            dir=tempfile.gettempdir(), suffix=".tmp", prefix="config_"
         )
         closed = False
         try:
             os.write(fd, content.encode("utf-8"))
             os.close(fd)
             closed = True
-            os.replace(tmp_path, str(target))
+            shutil.move(tmp_path, str(target))
         except OSError:
             if not closed:
                 os.close(fd)
@@ -122,23 +141,27 @@ class AppConfig:
 
 def detect_wow_path() -> str:
     """Try to find WoW installation path."""
-    # Try registry first (Battle.net launcher)
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft",
-        )
-        install_path, _ = winreg.QueryValueEx(key, "InstallPath")
-        winreg.CloseKey(key)
-        if Path(install_path).exists():
-            return str(install_path)
-    except (FileNotFoundError, OSError):
-        pass
+    if sys.platform == "win32":
+        # Try registry first (Battle.net launcher)
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft",
+            )
+            install_path, _ = winreg.QueryValueEx(key, "InstallPath")
+            winreg.CloseKey(key)
+            if Path(install_path).exists():
+                return str(install_path)
+        except (FileNotFoundError, OSError):
+            pass
 
-    # Try standard paths
-    for p in _WOW_PATHS:
-        if p.exists():
-            return str(p)
+        for p in _WOW_PATHS_WINDOWS:
+            if p.exists():
+                return str(p)
+    else:
+        # On Linux, WoW can be installed anywhere (Steam library, NTFS drive, etc.)
+        # Auto-detection is unreliable — return empty and let the user set it via GUI.
+        return ""
 
     return ""
 

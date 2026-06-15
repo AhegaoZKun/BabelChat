@@ -1,0 +1,18 @@
+[package]
+name = "babelchat_scanner"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "babelchat_scanner"
+crate-type = ["cdylib"]
+
+[dependencies]
+rayon = "1.10"
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

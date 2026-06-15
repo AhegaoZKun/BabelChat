@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lingua import Language
 
-from app.cache import TranslationCache
+from app.cache import TranslationCache, DEFAULT_DB_PATH
 from app.dedup import DeduplicationBuffer
 from app.detector import ChatLanguageDetector
 from app.glossary import expand_wow_terms
@@ -92,6 +92,9 @@ class PipelineConfig:
 
     chatlog_path: Path = Path("WoWChatLog.txt")
     deepl_api_key: str = ""
+    microsoft_api_key: str = ""
+    microsoft_region: str = ""
+    translator_priority: str = "deepl"
     target_lang: str = "EN"
     own_language: Language = Language.ENGLISH
     own_character: str = ""
@@ -103,7 +106,7 @@ class PipelineConfig:
     })
     skip_own_messages: bool = True
     translation_enabled: bool = True
-    db_path: str = "translations.db"
+    db_path: str = field(default_factory=lambda: DEFAULT_DB_PATH)
     use_memory_reader: bool = True  # Reads addon buffer from WoW process memory
 
 
@@ -125,7 +128,12 @@ class TranslationPipeline:
         self._cache = TranslationCache(db_path=config.db_path)
         self._cache.cleanup()  # remove expired entries on startup
         self._detector = ChatLanguageDetector(own_language=config.own_language)
-        self._translator = TranslatorService(api_key=config.deepl_api_key)
+        self._translator = TranslatorService(
+            api_key=config.deepl_api_key,
+            microsoft_api_key=config.microsoft_api_key,
+            microsoft_region=config.microsoft_region,
+            priority=config.translator_priority,
+        )
         self._watcher = ChatLogWatcher(config.chatlog_path, self._on_new_line)
 
         # Deduplication: track recent (author, text) to avoid double-delivery

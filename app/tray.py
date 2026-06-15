@@ -12,14 +12,34 @@ from PyQt6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 from app.i18n import tr
 
 # Icon path: works both in dev (assets/) and bundled (PyInstaller _MEIPASS)
-_ICON_CANDIDATES = [
-    Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
-    Path(__file__).parent.parent / "assets" / "icon.ico",
-]
+# On Linux, PNG must come before ICO — QSystemTrayIcon ignores .ico on Linux
+if sys.platform == "win32":
+    _ICON_CANDIDATES = [
+        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.ico",
+        Path(__file__).parent.parent / "assets" / "icon.ico",
+        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+        Path(__file__).parent.parent / "assets" / "icon.png",
+    ]
+else:
+    # Linux: only use PNG — QSystemTrayIcon ignores .ico and emits a warning
+    _ICON_CANDIDATES = [
+        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
+        Path(__file__).parent.parent / "assets" / "icon.png",
+    ]
 
 
 def _create_default_icon() -> QIcon:
-    """Load icon from .ico file, or generate programmatically as fallback."""
+    """Load icon, preferring theme icon on Linux to avoid XWayland tray warnings."""
+    if sys.platform != "win32":
+        # On Linux, load PNG directly into a pixmap and wrap it in QIcon.
+        # QSystemTrayIcon on XWayland emits "Ignoring icon" for any icon set
+        # via setIcon() with a file path — using a pixmap-backed QIcon avoids this.
+        for path in _ICON_CANDIDATES:
+            if path.is_file():
+                pixmap = QPixmap(str(path))
+                if not pixmap.isNull():
+                    return QIcon(pixmap)
+
     for path in _ICON_CANDIDATES:
         if path.is_file():
             return QIcon(str(path))

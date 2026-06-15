@@ -1,5 +1,88 @@
 # Changelog / История изменений / Registro de cambios
 
+## [3.2.0] — 2026-06-02
+
+### Performance / Производительность / Rendimiento
+
+**Linux memory scanner rewritten in Rust** — the single biggest performance improvement since Linux support was added.
+
+- **Rust scanner library** (`libbabelchat_scanner.so`) replaces the pure-Python `/proc/<pid>/mem` scanner
+- Uses `process_vm_readv` instead of `/proc/<pid>/mem` — a dedicated cross-process memory syscall that does not go through the VFS layer, requires no file descriptor, and does not pause the target process. Eliminates the WoW frame-time stutters caused by the old approach
+- **Address cache** — steady-state polling (every 250ms) is now a single `process_vm_readv` call at the cached address, costing ~microseconds and near-zero CPU
+- Full parallel heap scan (Rayon, 2 threads) only runs on cache miss, which happens approximately every 14s when Lua GC relocates the buffer
+- Scanner threads run at `SCHED_IDLE` — the lowest Linux scheduling class, below `nice +19`. WoW, the compositor, and all other processes take absolute scheduling priority over the scanner
+- **Initial scan time**: 10–13s → ~2.5s
+- **GC relocation detection**: 14–17s gaps → ~2s
+- **End-to-end overlay latency**: many seconds → ~1s (floor is DeepL API round-trip)
+- **Game stutters**: eliminated
+
+**Addon flush interval** reduced from 1.5s → 0.25s — messages are written to memory within one poll cycle of arriving, cutting the addon-side contribution to latency from up to 1.5s to ~250ms.
+
+**Python scanner overhaul** (retained as fallback if `.so` not found):
+- Persistent `/proc/<pid>/mem` fd — eliminates `open`/`close` syscall overhead on every read
+- Regions scanned smallest-first — active Lua strings live in smaller allocations; buffer found faster
+- Early exit on first valid marker — no longer scans all remaining regions after finding a hit
+- Ghost buffer blacklisting — stale old copies that cause seq resets are immediately blacklisted
+- All rescan paths pass `min_seq` — only buffers newer than already-delivered messages are accepted
+- Rescan interval no longer backs off exponentially when no newer buffer is found
+- Background scanner thread correctly validates seq before committing a new address
+
+### Added / Добавлено / Añadido
+- `babelchat_scanner/` — Rust crate producing `libbabelchat_scanner.so` for Linux
+- `build-linux.spec` — bundles `libbabelchat_scanner.so` into the Linux binary via PyInstaller
+
+### Changed / Изменено / Cambiado
+- `memory_reader_linux.py` — now a thin Python wrapper around the Rust scanner; falls back to pure-Python on missing `.so`
+- Linux architecture diagram in README updated to reflect Rust scanner
+- Limitations section updated: 5–10s relocation delay note removed (no longer applicable)
+
+---
+
+— **Rust-сканер памяти для Linux** — `libbabelchat_scanner.so` заменяет чистый Python-сканер
+— Использует `process_vm_readv` вместо `/proc/<pid>/mem` — без VFS, без дескриптора файла, без паузы целевого процесса. Устраняет фризы WoW
+— Кэш адреса — опрос в устойчивом состоянии стоит ~микросекунд; полное сканирование только при промахе кэша (~раз в 14с)
+— Потоки сканера работают в режиме `SCHED_IDLE` — WoW никогда не вытесняется сканером
+— Интервал сброса аддона: 1.5с → 0.25с
+
+— **Escáner de memoria en Rust para Linux** — `libbabelchat_scanner.so` reemplaza el escáner Python puro
+— Usa `process_vm_readv` en lugar de `/proc/<pid>/mem` — sin VFS, sin descriptor de archivo, sin pausar el proceso objetivo. Elimina los stutters de WoW
+— Caché de dirección — el sondeo en estado estable cuesta ~microsegundos; escaneo completo solo en fallo de caché (~cada 14s)
+— Hilos del escáner corren en modo `SCHED_IDLE` — WoW nunca es desalojado por el escáner
+— Intervalo de flush del addon: 1.5s → 0.25s
+
+# Changelog / История изменений / Registro de cambios
+
+## [3.1.2] — 2026-05-31
+
+### Added / Добавлено / Añadido
+- **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine (Tested under CachyOS)
+- Linux memory reader (`memory_reader_linux.py`) — reads WoW process memory via `/proc/<pid>/mem` and `os.pread()` with full 64-bit address support (Wine/Proton allocates above 4GB)
+- Linux hotkeys (`hotkeys_linux.py`) — global hotkeys via `pynput` with graceful fallback on pure Wayland
+- Platform dispatcher modules — `memory_reader.py` and `hotkeys.py` now auto-select the correct implementation based on `sys.platform`
+- `config.py`: Linux WoW path detection (`~/.steam/`, `/run/media/`) alongside Windows registry detection
+- `main.py`, `overlay.py`: all Windows-only calls (`ctypes.windll`, `X11BypassWindowManagerHint`) guarded by `sys.platform` checks
+- `overlay.py`: `X11BypassWindowManagerHint` flag on Linux for always-on-top and free `move()` via XWayland
+- `requirements.txt`: `pymem` is now Windows-only; `pynput` added for Linux
+- `build.spec`: excludes Linux modules from Windows `.exe` build
+
+### Notes / Примечания / Notas
+- Linux requires `ptrace_scope=0`: `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`
+- Run with `QT_QPA_PLATFORM=xcb` for overlay always-on-top and dragging on Wayland
+- Enable companion in WoW once: `/run BabelChatDB.companion = {enabled = true}`
+- Message latency on Linux is ~5–10s higher than Windows due to Lua GC buffer relocation; this is a known limitation of the `/proc/mem` approach
+
+— **Поддержка Linux/Proton** — приложение-компаньон теперь работает на Linux (CachyOS, Arch, Ubuntu и др.) с WoW под Proton/Wine через Steam
+— Linux memory reader — читает память WoW через `/proc/<pid>/mem` и `os.pread()` с полной поддержкой 64-bit адресов
+— Linux hotkeys — глобальные клавиши через `pynput` с автозаменой при чистом Wayland
+— Диспетчеры платформ — `memory_reader.py` и `hotkeys.py` автоматически выбирают реализацию по `sys.platform`
+— Требуется `ptrace_scope=0`; запуск с `QT_QPA_PLATFORM=xcb`; один раз в WoW: `/run BabelChatDB.companion = {enabled = true}`
+
+— **Soporte Linux/Proton** — la app acompañante ahora funciona en Linux (CachyOS, Arch, Ubuntu, etc.) con WoW bajo Proton/Wine via Steam
+— Linux memory reader — lee memoria de WoW via `/proc/<pid>/mem` y `os.pread()` con soporte completo de direcciones de 64 bits
+— Linux hotkeys — teclas globales via `pynput` con fallback automático en Wayland puro
+— Módulos despachadores de plataforma — `memory_reader.py` y `hotkeys.py` seleccionan automáticamente la implementación según `sys.platform`
+— Requiere `ptrace_scope=0`; ejecutar con `QT_QPA_PLATFORM=xcb`; una vez en WoW: `/run BabelChatDB.companion = {enabled = true}`
+
 ## [3.1.1] — 2026-03-25
 
 ### Changed / Изменено / Cambiado
