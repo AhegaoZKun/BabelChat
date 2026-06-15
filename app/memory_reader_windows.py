@@ -16,7 +16,6 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import logging
-import os
 import pathlib
 import re
 import sys
@@ -34,22 +33,24 @@ _DLL_NAMES = [
     str(pathlib.Path(__file__).parent.parent / "babelchat_scanner_win.dll"),
 ]
 
+
 def _load_rust_lib() -> ctypes.CDLL | None:
     for name in _DLL_NAMES:
         try:
             lib = ctypes.CDLL(name)
             lib.find_and_read_buffer.restype = ctypes.c_int32
             lib.find_and_read_buffer.argtypes = [
-                ctypes.c_int32,   # pid
-                ctypes.c_int32,   # min_seq
+                ctypes.c_int32,  # pid
+                ctypes.c_int32,  # min_seq
                 ctypes.c_char_p,  # out_buf
-                ctypes.c_int32,   # out_len
+                ctypes.c_int32,  # out_len
             ]
             logger.info("Loaded Rust scanner: %s", name)
             return lib
         except OSError:
             continue
     return None
+
 
 _rust_lib: ctypes.CDLL | None = _load_rust_lib()
 _OUT_BUF_SIZE = 131072  # 128KB
@@ -64,11 +65,8 @@ ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
 MAX_BUF_READ = 65536
 
-import sys as _sys
 RAW_LOG_FILE = str(
-    (pathlib.Path.home() / "babelchat_raw.log")
-    if getattr(_sys, "frozen", False)
-    else pathlib.Path("babelchat_raw.log")
+    (pathlib.Path.home() / "babelchat_raw.log") if getattr(sys, "frozen", False) else pathlib.Path("babelchat_raw.log")
 )
 
 WOW_PROCESS_NAMES = ["Wow.exe", "WowT.exe", "WowB.exe"]
@@ -76,9 +74,11 @@ _MAX_DELIVERED_PAYLOADS = 200
 
 # ── Process discovery ─────────────────────────────────────────────────────────
 
+
 def _find_wow_pid() -> int | None:
     """Find WoW PID using Windows EnumProcesses / tasklist fallback."""
     import subprocess
+
     try:
         out = subprocess.check_output(
             ["tasklist", "/FO", "CSV", "/NH"],
@@ -100,6 +100,7 @@ def _find_wow_pid() -> int | None:
     try:
         import pymem
         import pymem.exception
+
         for proc_name in WOW_PROCESS_NAMES:
             try:
                 pm = pymem.Pymem(proc_name)
@@ -113,18 +114,18 @@ def _find_wow_pid() -> int | None:
 
     return None
 
+
 def _is_system_noise(text: str) -> bool:
     t = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", text.lstrip())
     if t.startswith(("<DBM>", "<BW>", "<WA>", "|TInterface", "[WCT]", "[MoveAny")):
         return True
     if "|Hachievement:" in t:
         return True
-    for phrase in ("has earned", "achievement", "creates:", "создает:"):
-        if phrase in t:
-            return True
-    return False
+    return any(phrase in t for phrase in ("has earned", "achievement", "creates:", "создает:"))
+
 
 # ── Rust scanner call ─────────────────────────────────────────────────────────
+
 
 def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
     if _rust_lib is None:
@@ -135,7 +136,9 @@ def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
         return None
     return buf.raw[:n].decode("utf-8", errors="replace")
 
+
 # ── Pure-Python fallback scanner ──────────────────────────────────────────────
+
 
 def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
     """Fallback: use pymem if Rust DLL not available."""
@@ -143,6 +146,7 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
         import pymem
         import pymem.exception
         import pymem.pattern
+
         for proc_name in WOW_PROCESS_NAMES:
             try:
                 pm = pymem.Pymem(proc_name)
@@ -153,11 +157,13 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
             return None
 
         addrs = pymem.pattern.pattern_scan_all(
-            pm.process_handle, rb"__WCT_BUF_", return_multiple=True,
+            pm.process_handle,
+            rb"__WCT_BUF_",
+            return_multiple=True,
         )
         best_content = None
         best_seq = min_seq
-        for a in (addrs or []):
+        for a in addrs or []:
             try:
                 raw = pm.read_bytes(a, MAX_BUF_READ)
             except Exception:
@@ -178,6 +184,7 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
     except Exception:
         return None
 
+
 def _find_content_start(raw: bytes) -> int:
     if raw.startswith(b"__WCT_BUF_"):
         end = raw.find(b"__", 10)
@@ -186,6 +193,7 @@ def _find_content_start(raw: bytes) -> int:
     if raw.startswith(MARKER_START_LEGACY):
         return len(MARKER_START_LEGACY)
     return -1
+
 
 def _extract_max_seq(content: bytes) -> int:
     max_seq = 0
@@ -204,7 +212,9 @@ def _extract_max_seq(content: bytes) -> int:
             continue
     return max_seq
 
+
 # ── Main reader class ─────────────────────────────────────────────────────────
+
 
 class WoWAddonBufReader:
     """Reads chat messages from WoW addon buffer — Windows/Rust version.
@@ -290,6 +300,7 @@ class WoWAddonBufReader:
             return False
         try:
             import ctypes
+
             handle = ctypes.windll.kernel32.OpenProcess(0x0400, False, self._pid)
             if handle:
                 ctypes.windll.kernel32.CloseHandle(handle)
@@ -333,7 +344,8 @@ class WoWAddonBufReader:
         if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq:
             logger.info(
                 "Seq reset detected (buf max=%d, last_seq=%d) — resetting",
-                max_seq_in_buf, self._last_seq,
+                max_seq_in_buf,
+                self._last_seq,
             )
             self._pre_reset_texts = set(self._delivered_payloads)
             self._pre_reset_expire = time.monotonic() + 60.0
@@ -441,13 +453,21 @@ class WoWAddonBufReader:
     @staticmethod
     def _make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
         _ADDON_CHANNEL_TO_LOG = {
-            "SAY": "Say", "YELL": "Yell", "PARTY": "Party",
-            "PARTY_LEADER": "Party Leader", "RAID": "Raid",
-            "RAID_LEADER": "Raid Leader", "RAID_WARNING": "Raid Warning",
-            "GUILD": "Guild", "OFFICER": "Officer",
-            "INSTANCE_CHAT": "Instance", "INSTANCE_CHAT_LEADER": "Instance Leader",
-            "CHANNEL": "Say", "EMOTE": "Say",
-            "BATTLEGROUND": "Instance", "BATTLEGROUND_LEADER": "Instance Leader",
+            "SAY": "Say",
+            "YELL": "Yell",
+            "PARTY": "Party",
+            "PARTY_LEADER": "Party Leader",
+            "RAID": "Raid",
+            "RAID_LEADER": "Raid Leader",
+            "RAID_WARNING": "Raid Warning",
+            "GUILD": "Guild",
+            "OFFICER": "Officer",
+            "INSTANCE_CHAT": "Instance",
+            "INSTANCE_CHAT_LEADER": "Instance Leader",
+            "CHANNEL": "Say",
+            "EMOTE": "Say",
+            "BATTLEGROUND": "Instance",
+            "BATTLEGROUND_LEADER": "Instance Leader",
         }
         t = time.localtime()
         ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"

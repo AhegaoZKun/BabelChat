@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -27,10 +29,10 @@ CacheKey = tuple[str, str, str]  # (source_text, source_lang, target_lang)
 
 DEFAULT_TTL = 7 * 24 * 3600  # 7 days
 DEFAULT_MEMORY_SIZE = 1000
-import sys as _sys, os as _os
+
 DEFAULT_DB_PATH = (
-    _os.path.join(_os.path.expanduser("~"), ".config", "BabelChat", "translations.db")
-    if getattr(_sys, "frozen", False)
+    os.path.join(os.path.expanduser("~"), ".config", "BabelChat", "translations.db")
+    if getattr(sys, "frozen", False)
     else "translations.db"
 )
 
@@ -56,6 +58,7 @@ class TranslationCache:
 
         # Ensure parent directory exists (needed when frozen as AppImage)
         import os as _os
+
         _db_dir = _os.path.dirname(self._db_path)
         if _db_dir:
             _os.makedirs(_db_dir, exist_ok=True)
@@ -95,8 +98,7 @@ class TranslationCache:
             # Check TTL
             if time.time() - created_at > self._ttl:
                 self._conn.execute(
-                    "DELETE FROM translations "
-                    "WHERE source_text = ? AND source_lang = ? AND target_lang = ?",
+                    "DELETE FROM translations WHERE source_text = ? AND source_lang = ? AND target_lang = ?",
                     key,
                 )
                 self._conn.commit()
@@ -139,9 +141,7 @@ class TranslationCache:
         """Remove expired entries from SQLite. Returns count of deleted rows."""
         cutoff = time.time() - self._ttl
         with self._lock:
-            cursor = self._conn.execute(
-                "DELETE FROM translations WHERE created_at < ?", (cutoff,)
-            )
+            cursor = self._conn.execute("DELETE FROM translations WHERE created_at < ?", (cutoff,))
             self._conn.commit()
             deleted = cursor.rowcount
         if deleted:

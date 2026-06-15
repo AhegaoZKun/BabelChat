@@ -18,6 +18,7 @@ import logging
 import os
 import pathlib
 import re
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -33,22 +34,24 @@ _LIB_NAMES = [
     str(pathlib.Path(__file__).parent.parent / "libbabelchat_scanner.so"),
 ]
 
+
 def _load_rust_lib() -> ctypes.CDLL | None:
     for name in _LIB_NAMES:
         try:
             lib = ctypes.CDLL(name)
             lib.find_and_read_buffer.restype = ctypes.c_int32
             lib.find_and_read_buffer.argtypes = [
-                ctypes.c_int32,   # pid
-                ctypes.c_int32,   # min_seq
+                ctypes.c_int32,  # pid
+                ctypes.c_int32,  # min_seq
                 ctypes.c_char_p,  # out_buf
-                ctypes.c_int32,   # out_len
+                ctypes.c_int32,  # out_len
             ]
             logger.info("Loaded Rust scanner: %s", name)
             return lib
         except OSError:
             continue
     return None
+
 
 _rust_lib: ctypes.CDLL | None = _load_rust_lib()
 _OUT_BUF_SIZE = 131072  # 128KB output buffer
@@ -62,17 +65,15 @@ ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
 MAX_BUF_READ = 65536
 
-import sys as _sys
 RAW_LOG_FILE = str(
-    (pathlib.Path.home() / "babelchat_raw.log")
-    if getattr(_sys, "frozen", False)
-    else pathlib.Path("babelchat_raw.log")
+    (pathlib.Path.home() / "babelchat_raw.log") if getattr(sys, "frozen", False) else pathlib.Path("babelchat_raw.log")
 )
 
 WOW_PROCESS_NAMES = ["Wow.exe", "WowT.exe", "WowB.exe"]
 _MAX_DELIVERED_PAYLOADS = 200
 
 # ── Fallback pure-Python scanner (if Rust .so not available) ──────────────────
+
 
 def _find_wow_pid() -> int | None:
     try:
@@ -96,18 +97,18 @@ def _find_wow_pid() -> int | None:
         pass
     return None
 
+
 def _is_system_noise(text: str) -> bool:
     t = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", text.lstrip())
     if t.startswith(("<DBM>", "<BW>", "<WA>", "|TInterface", "[WCT]", "[MoveAny")):
         return True
     if "|Hachievement:" in t:
         return True
-    for phrase in ("has earned", "achievement", "creates:", "создает:"):
-        if phrase in t:
-            return True
-    return False
+    return any(phrase in t for phrase in ("has earned", "achievement", "creates:", "создает:"))
+
 
 # ── Rust-backed scanner ───────────────────────────────────────────────────────
+
 
 def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
     """Call Rust scanner to find and read the addon buffer. Returns content string or None."""
@@ -119,7 +120,9 @@ def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
         return None
     return buf.raw[:n].decode("utf-8", errors="replace")
 
+
 # ── Main reader class ─────────────────────────────────────────────────────────
+
 
 class WoWAddonBufReader:
     """Reads chat messages from WoW addon's in-memory buffer — Linux/Rust version.
@@ -197,8 +200,7 @@ class WoWAddonBufReader:
         mem_path = f"/proc/{pid}/mem"
         if not os.access(mem_path, os.R_OK):
             raise RuntimeError(
-                f"Cannot read /proc/{pid}/mem — set ptrace_scope: "
-                "echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope"
+                f"Cannot read /proc/{pid}/mem — set ptrace_scope: echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope"
             )
         self._pid = pid
         self._attached = True
@@ -219,7 +221,9 @@ class WoWAddonBufReader:
         if content is None:
             self._consecutive_misses += 1
             if self._consecutive_misses >= 4:
-                logger.debug("Scanner miss x%d (pid=%d, min_seq=%d)", self._consecutive_misses, self._pid, self._last_seq)
+                logger.debug(
+                    "Scanner miss x%d (pid=%d, min_seq=%d)", self._consecutive_misses, self._pid, self._last_seq
+                )
             return
 
         self._consecutive_misses = 0
@@ -245,7 +249,8 @@ class WoWAddonBufReader:
         if max_seq_in_buf > 0 and max_seq_in_buf < self._last_seq:
             logger.info(
                 "Seq reset detected (buf max=%d, last_seq=%d) — resetting",
-                max_seq_in_buf, self._last_seq,
+                max_seq_in_buf,
+                self._last_seq,
             )
             self._pre_reset_texts = set(self._delivered_payloads)
             self._pre_reset_expire = time.monotonic() + 60.0
@@ -353,13 +358,21 @@ class WoWAddonBufReader:
     @staticmethod
     def _make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
         _ADDON_CHANNEL_TO_LOG = {
-            "SAY": "Say", "YELL": "Yell", "PARTY": "Party",
-            "PARTY_LEADER": "Party Leader", "RAID": "Raid",
-            "RAID_LEADER": "Raid Leader", "RAID_WARNING": "Raid Warning",
-            "GUILD": "Guild", "OFFICER": "Officer",
-            "INSTANCE_CHAT": "Instance", "INSTANCE_CHAT_LEADER": "Instance Leader",
-            "CHANNEL": "Say", "EMOTE": "Say",
-            "BATTLEGROUND": "Instance", "BATTLEGROUND_LEADER": "Instance Leader",
+            "SAY": "Say",
+            "YELL": "Yell",
+            "PARTY": "Party",
+            "PARTY_LEADER": "Party Leader",
+            "RAID": "Raid",
+            "RAID_LEADER": "Raid Leader",
+            "RAID_WARNING": "Raid Warning",
+            "GUILD": "Guild",
+            "OFFICER": "Officer",
+            "INSTANCE_CHAT": "Instance",
+            "INSTANCE_CHAT_LEADER": "Instance Leader",
+            "CHANNEL": "Say",
+            "EMOTE": "Say",
+            "BATTLEGROUND": "Instance",
+            "BATTLEGROUND_LEADER": "Instance Leader",
         }
         t = time.localtime()
         ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
