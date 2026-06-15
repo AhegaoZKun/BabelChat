@@ -51,6 +51,35 @@ class TestStripForTranslation:
         cleaned, replacements = strip_for_translation(text)
         assert len(replacements) == 2
 
+    def test_discord_invite_preserved(self):
+        # "discord.gg/xyz" must not reach DeepL — ".gg" gets mistranslated as
+        # the "good game" abbreviation otherwise.
+        text = "join our discord.gg/wowru for raids"
+        cleaned, replacements = strip_for_translation(text)
+        assert "discord.gg/wowru" not in cleaned
+        assert len(replacements) == 1
+        restored = restore_tokens(cleaned, replacements)
+        assert "discord.gg/wowru" in restored
+
+    def test_bare_discord_domain_preserved(self):
+        text = "discord.gg"
+        cleaned, replacements = strip_for_translation(text)
+        assert "discord.gg" not in cleaned
+        assert len(replacements) == 1
+
+    def test_schemeless_domain_with_path_preserved(self):
+        text = "guide at wowhead.com/guide/123 here"
+        cleaned, replacements = strip_for_translation(text)
+        assert "wowhead.com/guide/123" not in cleaned
+        assert len(replacements) == 1
+
+    def test_plain_sentence_with_period_not_stripped(self):
+        # A period inside a normal sentence must NOT be mistaken for a URL.
+        text = "gg everyone. that was fun"
+        cleaned, replacements = strip_for_translation(text)
+        assert cleaned == text
+        assert len(replacements) == 0
+
 
 class TestCleanMessageText:
     """Test cleaning WoW color codes."""
