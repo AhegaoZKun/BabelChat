@@ -214,7 +214,7 @@ function addonTable.ShowWelcomeFrame()
     end
 
     local frame = CreateFrame("Frame", "BabelChatWelcomeFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(420, 320)
+    frame:SetSize(440, 380)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)

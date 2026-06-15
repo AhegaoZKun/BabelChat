@@ -108,11 +108,11 @@ L["QT_MINIMAP_TT"] = "|cffd597ffBabelChat|r\n|cffffffffClick:|r Open Settings"
 
 -- First run welcome
 L["WELCOME_1"] = "Welcome to |cffd597ffBabelChat|r!"
-L["WELCOME_2"] = "Break the language barrier — BabelChat translates gaming terms in chat (347 terms, 14 languages) and connects to a companion app for full DeepL translation."
-L["WELCOME_3"] = "Type |cffffff00/babel config|r to open settings and choose your language."
-L["WELCOME_4"] = "For real-time full sentence translation, get the companion overlay app:"
+L["WELCOME_2"] = "BabelChat translates 380+ gaming terms right in your chat — 14 languages, no setup, completely free. It's already working!"
+L["WELCOME_3"] = "Type |cffffff00/babel config|r to open settings and pick your language."
+L["WELCOME_4"] = "Want full sentence translation too? Get the |cff40ff40free|r companion app:"
 L["WELCOME_5"] = "|cffffff00https://github.com/Yumash/BabelChat|r"
-L["WELCOME_6"] = "Enable companion mode in settings: AddOns > BabelChat > Companion App."
+L["WELCOME_6"] = "The app is free. It translates via DeepL (free tier asks for a card to verify — never charges) or Microsoft Translator (free, no card). Enable in: AddOns > BabelChat > Companion App."
 L["WELCOME_OK"] = "OK"
 L["WELCOME_SETTINGS"] = "Settings"
 
@@ -212,11 +212,11 @@ if locale == "ruRU" then
     L["QT_MINIMAP_TT"] = "|cffd597ffBabelChat|r\n|cffffffffКлик:|r Открыть настройки"
 
     L["WELCOME_1"] = "Добро пожаловать в |cffd597ffBabelChat|r!"
-    L["WELCOME_2"] = "Ломаем языковой барьер — BabelChat переводит игровые термины в чате (347 терминов, 14 языков) и подключается к приложению-компаньону для полного перевода через DeepL."
+    L["WELCOME_2"] = "BabelChat переводит 380+ игровых терминов прямо в чате — 14 языков, без настройки, полностью бесплатно. Уже работает!"
     L["WELCOME_3"] = "Введите |cffffff00/babel config|r чтобы открыть настройки и выбрать язык."
-    L["WELCOME_4"] = "Для перевода полных предложений в реальном времени скачайте приложение-компаньон:"
+    L["WELCOME_4"] = "Нужен перевод целых предложений? Скачайте |cff40ff40бесплатное|r приложение-компаньон:"
     L["WELCOME_5"] = "|cffffff00https://github.com/Yumash/BabelChat|r"
-    L["WELCOME_6"] = "Включите режим компаньона в настройках: Аддоны > BabelChat > Приложение-компаньон."
+    L["WELCOME_6"] = "Приложение бесплатное. Перевод через DeepL (бесплатный тариф просит карту для проверки — без списаний) или Microsoft Translator (бесплатно, без карты). Включите: Аддоны > BabelChat > Приложение-компаньон."
     L["WELCOME_OK"] = "OK"
     L["WELCOME_SETTINGS"] = "Настройки"
 
@@ -316,11 +316,11 @@ elseif locale == "esES" or locale == "esMX" then
     L["QT_MINIMAP_TT"] = "|cffd597ffBabelChat|r\n|cffffffffClic:|r Abrir Ajustes"
 
     L["WELCOME_1"] = "¡Bienvenido a |cffd597ffBabelChat|r!"
-    L["WELCOME_2"] = "Rompe la barrera del idioma — BabelChat traduce términos gaming en el chat (347 términos, 14 idiomas) y se conecta a una app acompañante para traducción completa con DeepL."
+    L["WELCOME_2"] = "BabelChat traduce 380+ términos gaming en tu chat — 14 idiomas, sin configuración, totalmente gratis. ¡Ya está funcionando!"
     L["WELCOME_3"] = "Escribe |cffffff00/babel config|r para abrir los ajustes y elegir tu idioma."
-    L["WELCOME_4"] = "Para traducción completa en tiempo real, descarga la app acompañante:"
+    L["WELCOME_4"] = "¿Quieres también traducción de frases completas? Descarga la app |cff40ff40gratuita|r:"
     L["WELCOME_5"] = "|cffffff00https://github.com/Yumash/BabelChat|r"
-    L["WELCOME_6"] = "Activa el modo acompañante en ajustes: AddOns > BabelChat > App Acompañante."
+    L["WELCOME_6"] = "La app es gratis. Traduce con DeepL (el plan gratis pide tarjeta para verificar — nunca cobra) o Microsoft Translator (gratis, sin tarjeta). Actívala en: AddOns > BabelChat > App Acompañante."
     L["WELCOME_OK"] = "OK"
     L["WELCOME_SETTINGS"] = "Ajustes"
 end

@@ -218,7 +218,9 @@ class SetupWizard(QDialog):
         layout.addSpacing(4)
 
         explain = QLabel(
-            "Configure at least one translation provider. If both are provided, you can choose which takes priority."
+            "These keys are only for full-sentence translation — the in-game dictionary already works for free "
+            "without any of them. Configure at least one provider if you want sentence translation; if both are "
+            "set, you can choose which takes priority."
         )
         explain.setStyleSheet("color: #ccc; font-size: 12px;")
         explain.setWordWrap(True)
@@ -241,6 +243,13 @@ class SetupWizard(QDialog):
         deepl_link_row.addWidget(signup)
         deepl_link_row.addStretch()
         deepl_layout.addLayout(deepl_link_row)
+
+        deepl_hint = QLabel(
+            "Note: DeepL's free tier asks for a credit card to verify your account — it never charges you."
+        )
+        deepl_hint.setStyleSheet("color: #999; font-size: 10px;")
+        deepl_hint.setWordWrap(True)
+        deepl_layout.addWidget(deepl_hint)
 
         self._api_key_input = QLineEdit(self._config.deepl_api_key)
         self._api_key_input.setPlaceholderText("Translator API key (ends with :fx for free tier)")
@@ -274,6 +283,10 @@ class SetupWizard(QDialog):
         ms_link_row.addWidget(ms_link)
         ms_link_row.addStretch()
         ms_layout.addLayout(ms_link_row)
+
+        ms_hint = QLabel("Free — no credit card required.")
+        ms_hint.setStyleSheet("color: #40FF40; font-size: 10px;")
+        ms_layout.addWidget(ms_hint)
 
         self._ms_key_input = QLineEdit(self._config.microsoft_api_key)
         self._ms_key_input.setPlaceholderText("Microsoft Translator API key")
