@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 
 from app.i18n import tr
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 
 ABOUT_STYLESHEET = """
 QDialog {
@@ -75,7 +75,9 @@ class AboutDialog(QDialog):
                 Path(__file__).parent.parent / "assets" / "icon.ico",
                 Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
                 Path(__file__).parent.parent / "assets" / "icon.png",
-            ] if sys.platform == "win32" else [
+            ]
+            if sys.platform == "win32"
+            else [
                 # Linux: only PNG — .ico causes "Ignoring icon" warning
                 Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
                 Path(__file__).parent.parent / "assets" / "icon.png",

@@ -1,6 +1,10 @@
 # Changelog / История изменений / Registro de cambios
 
-## [3.2.0] — 2026-06-02
+## [3.2.0] — 2026-06-15
+
+### Fixed / Исправлено / Corregido
+
+- **Discord invite links no longer mistranslated** — schemeless links like `discord.gg/xyz` were reaching DeepL, which read `.gg` as the gaming abbreviation and rendered it as "good game" / "хорошая игра". URL tokenization now also protects known link/invite domains (`discord.gg`, `t.me`, `bit.ly`, …) and any `domain.tld/path`.
 
 ### Performance / Производительность / Rendimiento
 

@@ -1,10 +1,11 @@
-# Claude Code / Frai (local dev tools)
+# Claude Code / Tausik (local dev tools)
 .claude/
-.claude-lib/
+.tausik-lib/
+.tausik/
 .claude-project/
-.frai/
 .rag/
 CLAUDE.md
+AGENTS.md
 .mcp.json
 
 # Virtual environments
