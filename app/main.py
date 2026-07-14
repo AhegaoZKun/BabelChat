@@ -118,12 +118,22 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         enabled_channels |= {Channel.WHISPER_FROM, Channel.WHISPER_TO}
     if config.channels_instance:
         enabled_channels |= {Channel.INSTANCE, Channel.INSTANCE_LEADER}
+    if config.channels_trade:
+        enabled_channels |= {Channel.TRADE}
+    if config.channels_general:
+        enabled_channels |= {Channel.GENERAL}
+    if config.channels_services:
+        enabled_channels |= {Channel.SERVICES}
+    if config.channels_lfg:
+        enabled_channels |= {Channel.LOOKING_FOR_GROUP}
 
     return PipelineConfig(
         chatlog_path=chatlog,
         deepl_api_key=config.deepl_api_key,
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
+        google_api_key=getattr(config, "google_api_key", ""),
+        argos_enabled=getattr(config, "argos_enabled", False),
         translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
@@ -148,6 +158,14 @@ def _enabled_filter_names(config: AppConfig) -> set[str]:
         names.add("Whisper")
     if config.channels_instance:
         names.add("Instance")
+    if config.channels_trade:
+        names.add("Trade")
+    if config.channels_general:
+        names.add("General")
+    if config.channels_services:
+        names.add("Services")
+    if config.channels_lfg:
+        names.add("LookingForGroup")
     return names
 
 
@@ -294,6 +312,8 @@ def main() -> int:
         api_key=config.deepl_api_key,
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
+        google_api_key=getattr(config, "google_api_key", ""),
+        argos_enabled=getattr(config, "argos_enabled", False),
         priority=getattr(config, "translator_priority", "deepl"),
     )
     reply_lang = "EN" if config.own_language != "EN" else config.target_language

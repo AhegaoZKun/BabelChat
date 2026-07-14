@@ -99,6 +99,21 @@ local function ChatFilter(self, event, text, author, ...)
     -- Strip CHAT_MSG_ prefix for compact event name
     local shortEvent = event:gsub("^CHAT_MSG_", "")
 
+    -- For public/numbered channels, capture the channel name so the companion
+    -- can distinguish Trade / Services / General / LookingForGroup. The
+    -- CHAT_MSG_CHANNEL signature is (text, author, lang, channelString, ...);
+    -- channelString looks like "2. Trade - City". We keep the human name and
+    -- encode it into the event token as "CHANNEL:<Name>" (names never contain
+    -- a '|', so the pipe-delimited buffer format stays intact).
+    if event == "CHAT_MSG_CHANNEL" then
+        local channelString = select(2, ...)
+        if channelString and channelString ~= "" then
+            -- Strip a leading "N. " channel-number prefix if present.
+            local name = channelString:gsub("^%d+%.%s*", "")
+            shortEvent = "CHANNEL:" .. name
+        end
+    end
+
     -- Dictionary translation (if enabled and channel not filtered)
     local translated, wasChanged
     local dictChannelEnabled = not db.dict.settings.channels or db.dict.settings.channels[event] ~= false

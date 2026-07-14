@@ -94,6 +94,8 @@ class PipelineConfig:
     deepl_api_key: str = ""
     microsoft_api_key: str = ""
     microsoft_region: str = ""
+    google_api_key: str = ""
+    argos_enabled: bool = False
     translator_priority: str = "deepl"
     target_lang: str = "EN"
     own_language: Language = Language.ENGLISH
@@ -132,6 +134,8 @@ class TranslationPipeline:
             api_key=config.deepl_api_key,
             microsoft_api_key=config.microsoft_api_key,
             microsoft_region=config.microsoft_region,
+            google_api_key=config.google_api_key,
+            argos_enabled=config.argos_enabled,
             priority=config.translator_priority,
         )
         self._watcher = ChatLogWatcher(config.chatlog_path, self._on_new_line)
@@ -167,6 +171,10 @@ class TranslationPipeline:
         """
         old_own = self._config.own_language
         old_target = self._config.target_lang
+        # Preserve the RUNTIME translation on/off state: the incoming config
+        # carries translation_enabled_default, which would silently override a
+        # user's live TL toggle (and desync the toggle button) on settings save.
+        config.translation_enabled = self._config.translation_enabled
         self._config = config
         self._detector.own_language = config.own_language
         if old_own != config.own_language:

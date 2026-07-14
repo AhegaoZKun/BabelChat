@@ -22,3 +22,6 @@ ruff==0.15.6
 
 # Utils
 python-dotenv>=1.0.0
+
+# Optional: fully offline translation backend (large; models download on first use)
+# argostranslate>=1.9.0

@@ -36,11 +36,25 @@ const MAX_ADDRESS: usize = 0x7FFF_FFFF_FFFF;
 struct Cache {
     pid: u32,
     addr: usize,
+    /// Cached process handle (raw value). Reused across polls instead of
+    /// OpenProcess/CloseHandle 4×/sec; invalidated when a read fails.
+    handle: isize,
 }
 
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 static SCAN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+/// Rate-limit full scans: if the cache is lost while chat is idle (e.g. after
+/// a /reload), scans would otherwise repeat every poll. Minimum gap in ms.
+static LAST_SCAN_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+const SCAN_MIN_GAP_MS: u64 = 3000;
 static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 fn get_pool() -> &'static rayon::ThreadPool {
     POOL.get_or_init(|| {
@@ -228,17 +242,22 @@ fn full_scan(pid: u32, min_seq: i32) -> Option<(usize, Vec<u8>)> {
 
     // We need one handle per thread — duplicate it for each worker
     get_pool().install(|| {
-        regions.par_iter().for_each(|region| {
-            if found.load(Ordering::Relaxed) { return; }
-            // Open a fresh handle per thread (handles are not Send in windows-rs)
-            let h = match open_process(pid) { Some(h) => h, None => return };
-            if let Some((addr, content)) = scan_region(h, region, min_seq) {
-                if !found.swap(true, Ordering::Relaxed) {
-                    *result.lock().unwrap() = Some((addr, content));
+        // One handle per worker split (for_each_init) instead of one
+        // OpenProcess/CloseHandle per region — regions number in the
+        // thousands; handles are expensive kernel objects.
+        regions.par_iter().for_each_init(
+            || open_process(pid).map(|h| h.0 as isize),
+            |h, region| {
+                if found.load(Ordering::Relaxed) { return; }
+                let Some(raw) = h else { return };
+                let handle = HANDLE(*raw as *mut _);
+                if let Some((addr, content)) = scan_region(handle, region, min_seq) {
+                    if !found.swap(true, Ordering::Relaxed) {
+                        *result.lock().unwrap() = Some((addr, content));
+                    }
                 }
-            }
-            unsafe { let _ = CloseHandle(h); }
-        });
+            },
+        );
     });
 
     unsafe { let _ = CloseHandle(handle); }
@@ -250,34 +269,49 @@ fn full_scan(_pid: u32, _min_seq: i32) -> Option<(usize, Vec<u8>)> { None }
 
 // ── Fast path: read at cached address ─────────────────────────────────────────
 
+/// Outcome of a fast-path read at the cached address.
+enum FastRead {
+    /// Buffer valid, new messages present.
+    Fresh(Vec<u8>),
+    /// Buffer valid at cached address but nothing newer than min_seq.
+    /// This must NOT trigger a rescan — it's the steady idle state.
+    NoNew,
+    /// Read failed or markers gone: cache is stale, rescan needed.
+    Stale,
+}
+
 #[cfg(windows)]
-fn try_read_at(pid: u32, addr: usize, min_seq: i32) -> Option<Vec<u8>> {
-    let handle = open_process(pid)?;
+fn try_read_at(handle: HANDLE, addr: usize, min_seq: i32) -> FastRead {
     let mut raw = vec![0u8; MAX_BUF_READ];
-    let ok = read_memory(handle, addr, &mut raw);
-    unsafe { let _ = CloseHandle(handle); }
-    if !ok { return None; }
-    let cs = find_content_start(&raw)?;
-    let ep = raw[cs..].windows(MARKER_END.len()).position(|w| w == MARKER_END)?;
+    if !read_memory(handle, addr, &mut raw) {
+        return FastRead::Stale;
+    }
+    let cs = match find_content_start(&raw) {
+        Some(cs) => cs,
+        None => return FastRead::Stale,
+    };
+    let ep = match raw[cs..].windows(MARKER_END.len()).position(|w| w == MARKER_END) {
+        Some(p) => p,
+        None => return FastRead::Stale,
+    };
     let content = &raw[cs..cs + ep];
     if extract_max_seq(content) > min_seq {
-        Some(content.to_vec())
+        FastRead::Fresh(content.to_vec())
     } else {
-        None
+        FastRead::NoNew
     }
 }
 
 #[cfg(not(windows))]
-fn try_read_at(_pid: u32, _addr: usize, _min_seq: i32) -> Option<Vec<u8>> { None }
+fn try_read_at(_handle: (), _addr: usize, _min_seq: i32) -> FastRead { FastRead::Stale }
 
 // ── C export ─────────────────────────────────────────────────────────────────
 
 /// Find the WoW addon buffer and write its content into out_buf.
 ///
-/// Fast path: single ReadProcessMemory at cached address.
-/// Slow path: full parallel scan on cache miss.
-///
-/// Returns bytes written (>0) or -1 on failure.
+/// Fast path: single ReadProcessMemory at cached address (cached handle).
+/// Returns: bytes written (>0) new data; 0 = buffer valid, nothing new
+/// (steady idle state — NO scan); -1 = failure / scan rate-limited.
 #[unsafe(no_mangle)]
 pub extern "C" fn find_and_read_buffer(
     pid: i32,
@@ -298,21 +332,36 @@ pub extern "C" fn find_and_read_buffer(
     };
 
     // ── Fast path ────────────────────────────────────────────────────────────
+    #[cfg(windows)]
     {
-        let cache = CACHE.lock().unwrap();
+        let mut cache = CACHE.lock().unwrap();
         if let Some(ref c) = *cache {
             if c.pid == pid {
-                if let Some(content) = try_read_at(pid, c.addr, min_seq) {
-                    return write_out(content);
+                let handle = HANDLE(c.handle as *mut _);
+                match try_read_at(handle, c.addr, min_seq) {
+                    FastRead::Fresh(content) => return write_out(content),
+                    // CRITICAL: idle (no new chat) must not fall through to a
+                    // full memory scan — that was pegging the CPU every poll.
+                    FastRead::NoNew => return 0,
+                    FastRead::Stale => {
+                        unsafe { let _ = CloseHandle(handle); }
+                        *cache = None; // fall through to scan
+                    }
                 }
             }
         }
     }
 
-    // ── Slow path (one at a time) ─────────────────────────────────────────────
+    // ── Slow path (rate-limited, one at a time) ──────────────────────────────
+    let now = now_ms();
+    let last = LAST_SCAN_MS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < SCAN_MIN_GAP_MS {
+        return -1;
+    }
     if SCAN_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         return -1;
     }
+    LAST_SCAN_MS.store(now, Ordering::Relaxed);
 
     let result = full_scan(pid, min_seq);
     SCAN_IN_PROGRESS.store(false, Ordering::SeqCst);
@@ -320,7 +369,13 @@ pub extern "C" fn find_and_read_buffer(
     match result {
         None => -1,
         Some((addr, content)) => {
-            *CACHE.lock().unwrap() = Some(Cache { pid, addr });
+            #[cfg(windows)]
+            {
+                // Cache a persistent handle alongside the address.
+                if let Some(h) = open_process(pid) {
+                    *CACHE.lock().unwrap() = Some(Cache { pid, addr, handle: h.0 as isize });
+                }
+            }
             write_out(content)
         }
     }
