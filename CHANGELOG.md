@@ -1,5 +1,32 @@
 # Changelog / История изменений / Registro de cambios
 
+## [3.3.0] — 2026-07-14
+
+### Added / Добавлено / Añadido
+
+- **Native GTK4 overlay for Linux (Wayland)** — the Linux frontend is rebuilt in GTK4 + gtk4-layer-shell, rendering as a true layer-shell surface that stays above fullscreen WoW without XWayland workarounds. Windows continues to use the PyQt6 frontend unchanged (see `ARCHITECTURE_FRONTENDS.md`).
+  - Per-channel chat filtering, streaming messages with channel badges
+  - Drag/resize with ghost outline preview
+  - Quick translation on/off toggle and reply-language selector
+  - Settings window with live apply — no restart needed
+  - First-run setup wizard (GTK)
+- **Automatic backend fallback** — if your priority backend (DeepL or Microsoft) fails or hits quota, the other configured backend is tried automatically instead of dropping the message
+- **New chat channels** — Trade, General, and Services are now captured, filterable, and translated end-to-end (addon + app)
+- `packaging/` with `babelchat.desktop` and a fish build script (`build-linux.fish`) that produces a self-contained Linux AppImage (Rust scanner → PyInstaller → linuxdeploy + GTK bundling)
+
+### Fixed / Исправлено / Corregido
+
+- **Wayland input focus** — the overlay input field can now be typed into on Wayland (Qt `Tool` windows never receive keyboard focus from the compositor; the overlay is now a frameless always-on-top normal window)
+- **Windows: high CPU while chat idle** — losing the buffer address during idle no longer triggers continuous full memory scans; scans are now rate-limited with a tri-state fast path in both Rust scanners
+- Settings save no longer resets the translation toggle state
+
+### Changed / Изменено / Cambiado
+
+- Merged upstream 3.2.0: Endgame/Midnight dictionary category, discord.gg link fix, dictionary engine pre-indexing, release workflow and lint fixes
+- Removed the unused `lang_selector.py` / `reply_widget.py` modules — reply-language selection lives inline in both overlays
+- `ruff check app/` is fully clean, including the new GTK modules
+
+
 ## [3.2.0] — 2026-06-15
 
 ### Added / Добавлено / Añadido
