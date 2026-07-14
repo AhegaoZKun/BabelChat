@@ -7,19 +7,19 @@ import sys
 
 if sys.platform == "win32":
     from app.memory_reader_windows import (  # noqa: F401
-        MemoryChatWatcher,
-        WoWAddonBufReader,
-        MARKER_START,
         MARKER_END,
+        MARKER_START,
         POLL_INTERVAL,
         WOW_PROCESS_NAMES,
+        MemoryChatWatcher,
+        WoWAddonBufReader,
     )
 else:
     from app.memory_reader_linux import (  # noqa: F401
-        MemoryChatWatcher,
-        WoWAddonBufReader,
-        MARKER_START,
         MARKER_END,
+        MARKER_START,
         POLL_INTERVAL,
         WOW_PROCESS_NAMES,
+        MemoryChatWatcher,
+        WoWAddonBufReader,
     )

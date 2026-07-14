@@ -6,8 +6,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import deepl
-from app.translator import validate_deepl_key, validate_microsoft_key
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
@@ -32,6 +30,7 @@ from app.settings_dialog import (
     WOW_THEME_STYLESHEET,
     _create_dialog_icon,
 )
+from app.translator import validate_deepl_key, validate_microsoft_key
 
 PAGE_WELCOME = 0
 PAGE_API_KEY = 1
@@ -54,9 +53,7 @@ _GOLD_BTN_STYLE = (
 class SetupWizard(QDialog):
     """First-run setup wizard with WoW-themed dark UI."""
 
-    def __init__(
-        self, config: AppConfig, parent: QWidget | None = None
-    ) -> None:
+    def __init__(self, config: AppConfig, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._config = config
         self._deepl_validated = False
@@ -137,23 +134,15 @@ class SetupWizard(QDialog):
         current = self._stack.currentIndex()
         for i, dot in enumerate(self._step_dots):
             if i < current:
-                dot.setStyleSheet(
-                    "background: #997D00; border-radius: 6px;"
-                )
+                dot.setStyleSheet("background: #997D00; border-radius: 6px;")
             elif i == current:
-                dot.setStyleSheet(
-                    "background: #FFD200; border-radius: 6px;"
-                )
+                dot.setStyleSheet("background: #FFD200; border-radius: 6px;")
             else:
-                dot.setStyleSheet(
-                    "background: #555; border-radius: 6px;"
-                )
+                dot.setStyleSheet("background: #555; border-radius: 6px;")
 
         step_names = tr("wizard.steps").split("|")
         name = step_names[current] if current < len(step_names) else ""
-        self._step_text.setText(
-            tr("wizard.step_of", current=current + 1, total=TOTAL_PAGES, name=name)
-        )
+        self._step_text.setText(tr("wizard.step_of", current=current + 1, total=TOTAL_PAGES, name=name))
 
     # ── Page 1: Welcome ──────────────────────────────────────────
 
@@ -172,9 +161,7 @@ class SetupWizard(QDialog):
 
         # Title
         self._welcome_title = QLabel(tr("wizard.welcome.title"))
-        self._welcome_title.setStyleSheet(
-            "color: #FFD200; font-size: 22px; font-weight: bold;"
-        )
+        self._welcome_title.setStyleSheet("color: #FFD200; font-size: 22px; font-weight: bold;")
         self._welcome_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._welcome_title)
 
@@ -197,14 +184,10 @@ class SetupWizard(QDialog):
         lang_row.addWidget(ui_lang_label)
 
         self._ui_lang_combo = QComboBox()
-        self._ui_lang_combo.setStyleSheet(
-            "QComboBox { min-width: 140px; padding: 6px 8px; }"
-        )
+        self._ui_lang_combo.setStyleSheet("QComboBox { min-width: 140px; padding: 6px 8px; }")
         for code, name in UI_LANGUAGES.items():
             self._ui_lang_combo.addItem(name, code)
-        self._ui_lang_combo.setCurrentIndex(
-            self._ui_lang_combo.findData(tr.get_language())
-        )
+        self._ui_lang_combo.setCurrentIndex(self._ui_lang_combo.findData(tr.get_language()))
         self._ui_lang_combo.currentIndexChanged.connect(self._on_ui_lang_changed)
         lang_row.addWidget(self._ui_lang_combo)
         lang_row.addStretch()
@@ -235,8 +218,9 @@ class SetupWizard(QDialog):
         layout.addSpacing(4)
 
         explain = QLabel(
-            "Configure at least one translation provider. "
-            "If both are provided, you can choose which takes priority."
+            "These keys are only for full-sentence translation — the in-game dictionary already works for free "
+            "without any of them. Configure at least one provider if you want sentence translation; if both are "
+            "set, you can choose which takes priority."
         )
         explain.setStyleSheet("color: #ccc; font-size: 12px;")
         explain.setWordWrap(True)
@@ -253,12 +237,19 @@ class SetupWizard(QDialog):
         signup = QLabel(
             '<a href="https://www.deepl.com/pro-api" '
             'style="color: #FFD200; font-size: 11px;">'
-            'Get free API key (1M chars, one-time)</a>'
+            "Get free API key (1M chars, one-time)</a>"
         )
         signup.setOpenExternalLinks(True)
         deepl_link_row.addWidget(signup)
         deepl_link_row.addStretch()
         deepl_layout.addLayout(deepl_link_row)
+
+        deepl_hint = QLabel(
+            "Note: DeepL's free tier asks for a credit card to verify your account — it never charges you."
+        )
+        deepl_hint.setStyleSheet("color: #999; font-size: 10px;")
+        deepl_hint.setWordWrap(True)
+        deepl_layout.addWidget(deepl_hint)
 
         self._api_key_input = QLineEdit(self._config.deepl_api_key)
         self._api_key_input.setPlaceholderText("Translator API key (ends with :fx for free tier)")
@@ -286,12 +277,16 @@ class SetupWizard(QDialog):
         ms_link = QLabel(
             '<a href="https://portal.azure.com/" '
             'style="color: #FFD200; font-size: 11px;">'
-            'Get free key (2M chars/month, Azure — more setup required)</a>'
+            "Get free key (2M chars/month, Azure — more setup required)</a>"
         )
         ms_link.setOpenExternalLinks(True)
         ms_link_row.addWidget(ms_link)
         ms_link_row.addStretch()
         ms_layout.addLayout(ms_link_row)
+
+        ms_hint = QLabel("Free — no credit card required.")
+        ms_hint.setStyleSheet("color: #40FF40; font-size: 10px;")
+        ms_layout.addWidget(ms_hint)
 
         self._ms_key_input = QLineEdit(self._config.microsoft_api_key)
         self._ms_key_input.setPlaceholderText("Microsoft Translator API key")
@@ -324,9 +319,7 @@ class SetupWizard(QDialog):
         self._priority_combo = QComboBox()
         self._priority_combo.addItem("DeepL first", "deepl")
         self._priority_combo.addItem("Microsoft first", "microsoft")
-        idx = self._priority_combo.findData(
-            getattr(self._config, "translator_priority", "deepl")
-        )
+        idx = self._priority_combo.findData(getattr(self._config, "translator_priority", "deepl"))
         if idx >= 0:
             self._priority_combo.setCurrentIndex(idx)
         priority_layout.addWidget(self._priority_combo)
@@ -409,12 +402,22 @@ class SetupWizard(QDialog):
         self._validate_deepl_key()
 
     def _set_api_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        color = {
+            "unconfigured": "#999",
+            "valid": "#40FF40",
+            "invalid": "#FF4040",
+            "error": "#FF7F00",
+        }.get(state, "#999")
         self._api_status_label.setText(message)
         self._api_status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
 
     def _set_ms_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        color = {
+            "unconfigured": "#999",
+            "valid": "#40FF40",
+            "invalid": "#FF4040",
+            "error": "#FF7F00",
+        }.get(state, "#999")
         self._ms_status_label.setText(message)
         self._ms_status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
 
@@ -425,9 +428,7 @@ class SetupWizard(QDialog):
         layout = QVBoxLayout(page)
 
         title = QLabel(tr("wizard.wow.title"))
-        title.setStyleSheet(
-            "color: #FFD200; font-size: 16px; font-weight: bold;"
-        )
+        title.setStyleSheet("color: #FFD200; font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
 
         layout.addSpacing(4)
@@ -442,9 +443,7 @@ class SetupWizard(QDialog):
         # Path input + Browse
         path_row = QHBoxLayout()
         self._wow_path_input = QLineEdit(self._config.wow_path)
-        self._wow_path_input.setPlaceholderText(
-            "C:/Program Files/World of Warcraft"
-        )
+        self._wow_path_input.setPlaceholderText("C:/Program Files/World of Warcraft")
         path_row.addWidget(self._wow_path_input, stretch=1)
 
         browse_btn = QPushButton(tr("wizard.wow.browse"))
@@ -468,6 +467,7 @@ class SetupWizard(QDialog):
 
     def _auto_detect_wow(self) -> None:
         import sys
+
         if sys.platform != "win32":
             # On Linux, auto-detection is unreliable — open the file browser directly
             self._browse_wow_path()
@@ -476,25 +476,17 @@ class SetupWizard(QDialog):
         if detected:
             self._wow_path_input.setText(detected)
             self._wow_status_label.setText(tr("wizard.wow.found"))
-            self._wow_status_label.setStyleSheet(
-                "color: #40FF40; font-weight: bold;"
-            )
+            self._wow_status_label.setStyleSheet("color: #40FF40; font-weight: bold;")
         else:
             self._wow_status_label.setText(tr("wizard.wow.not_found"))
-            self._wow_status_label.setStyleSheet(
-                "color: #FF7F00; font-weight: bold;"
-            )
+            self._wow_status_label.setStyleSheet("color: #FF7F00; font-weight: bold;")
 
     def _browse_wow_path(self) -> None:
-        path = QFileDialog.getExistingDirectory(
-            self, tr("wizard.wow.browse_title")
-        )
+        path = QFileDialog.getExistingDirectory(self, tr("wizard.wow.browse_title"))
         if path:
             self._wow_path_input.setText(path)
             self._wow_status_label.setText(tr("wizard.wow.path_set"))
-            self._wow_status_label.setStyleSheet(
-                "color: #40FF40; font-weight: bold;"
-            )
+            self._wow_status_label.setStyleSheet("color: #40FF40; font-weight: bold;")
 
     # ── Page 4: Language ──────────────────────────────────────────
 
@@ -503,9 +495,7 @@ class SetupWizard(QDialog):
         layout = QVBoxLayout(page)
 
         title = QLabel(tr("wizard.lang.title"))
-        title.setStyleSheet(
-            "color: #FFD200; font-size: 16px; font-weight: bold;"
-        )
+        title.setStyleSheet("color: #FFD200; font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
 
         layout.addSpacing(8)
@@ -517,9 +507,7 @@ class SetupWizard(QDialog):
         self._own_lang = QComboBox()
         for code, name in LANGUAGES.items():
             self._own_lang.addItem(f"{name} ({code})", code)
-        self._own_lang.setCurrentIndex(
-            self._own_lang.findData(self._config.own_language)
-        )
+        self._own_lang.setCurrentIndex(self._own_lang.findData(self._config.own_language))
         layout.addWidget(self._own_lang)
 
         layout.addSpacing(12)
@@ -531,9 +519,7 @@ class SetupWizard(QDialog):
         self._target_lang = QComboBox()
         for code, name in LANGUAGES.items():
             self._target_lang.addItem(f"{name} ({code})", code)
-        self._target_lang.setCurrentIndex(
-            self._target_lang.findData(self._config.target_language)
-        )
+        self._target_lang.setCurrentIndex(self._target_lang.findData(self._config.target_language))
         layout.addWidget(self._target_lang)
 
         layout.addSpacing(12)
@@ -554,9 +540,7 @@ class SetupWizard(QDialog):
         layout.addStretch()
 
         title = QLabel(tr("wizard.ready.title"))
-        title.setStyleSheet(
-            "color: #FFD200; font-size: 20px; font-weight: bold;"
-        )
+        title.setStyleSheet("color: #FFD200; font-size: 20px; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
@@ -616,29 +600,19 @@ class SetupWizard(QDialog):
         wow = self._wow_path_input.text().strip()
         if not wow:
             self._addon_status_label.setText(tr("wizard.ready.addon_no_path"))
-            self._addon_status_label.setStyleSheet(
-                "color: #FF4040; font-weight: bold;"
-            )
+            self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
             return
 
         addons_dir = Path(wow) / "_retail_" / "Interface" / "AddOns"
         if not addons_dir.parent.exists():
-            self._addon_status_label.setText(
-                tr("wizard.ready.addon_path_not_found", path=addons_dir.parent)
-            )
-            self._addon_status_label.setStyleSheet(
-                "color: #FF4040; font-weight: bold;"
-            )
+            self._addon_status_label.setText(tr("wizard.ready.addon_path_not_found", path=addons_dir.parent))
+            self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
             return
 
         src = self._addon_source_path()
         if not src.exists():
-            self._addon_status_label.setText(
-                tr("wizard.ready.addon_files_missing")
-            )
-            self._addon_status_label.setStyleSheet(
-                "color: #FF4040; font-weight: bold;"
-            )
+            self._addon_status_label.setText(tr("wizard.ready.addon_files_missing"))
+            self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
             return
 
         dest = addons_dir / "BabelChat"
@@ -646,18 +620,12 @@ class SetupWizard(QDialog):
             if dest.exists():
                 shutil.rmtree(dest)
             shutil.copytree(src, dest)
-            self._addon_status_label.setText(
-                tr("wizard.ready.addon_installed", dest=dest)
-            )
-            self._addon_status_label.setStyleSheet(
-                "color: #40FF40; font-weight: bold;"
-            )
+            self._addon_status_label.setText(tr("wizard.ready.addon_installed", dest=dest))
+            self._addon_status_label.setStyleSheet("color: #40FF40; font-weight: bold;")
             self._install_addon_btn.setText(tr("wizard.ready.reinstall_addon"))
         except OSError as e:
             self._addon_status_label.setText(f"\u2717 {e}")
-            self._addon_status_label.setStyleSheet(
-                "color: #FF4040; font-weight: bold;"
-            )
+            self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
 
     def _update_summary(self) -> None:
         deepl_key = self._api_key_input.text().strip()

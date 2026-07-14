@@ -6,8 +6,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import deepl
-from app.translator import validate_deepl_key, validate_microsoft_key
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QKeyEvent, QPainter, QPixmap
 from PyQt6.QtWidgets import (
@@ -35,6 +33,7 @@ from PyQt6.QtWidgets import (
 from app.about_dialog import VERSION
 from app.config import AppConfig, detect_wow_path
 from app.i18n import UI_LANGUAGES, tr
+from app.translator import validate_deepl_key, validate_microsoft_key
 
 # DeepL supported target languages
 LANGUAGES = {
@@ -356,7 +355,9 @@ def _create_dialog_icon() -> QIcon:
                 Path(__file__).parent.parent / "assets" / "icon.ico",
                 Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
                 Path(__file__).parent.parent / "assets" / "icon.png",
-            ] if sys.platform == "win32" else [
+            ]
+            if sys.platform == "win32"
+            else [
                 # Linux: only PNG — .ico causes "Ignoring icon" warning
                 Path(getattr(sys, "_MEIPASS", "")) / "assets" / "icon.png",
                 Path(__file__).parent.parent / "assets" / "icon.png",
@@ -406,9 +407,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(tabs)
 
         # Buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save_and_accept)
         buttons.rejected.connect(self.reject)
 
@@ -475,9 +474,7 @@ class SettingsDialog(QDialog):
         self._ui_lang = QComboBox()
         for code, name in UI_LANGUAGES.items():
             self._ui_lang.addItem(name, code)
-        self._ui_lang.setCurrentIndex(
-            self._ui_lang.findData(self._config.ui_language)
-        )
+        self._ui_lang.setCurrentIndex(self._ui_lang.findData(self._config.ui_language))
         lang_layout.addRow(tr("settings.lang.ui"), self._ui_lang)
 
         self._own_lang = QComboBox()
@@ -486,12 +483,8 @@ class SettingsDialog(QDialog):
             self._own_lang.addItem(f"{name} ({code})", code)
             self._target_lang.addItem(f"{name} ({code})", code)
 
-        self._own_lang.setCurrentIndex(
-            self._own_lang.findData(self._config.own_language)
-        )
-        self._target_lang.setCurrentIndex(
-            self._target_lang.findData(self._config.target_language)
-        )
+        self._own_lang.setCurrentIndex(self._own_lang.findData(self._config.own_language))
+        self._target_lang.setCurrentIndex(self._target_lang.findData(self._config.target_language))
         lang_layout.addRow(tr("settings.lang.own"), self._own_lang)
         lang_layout.addRow(tr("settings.lang.target"), self._target_lang)
         layout.addWidget(lang_group)
@@ -552,7 +545,9 @@ class SettingsDialog(QDialog):
         self._validate_btn = QPushButton(tr("settings.api.validate"))
         self._validate_btn.clicked.connect(self._validate_api_key)
         deepl_row.addWidget(self._validate_btn)
-        deepl_key_link = QLabel('<a href="https://www.deepl.com/your-account/keys" style="color: #FFD200; font-size: 11px;">Get key</a>')
+        deepl_key_link = QLabel(
+            '<a href="https://www.deepl.com/your-account/keys" style="color: #FFD200; font-size: 11px;">Get key</a>'
+        )
         deepl_key_link.setOpenExternalLinks(True)
         deepl_row.addWidget(deepl_key_link)
         api_layout.addLayout(deepl_row)
@@ -595,7 +590,9 @@ class SettingsDialog(QDialog):
         self._ms_validate_btn = QPushButton(tr("settings.api.validate"))
         self._ms_validate_btn.clicked.connect(self._validate_ms_key)
         ms_row.addWidget(self._ms_validate_btn)
-        ms_key_link = QLabel('<a href="https://portal.azure.com/" style="color: #FFD200; font-size: 11px;">Azure portal</a>')
+        ms_key_link = QLabel(
+            '<a href="https://portal.azure.com/" style="color: #FFD200; font-size: 11px;">Azure portal</a>'
+        )
         ms_key_link.setOpenExternalLinks(True)
         ms_row.addWidget(ms_key_link)
         api_layout.addLayout(ms_row)
@@ -657,7 +654,9 @@ class SettingsDialog(QDialog):
                     self._usage_bar.setValue(pct)
                     self._usage_detail_label.setText(f"{int(count_str):,} / {int(limit_str):,} ({pct}%)")
                     bar_color = "#FF4040" if pct >= 90 else "#FF7F00" if pct >= 70 else "#FFD200"
-                    self._usage_bar.setStyleSheet(f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}")
+                    self._usage_bar.setStyleSheet(
+                        f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}"
+                    )
                     self._usage_widget.show()
                 except Exception:
                     self._usage_widget.hide()
@@ -688,13 +687,17 @@ class SettingsDialog(QDialog):
             self._set_ms_status("invalid", msgs.get(msg, f"✗ {msg}"))
 
     def _set_api_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(
+            state, "#999"
+        )
         icon = {"unconfigured": "•", "valid": "✓", "invalid": "✗", "error": "⚠"}.get(state, "")
         self._api_status_label.setText(f"{icon} {message}")
         self._api_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
 
     def _set_ms_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(state, "#999")
+        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(
+            state, "#999"
+        )
         self._ms_status_label.setText(message)
         self._ms_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
 
@@ -721,13 +724,9 @@ class SettingsDialog(QDialog):
         self._opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self._opacity_slider.setRange(50, 255)
         self._opacity_slider.setValue(self._config.overlay_opacity)
-        self._opacity_label = QLabel(
-            f"{int(self._config.overlay_opacity / 255 * 100)}%"
-        )
+        self._opacity_label = QLabel(f"{int(self._config.overlay_opacity / 255 * 100)}%")
         self._opacity_label.setFixedWidth(40)
-        self._opacity_slider.valueChanged.connect(
-            lambda v: self._opacity_label.setText(f"{int(v / 255 * 100)}%")
-        )
+        self._opacity_slider.valueChanged.connect(lambda v: self._opacity_label.setText(f"{int(v / 255 * 100)}%"))
         opacity_row = QHBoxLayout()
         opacity_row.addWidget(self._opacity_slider)
         opacity_row.addWidget(self._opacity_label)
@@ -817,8 +816,7 @@ class SettingsDialog(QDialog):
 
         # GitHub
         github = QLabel(
-            '<a href="https://github.com/Yumash/BabelChat" '
-            'style="color: #FFD200;">GitHub: Yumash/BabelChat</a>'
+            '<a href="https://github.com/Yumash/BabelChat" style="color: #FFD200;">GitHub: Yumash/BabelChat</a>'
         )
         github.setAlignment(Qt.AlignmentFlag.AlignCenter)
         github.setOpenExternalLinks(True)
@@ -857,7 +855,7 @@ class SettingsDialog(QDialog):
         pirson_link = QLabel(
             '<a href="https://buymeacoffee.com/franciscorb" '
             'style="color: #FFD200; font-size: 12px;">'
-            'Buy Me a Coffee — Pirson</a>'
+            "Buy Me a Coffee — Pirson</a>"
         )
         pirson_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
         pirson_link.setOpenExternalLinks(True)
@@ -901,9 +899,7 @@ class SettingsDialog(QDialog):
 
             copy_btn = QPushButton(tr("overlay.reply.copy"))
             copy_btn.setFixedWidth(80)
-            copy_btn.clicked.connect(
-                lambda checked, a=addr: QApplication.clipboard().setText(a)
-            )
+            copy_btn.clicked.connect(lambda checked, a=addr: QApplication.clipboard().setText(a))
             row.addWidget(copy_btn)
             layout.addLayout(row)
 
@@ -931,9 +927,7 @@ class SettingsDialog(QDialog):
 
         addons_dir = Path(wow) / "_retail_" / "Interface" / "AddOns"
         if not addons_dir.parent.exists():
-            self._addon_status.setText(
-                tr("settings.wow.addon_not_found", path=addons_dir.parent)
-            )
+            self._addon_status.setText(tr("settings.wow.addon_not_found", path=addons_dir.parent))
             self._addon_status.setStyleSheet("color: #FF4040; font-weight: bold;")
             return
 
@@ -994,6 +988,7 @@ class SettingsDialog(QDialog):
 
     def _restore_position(self) -> None:
         import json
+
         try:
             data = json.loads(Path(_SETTINGS_DIALOG_POS_FILE).read_text(encoding="utf-8"))
             self.move(data.get("x", 200), data.get("y", 200))
@@ -1003,11 +998,10 @@ class SettingsDialog(QDialog):
     def _save_position(self) -> None:
         import contextlib
         import json
+
         with contextlib.suppress(OSError):
             data = {"x": self.x(), "y": self.y()}
-            Path(_SETTINGS_DIALOG_POS_FILE).write_text(
-                json.dumps(data), encoding="utf-8"
-            )
+            Path(_SETTINGS_DIALOG_POS_FILE).write_text(json.dumps(data), encoding="utf-8")
 
     def closeEvent(self, event: object) -> None:
         self._save_position()

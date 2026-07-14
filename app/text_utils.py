@@ -13,9 +13,25 @@ _RE_WOW_MARKERS = re.compile(
     re.IGNORECASE,
 )
 
-# URLs
+# URLs (with scheme or www. prefix)
 _RE_URL = re.compile(
     r"https?://[^\s<>\"]+|www\.[^\s<>\"]+",
+    re.IGNORECASE,
+)
+
+# Schemeless links that DeepL otherwise mangles — most notably "discord.gg/xyz",
+# where the ".gg" gets read as the gaming abbreviation and translated to
+# "good game". Two cases:
+#   1. Known link/invite domains — matched even without a path (e.g. "discord.gg").
+#   2. Any "domain.tld/path" — requires a slash+path so we don't swallow ordinary
+#      sentences that merely contain a period.
+_LINK_DOMAINS = (
+    r"discord\.gg|discord\.com|discordapp\.com|t\.me|bit\.ly|"
+    r"youtu\.be|twitch\.tv|tinyurl\.com"
+)
+_RE_BARE_URL = re.compile(
+    rf"\b(?:{_LINK_DOMAINS})(?:/[^\s<>\"]*)?"
+    rf"|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{{2,}}/[^\s<>\"]+",
     re.IGNORECASE,
 )
 
@@ -37,9 +53,11 @@ def strip_for_translation(text: str) -> tuple[str, list[tuple[str, str]]]:
         return placeholder
 
     result = text
-    # Order matters: WoW links first (they contain special chars), then URLs, then markers
+    # Order matters: WoW links first (they contain special chars), then scheme'd
+    # URLs, then schemeless link domains (discord.gg etc.), then markers
     result = RE_WOW_LINK.sub(replace_token, result)
     result = _RE_URL.sub(replace_token, result)
+    result = _RE_BARE_URL.sub(replace_token, result)
     result = _RE_WOW_MARKERS.sub(replace_token, result)
 
     return result, replacements

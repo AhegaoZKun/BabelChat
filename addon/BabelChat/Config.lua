@@ -117,6 +117,7 @@ function addonTable.CreateConfigUI()
         { text = L["CAT_GUILD"],   key = "showHermandad",   tt = L["TT_CAT_GUILD"] },
         { text = L["CAT_STATUS"],  key = "showEstado",      tt = L["TT_CAT_STATUS"] },
         { text = L["CAT_SLANG"],   key = "showSlang",       tt = L["TT_CAT_SLANG"] },
+        { text = L["CAT_ENDGAME"], key = "showEndgame",     tt = L["TT_CAT_ENDGAME"] },
         { text = L["CAT_ZONES"],   key = "showZones",       tt = L["TT_CAT_ZONES"] },
         { text = L["CAT_SETS"],    key = "showSets",        tt = L["TT_CAT_SETS"] },
     }
