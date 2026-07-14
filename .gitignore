@@ -72,3 +72,7 @@ config.json
 
 # Rust scanner build artifacts
 babelchat_scanner_*/target/
+
+# Local dev tools (fork-local)
+.frai/
+.claude-lib/
