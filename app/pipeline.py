@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lingua import Language
 
-from app.cache import TranslationCache, DEFAULT_DB_PATH
+from app.cache import DEFAULT_DB_PATH, TranslationCache
 from app.dedup import DeduplicationBuffer
 from app.detector import ChatLanguageDetector
 from app.glossary import expand_wow_terms

@@ -9,8 +9,8 @@ not specific to BabelChat.
 
 from __future__ import annotations
 
+import contextlib
 import logging
-import threading
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -108,8 +108,6 @@ class GlobalHotkeyManager(QObject):
         """Stop listening."""
         self._running = False
         if self._listener:
-            try:
+            with contextlib.suppress(Exception):
                 self._listener.stop()
-            except Exception:
-                pass
             self._listener = None

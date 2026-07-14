@@ -15,9 +15,35 @@ logger = logging.getLogger(__name__)
 # ── Language maps ─────────────────────────────────────────────────────────────
 
 DEEPL_LANGUAGES = {
-    "BG", "CS", "DA", "DE", "EL", "EN", "ES", "ET", "FI", "FR",
-    "HU", "ID", "IT", "JA", "KO", "LT", "LV", "NB", "NL", "PL",
-    "PT", "RO", "RU", "SK", "SL", "SV", "TR", "UK", "ZH",
+    "BG",
+    "CS",
+    "DA",
+    "DE",
+    "EL",
+    "EN",
+    "ES",
+    "ET",
+    "FI",
+    "FR",
+    "HU",
+    "ID",
+    "IT",
+    "JA",
+    "KO",
+    "LT",
+    "LV",
+    "NB",
+    "NL",
+    "PL",
+    "PT",
+    "RO",
+    "RU",
+    "SK",
+    "SL",
+    "SV",
+    "TR",
+    "UK",
+    "ZH",
 }
 
 # Microsoft uses slightly different codes for some languages
@@ -37,6 +63,7 @@ TranslatorBackend = Literal["deepl", "microsoft", "google", "argos", "auto"]
 @dataclass(frozen=True, slots=True)
 class TranslationResult:
     """Result of a translation attempt."""
+
     original: str
     translated: str
     source_lang: str
@@ -47,6 +74,7 @@ class TranslationResult:
 
 
 # ── DeepL backend ─────────────────────────────────────────────────────────────
+
 
 class _DeepLBackend:
     def __init__(self, api_key: str, max_retries: int = 3, retry_delay: float = 1.0) -> None:
@@ -65,32 +93,47 @@ class _DeepLBackend:
                     context="World of Warcraft chat",
                 )
                 return TranslationResult(
-                    original=text, translated=result.text,
+                    original=text,
+                    translated=result.text,
                     source_lang=result.detected_source_lang,
-                    target_lang=target_lang, success=True, backend="deepl",
+                    target_lang=target_lang,
+                    success=True,
+                    backend="deepl",
                 )
             except deepl.QuotaExceededException:
                 logger.error("DeepL quota exceeded")
                 return TranslationResult(
-                    original=text, translated=text,
-                    source_lang=source_lang or "", target_lang=target_lang,
-                    success=False, error="quota_exceeded", backend="deepl",
+                    original=text,
+                    translated=text,
+                    source_lang=source_lang or "",
+                    target_lang=target_lang,
+                    success=False,
+                    error="quota_exceeded",
+                    backend="deepl",
                 )
             except deepl.DeepLException as e:
                 logger.warning("DeepL error (attempt %d/%d): %s", attempt + 1, self._max_retries, e)
                 if attempt < self._max_retries - 1:
-                    time.sleep(self._retry_delay * (2 ** attempt))
+                    time.sleep(self._retry_delay * (2**attempt))
             except Exception as e:
                 logger.error("DeepL unexpected error: %s", e)
                 return TranslationResult(
-                    original=text, translated=text,
-                    source_lang=source_lang or "", target_lang=target_lang,
-                    success=False, error=f"unexpected: {e}", backend="deepl",
+                    original=text,
+                    translated=text,
+                    source_lang=source_lang or "",
+                    target_lang=target_lang,
+                    success=False,
+                    error=f"unexpected: {e}",
+                    backend="deepl",
                 )
         return TranslationResult(
-            original=text, translated=text,
-            source_lang=source_lang or "", target_lang=target_lang,
-            success=False, error="max_retries_exceeded", backend="deepl",
+            original=text,
+            translated=text,
+            source_lang=source_lang or "",
+            target_lang=target_lang,
+            success=False,
+            error="max_retries_exceeded",
+            backend="deepl",
         )
 
     def get_usage(self) -> deepl.Usage:
@@ -109,6 +152,7 @@ class _DeepLBackend:
 _MS_ENDPOINT = "https://api.cognitive.microsofttranslator.com/translate"
 _MS_DETECT_ENDPOINT = "https://api.cognitive.microsofttranslator.com/detect"
 
+
 class _MicrosoftBackend:
     def __init__(self, api_key: str, region: str = "", max_retries: int = 3, retry_delay: float = 1.0) -> None:
         self._api_key = api_key
@@ -116,11 +160,13 @@ class _MicrosoftBackend:
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self._session = requests.Session()
-        self._session.headers.update({
-            "Ocp-Apim-Subscription-Key": api_key,
-            "Ocp-Apim-Subscription-Region": region,
-            "Content-Type": "application/json",
-        })
+        self._session.headers.update(
+            {
+                "Ocp-Apim-Subscription-Key": api_key,
+                "Ocp-Apim-Subscription-Region": region,
+                "Content-Type": "application/json",
+            }
+        )
 
     def translate(self, text: str, target_lang: str, source_lang: str | None = None) -> TranslationResult:
         ms_target = _MS_LANG_MAP.get(target_lang.upper(), target_lang.lower())
@@ -136,40 +182,55 @@ class _MicrosoftBackend:
                 resp = self._session.post(_MS_ENDPOINT, params=params, json=body, timeout=10)
                 if resp.status_code == 401:
                     return TranslationResult(
-                        original=text, translated=text,
-                        source_lang=source_lang or "", target_lang=target_lang,
-                        success=False, error="auth_failed", backend="microsoft",
+                        original=text,
+                        translated=text,
+                        source_lang=source_lang or "",
+                        target_lang=target_lang,
+                        success=False,
+                        error="auth_failed",
+                        backend="microsoft",
                     )
                 if resp.status_code == 429:
                     logger.warning("Microsoft Translator rate limited")
                     if attempt < self._max_retries - 1:
-                        time.sleep(self._retry_delay * (2 ** attempt))
+                        time.sleep(self._retry_delay * (2**attempt))
                     continue
                 resp.raise_for_status()
                 data = resp.json()
                 translated = data[0]["translations"][0]["text"]
                 detected = data[0].get("detectedLanguage", {}).get("language", source_lang or "")
                 return TranslationResult(
-                    original=text, translated=translated,
-                    source_lang=detected.upper(), target_lang=target_lang,
-                    success=True, backend="microsoft",
+                    original=text,
+                    translated=translated,
+                    source_lang=detected.upper(),
+                    target_lang=target_lang,
+                    success=True,
+                    backend="microsoft",
                 )
             except requests.RequestException as e:
                 logger.warning("Microsoft Translator error (attempt %d/%d): %s", attempt + 1, self._max_retries, e)
                 if attempt < self._max_retries - 1:
-                    time.sleep(self._retry_delay * (2 ** attempt))
+                    time.sleep(self._retry_delay * (2**attempt))
             except Exception as e:
                 logger.error("Microsoft Translator unexpected error: %s", e)
                 return TranslationResult(
-                    original=text, translated=text,
-                    source_lang=source_lang or "", target_lang=target_lang,
-                    success=False, error=f"unexpected: {e}", backend="microsoft",
+                    original=text,
+                    translated=text,
+                    source_lang=source_lang or "",
+                    target_lang=target_lang,
+                    success=False,
+                    error=f"unexpected: {e}",
+                    backend="microsoft",
                 )
 
         return TranslationResult(
-            original=text, translated=text,
-            source_lang=source_lang or "", target_lang=target_lang,
-            success=False, error="max_retries_exceeded", backend="microsoft",
+            original=text,
+            translated=text,
+            source_lang=source_lang or "",
+            target_lang=target_lang,
+            success=False,
+            error="max_retries_exceeded",
+            backend="microsoft",
         )
 
     def validate(self) -> bool:
@@ -342,6 +403,7 @@ class _ArgosBackend:
 
 # ── Unified TranslatorService ─────────────────────────────────────────────────
 
+
 class TranslatorService:
     """Unified translation service supporting DeepL and Microsoft Translator.
 
@@ -409,8 +471,10 @@ class TranslatorService:
     ) -> TranslationResult:
         if not text.strip():
             return TranslationResult(
-                original=text, translated=text,
-                source_lang=source_lang or "", target_lang=target_lang,
+                original=text,
+                translated=text,
+                source_lang=source_lang or "",
+                target_lang=target_lang,
                 success=True,
             )
 
@@ -418,9 +482,12 @@ class TranslatorService:
 
         if not chain:
             return TranslationResult(
-                original=text, translated=text,
-                source_lang=source_lang or "", target_lang=target_lang,
-                success=False, error="no_backend",
+                original=text,
+                translated=text,
+                source_lang=source_lang or "",
+                target_lang=target_lang,
+                success=False,
+                error="no_backend",
             )
 
         result: TranslationResult | None = None
@@ -458,6 +525,7 @@ class TranslatorService:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _normalize_deepl_target(lang: str) -> str:
     upper = lang.upper()

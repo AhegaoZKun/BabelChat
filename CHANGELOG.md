@@ -1,6 +1,16 @@
 # Changelog / История изменений / Registro de cambios
 
-## [3.2.0] — 2026-06-02
+## [3.2.0] — 2026-06-15
+
+### Added / Добавлено / Añadido
+
+- **Endgame & Midnight dictionary category** — 22 current terms across all 14 client languages (delves, Bountiful, Brann, Mythic+/keystone/affixes, gear tracks Champion/Hero/Myth, Gilded/Runed crests, Warband, catalyst, spark, renown, Raider.IO, KSM, Manaforge Omega, Undermine). The in-game dictionary now keeps up with The War Within / Midnight chat.
+- **Dictionary engine**: LibBabble zone/item-set lookups are pre-indexed at rebuild time instead of re-scanned on every chat line; single-word matching now resolves the correct token position when a word repeats in a message.
+- **Clearer onboarding** (from CurseForge feedback) — the first-run welcome now states the dictionary works instantly and free with no app required; the companion setup explains that DeepL's free tier asks for a credit card to verify (never charges) while Microsoft Translator needs no card. CurseForge description rewritten with a Quick Start.
+
+### Fixed / Исправлено / Corregido
+
+- **Discord invite links no longer mistranslated** — schemeless links like `discord.gg/xyz` were reaching DeepL, which read `.gg` as the gaming abbreviation and rendered it as "good game" / "хорошая игра". URL tokenization now also protects known link/invite domains (`discord.gg`, `t.me`, `bit.ly`, …) and any `domain.tld/path`.
 
 ### Performance / Производительность / Rendimiento
 
