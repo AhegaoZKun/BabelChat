@@ -30,6 +30,17 @@ struct Cache {
 
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 static SCAN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+/// Minimum gap between full scans (ms) — prevents scan loops if the cache is
+/// lost while chat is idle (e.g. after an in-game /reload).
+static LAST_SCAN_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+const SCAN_MIN_GAP_MS: u64 = 3000;
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
 
 fn get_pool() -> &'static rayon::ThreadPool {
@@ -163,6 +174,30 @@ fn try_read_at(pid: i32, addr: u64, min_seq: i32) -> Option<Vec<u8>> {
     }
 }
 
+/// Outcome of a fast-path read at the cached address.
+enum FastRead {
+    Fresh(Vec<u8>),
+    /// Buffer valid at cached address but nothing newer than min_seq.
+    /// Must NOT trigger a rescan — this is the steady idle state.
+    NoNew,
+    /// Read failed or markers gone: cache stale, rescan needed.
+    Stale,
+}
+
+fn fast_read_at(pid: i32, addr: u64, min_seq: i32) -> FastRead {
+    let Some(raw) = vm_read_partial(pid, addr, MAX_BUF_READ) else { return FastRead::Stale };
+    let Some(cs) = find_content_start(&raw) else { return FastRead::Stale };
+    let Some(ep) = raw[cs..].windows(MARKER_END.len()).position(|w| w == MARKER_END) else {
+        return FastRead::Stale;
+    };
+    let content = &raw[cs..cs + ep];
+    if extract_max_seq(content) > min_seq {
+        FastRead::Fresh(content.to_vec())
+    } else {
+        FastRead::NoNew
+    }
+}
+
 // ── Region scan ───────────────────────────────────────────────────────────────
 
 fn scan_region(pid: i32, region: &Region, min_seq: i32) -> Option<(u64, Vec<u8>)> {
@@ -240,20 +275,29 @@ pub extern "C" fn find_and_read_buffer(
 
     // ── Fast path: cached address (single process_vm_readv) ──────────────────
     {
-        let cache = CACHE.lock().unwrap();
+        let mut cache = CACHE.lock().unwrap();
         if let Some(ref c) = *cache {
             if c.pid == pid {
-                if let Some(content) = try_read_at(pid, c.addr, min_seq) {
-                    return write_out(content);
+                match fast_read_at(pid, c.addr, min_seq) {
+                    FastRead::Fresh(content) => return write_out(content),
+                    // Idle (no new chat) must NOT fall through to a full scan —
+                    // that pegged the CPU on every poll with no new messages.
+                    FastRead::NoNew => return 0,
+                    FastRead::Stale => { *cache = None; }
                 }
             }
         }
     }
 
-    // ── Slow path: full scan (one at a time) ─────────────────────────────────
+    // ── Slow path: full scan (rate-limited, one at a time) ───────────────────
+    let now = now_ms();
+    if now.saturating_sub(LAST_SCAN_MS.load(Ordering::Relaxed)) < SCAN_MIN_GAP_MS {
+        return -1;
+    }
     if SCAN_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         return -1;
     }
+    LAST_SCAN_MS.store(now, Ordering::Relaxed);
 
     let result = full_scan(pid, min_seq);
     SCAN_IN_PROGRESS.store(false, Ordering::SeqCst);

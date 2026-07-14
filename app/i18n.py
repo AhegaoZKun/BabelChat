@@ -619,6 +619,26 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Instance",
         "ES": "Mazmorra",
     },
+    "settings.ch.trade": {
+        "RU": "Торговля",
+        "EN": "Trade",
+        "ES": "Comercio",
+    },
+    "settings.ch.general": {
+        "RU": "Общий",
+        "EN": "General",
+        "ES": "General",
+    },
+    "settings.ch.services": {
+        "RU": "Услуги",
+        "EN": "Services",
+        "ES": "Servicios",
+    },
+    "settings.ch.lfg": {
+        "RU": "Поиск группы",
+        "EN": "LFG",
+        "ES": "Buscar grupo",
+    },
 
     # Overlay tab
     "settings.appearance_group": {
@@ -831,6 +851,26 @@ _STRINGS: dict[str, dict[str, str]] = {
         "RU": "Подземелье",
         "EN": "Instance",
         "ES": "Mazmorra",
+    },
+    "overlay.filter.trade": {
+        "RU": "Торговля",
+        "EN": "Trade",
+        "ES": "Comercio",
+    },
+    "overlay.filter.general": {
+        "RU": "Общий",
+        "EN": "General",
+        "ES": "General",
+    },
+    "overlay.filter.services": {
+        "RU": "Услуги",
+        "EN": "Services",
+        "ES": "Servicios",
+    },
+    "overlay.filter.lfg": {
+        "RU": "Поиск группы",
+        "EN": "LFG",
+        "ES": "Buscar grupo",
     },
 
     # Reply translator

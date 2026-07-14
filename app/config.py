@@ -49,6 +49,8 @@ class AppConfig:
     deepl_api_key: str = ""
     microsoft_api_key: str = ""
     microsoft_region: str = ""
+    google_api_key: str = ""
+    argos_enabled: bool = False
     translator_priority: str = "deepl"  # "deepl" or "microsoft"
 
     # Paths
@@ -81,6 +83,10 @@ class AppConfig:
     channels_whisper: bool = True
     channels_yell: bool = False
     channels_instance: bool = True
+    channels_trade: bool = False
+    channels_general: bool = False
+    channels_services: bool = False
+    channels_lfg: bool = False
 
     # Translation
     skip_own_messages: bool = True

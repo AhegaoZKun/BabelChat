@@ -95,6 +95,10 @@ CHANNEL_COLORS: dict[Channel, str] = {
     Channel.WHISPER_TO: "#FF80FF",
     Channel.INSTANCE: "#FF7F00",
     Channel.INSTANCE_LEADER: "#FF7F00",
+    Channel.TRADE: "#FFC0C0",
+    Channel.GENERAL: "#FFC0C0",
+    Channel.SERVICES: "#FFC0C0",
+    Channel.LOOKING_FOR_GROUP: "#FFC0C0",
 }
 
 CHANNEL_PREFIXES: dict[Channel, str] = {
@@ -111,6 +115,10 @@ CHANNEL_PREFIXES: dict[Channel, str] = {
     Channel.WHISPER_TO: "[W To]",
     Channel.INSTANCE: "[I]",
     Channel.INSTANCE_LEADER: "[IL]",
+    Channel.TRADE: "[Trade]",
+    Channel.GENERAL: "[Gen]",
+    Channel.SERVICES: "[Svc]",
+    Channel.LOOKING_FOR_GROUP: "[LFG]",
 }
 
 TRANSLATION_COLOR = "#FFD200"  # Gold for translated text
@@ -130,7 +138,7 @@ class ChannelFilterBar(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)
 
-        _filter_keys = ["All", "Party", "Raid", "Guild", "Say", "Whisper", "Instance"]
+        _filter_keys = ["All", "Party", "Raid", "Guild", "Say", "Whisper", "Instance", "Trade", "General", "Services", "LookingForGroup"]
         _filter_tr = {
             "All": "overlay.filter.all",
             "Party": "overlay.filter.party",
@@ -139,6 +147,10 @@ class ChannelFilterBar(QWidget):
             "Say": "overlay.filter.say",
             "Whisper": "overlay.filter.whisper",
             "Instance": "overlay.filter.instance",
+            "Trade": "overlay.filter.trade",
+            "General": "overlay.filter.general",
+            "Services": "overlay.filter.services",
+            "LookingForGroup": "overlay.filter.lfg",
         }
         for name in _filter_keys:
             btn = QPushButton(tr(_filter_tr[name]))
@@ -200,6 +212,10 @@ _FILTER_CHANNELS: dict[str, set[Channel]] = {
     "Say": {Channel.SAY, Channel.YELL},
     "Whisper": {Channel.WHISPER_FROM, Channel.WHISPER_TO},
     "Instance": {Channel.INSTANCE, Channel.INSTANCE_LEADER},
+    "Trade": {Channel.TRADE},
+    "General": {Channel.GENERAL},
+    "Services": {Channel.SERVICES},
+    "LookingForGroup": {Channel.LOOKING_FOR_GROUP},
 }
 
 
@@ -235,14 +251,19 @@ class ReplyDialog(QWidget):
     translate_requested = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
+        # A normal (non-Tool) window is required on Wayland: Qt.Tool windows are
+        # treated as auxiliary surfaces that the compositor will not grant
+        # keyboard focus to, so the input field could never be typed into.
+        # A frameless, stays-on-top normal Window can be activated and focused.
         super().__init__(parent,
-            Qt.WindowType.Tool
+            Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Must NOT show-without-activating: the dialog needs to be activatable so
+        # it can receive keyboard focus when the user interacts with it.
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._translator: TranslatorService | None = None
         self._target_lang: str = "EN"
         self._thread_pool = QThreadPool.globalInstance()
@@ -339,6 +360,25 @@ class ReplyDialog(QWidget):
         idx = self._reply_lang_combo.findData(target_lang)
         if idx >= 0:
             self._reply_lang_combo.setCurrentIndex(idx)
+
+    def activate_input(self) -> None:
+        """Bring the dialog forward and grab keyboard focus for the input.
+
+        On Wayland the compositor only grants keyboard focus on an explicit
+        activation request, so showing the window is not enough — we must
+        raise + activate + focus the field together.
+        """
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self._reply_input.setFocus(Qt.FocusReason.MouseFocusReason)
+
+    def mousePressEvent(self, event: object) -> None:
+        # Clicking anywhere in the dialog should activate it so the user can
+        # type — Wayland will not focus a window the user hasn't interacted with.
+        self.activateWindow()
+        self._reply_input.setFocus(Qt.FocusReason.MouseFocusReason)
+        super().mousePressEvent(event)  # type: ignore[misc]
 
     def _do_translate(self) -> None:
         text = self._reply_input.text().strip()
