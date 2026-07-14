@@ -132,8 +132,6 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         deepl_api_key=config.deepl_api_key,
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
-        google_api_key=getattr(config, "google_api_key", ""),
-        argos_enabled=getattr(config, "argos_enabled", False),
         translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
@@ -312,8 +310,6 @@ def main() -> int:
         api_key=config.deepl_api_key,
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
-        google_api_key=getattr(config, "google_api_key", ""),
-        argos_enabled=getattr(config, "argos_enabled", False),
         priority=getattr(config, "translator_priority", "deepl"),
     )
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
