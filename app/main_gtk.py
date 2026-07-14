@@ -20,12 +20,11 @@ from dotenv import load_dotenv
 from lingua import Language
 
 from app.config import CONFIG_FILE, AppConfig, resolve_chatlog_path
+from app.overlay_gtk import ChatOverlayGtk
 from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
-from app.translator import TranslatorService
-from app.overlay_gtk import ChatOverlayGtk
 from app.settings_gtk import SettingsWindowGtk
-
+from app.translator import TranslatorService
 
 _LANG_CODE_TO_LINGUA: dict[str, Language] = {
     "EN": Language.ENGLISH,
@@ -74,8 +73,6 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
         translator_priority=getattr(config, "translator_priority", "deepl"),
-        google_api_key=getattr(config, "google_api_key", ""),
-        argos_enabled=getattr(config, "argos_enabled", False),
         target_lang=config.target_language,
         own_language=own_lang,
         enabled_channels=enabled_channels,
@@ -98,8 +95,6 @@ def main() -> int:
     if not os.path.exists(CONFIG_FILE) or (
         not config.deepl_api_key
         and not getattr(config, "microsoft_api_key", "")
-        and not getattr(config, "google_api_key", "")
-        and not getattr(config, "argos_enabled", False)
     ):
         from app.setup_wizard_gtk import run_setup_wizard
 
@@ -114,8 +109,6 @@ def main() -> int:
         api_key=config.deepl_api_key,
         microsoft_api_key=getattr(config, "microsoft_api_key", ""),
         microsoft_region=getattr(config, "microsoft_region", ""),
-        google_api_key=getattr(config, "google_api_key", ""),
-        argos_enabled=getattr(config, "argos_enabled", False),
         priority=getattr(config, "translator_priority", "deepl"),
     )
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
@@ -154,8 +147,6 @@ def main() -> int:
                 api_key=updated.deepl_api_key,
                 microsoft_api_key=getattr(updated, "microsoft_api_key", ""),
                 microsoft_region=getattr(updated, "microsoft_region", ""),
-                google_api_key=getattr(updated, "google_api_key", ""),
-                argos_enabled=getattr(updated, "argos_enabled", False),
                 priority=getattr(updated, "translator_priority", "deepl"),
             )
             new_reply_lang = "EN" if updated.own_language != "EN" else updated.target_language

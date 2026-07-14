@@ -137,7 +137,10 @@ class ChannelFilterBar(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)
 
-        _filter_keys = ["All", "Party", "Raid", "Guild", "Say", "Whisper", "Instance", "Trade", "General", "Services", "LookingForGroup"]
+        _filter_keys = [
+            "All", "Party", "Raid", "Guild", "Say", "Whisper", "Instance",
+            "Trade", "General", "Services", "LookingForGroup",
+        ]
         _filter_tr = {
             "All": "overlay.filter.all",
             "Party": "overlay.filter.party",

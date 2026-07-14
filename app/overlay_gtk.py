@@ -55,19 +55,21 @@ def _load_layer_shell() -> None:
 
 _load_layer_shell()
 
-import threading
-from typing import Callable
+import contextlib
+import threading  # noqa: E402
+from collections.abc import Callable  # noqa: E402
 
-import gi
+import gi  # noqa: E402
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gtk, Gtk4LayerShell as LayerShell, GLib, Pango  # noqa: E402
+from gi.repository import GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
-from app.config import AppConfig
-from app.parser import Channel
-from app.pipeline import TranslatedMessage
-from app.translator import TranslatorService
-
+from app.config import AppConfig  # noqa: E402
+from app.parser import Channel  # noqa: E402
+from app.pipeline import TranslatedMessage  # noqa: E402
+from app.translator import TranslatorService  # noqa: E402
 
 # Channel → display color (ARGB hex for Pango markup). Ported from the PyQt UI.
 _CHANNEL_COLORS: dict[Channel, str] = {
@@ -223,10 +225,8 @@ class ChatOverlayGtk:
         # Keep the reply-language dropdown in sync if it exists.
         dd = getattr(self, "_reply_lang_dd", None)
         if dd is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 dd.set_selected(_REPLY_LANGS.index(reply_lang))
-            except ValueError:
-                pass
 
     # ── message delivery (thread-safe entry point) ───────────────────────
     def deliver_message(self, msg: TranslatedMessage) -> None:
@@ -362,7 +362,6 @@ class ChatOverlayGtk:
         self._cur_w = width
         self._cur_h = height
         opacity = max(0.1, min(1.0, (self._config.overlay_opacity or 200) / 255.0))
-        font_px = max(8, int(self._config.overlay_font_size or 12))
 
         win = Gtk.ApplicationWindow(application=app)
         win.set_default_size(width, height)
@@ -463,10 +462,8 @@ class ChatOverlayGtk:
                 LayerShell.set_margin(self._win, LayerShell.Edge.LEFT, self._margin_left)
             self._config.overlay_y = self._margin_top
             self._config.overlay_x = self._margin_left
-            try:
+            with contextlib.suppress(Exception):
                 self._config.save()
-            except Exception:  # noqa: BLE001
-                pass
 
         drag.connect("drag-begin", _drag_begin)
         drag.connect("drag-update", _drag_update)
@@ -593,10 +590,8 @@ class ChatOverlayGtk:
                 GLib.idle_add(_relax)
             self._config.overlay_width = self._cur_w
             self._config.overlay_height = self._cur_h
-            try:
+            with contextlib.suppress(Exception):
                 self._config.save()
-            except Exception:  # noqa: BLE001
-                pass
 
         resize.connect("drag-begin", _resize_begin)
         resize.connect("drag-update", _resize_update)
@@ -651,7 +646,7 @@ class ChatOverlayGtk:
             f".bc-chat label {{ text-shadow: 0 1px 2px rgba(0,0,0,0.9); }}"
             f".bc-grip {{ color: #888888; padding: 0 4px; }}"
             f".bc-reply entry {{ font-size: {font_px}px; }}"
-        ).encode("utf-8"))
+        ).encode())
 
     def _build_filter_bar(self) -> Gtk.Widget:
         # Horizontal scroller so the tabs don't force the overlay wider.

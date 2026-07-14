@@ -11,14 +11,14 @@ overlay opacity/font, and the skip-own-messages toggle.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable  # noqa: E402
 
-import gi
+import gi  # noqa: E402
+
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk  # noqa: E402
 
-from app.config import AppConfig
-
+from app.config import AppConfig  # noqa: E402
 
 # (label, attribute) pairs for the channel checkboxes.
 _CHANNELS: list[tuple[str, str]] = [
@@ -93,15 +93,11 @@ class SettingsWindowGtk:
         # Translation API
         root.append(self._section("Translation API"))
         self._priority = self._combo_row(
-            root, "Priority", self._config.translator_priority, options=["deepl", "microsoft", "google", "argos"]
+            root, "Priority", self._config.translator_priority, options=["deepl", "microsoft"]
         )
         self._deepl = self._entry_row(root, "DeepL API key", self._config.deepl_api_key, secret=True)
         self._ms_key = self._entry_row(root, "Microsoft API key", self._config.microsoft_api_key, secret=True)
         self._ms_region = self._entry_row(root, "Microsoft region", self._config.microsoft_region)
-        self._google = self._entry_row(root, "Google API key", getattr(self._config, "google_api_key", ""), secret=True)
-        self._argos = Gtk.CheckButton(label="Offline translation (Argos) — no key, downloads models on first use")
-        self._argos.set_active(bool(getattr(self._config, "argos_enabled", False)))
-        root.append(self._argos)
 
         # Appearance
         root.append(self._section("Appearance"))
@@ -204,8 +200,6 @@ class SettingsWindowGtk:
         c.deepl_api_key = self._deepl.get_text()
         c.microsoft_api_key = self._ms_key.get_text()
         c.microsoft_region = self._ms_region.get_text()
-        c.google_api_key = self._google.get_text()
-        c.argos_enabled = self._argos.get_active()
         c.overlay_opacity = int(self._opacity.get_value())
         c.overlay_font_size = int(self._font.get_value())
         c.skip_own_messages = self._skip_own.get_active()
