@@ -13,14 +13,15 @@ Usage (from main_gtk):
 
 from __future__ import annotations
 
-import threading
+import threading  # noqa: E402
 
-import gi
+import gi  # noqa: E402
+
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, GLib  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
-from app.config import AppConfig, detect_wow_path
-from app.translator import validate_deepl_key, validate_google_key, validate_microsoft_key
+from app.config import AppConfig, detect_wow_path  # noqa: E402
+from app.translator import validate_deepl_key, validate_microsoft_key  # noqa: E402
 
 _LANGS = [
     ("EN", "English"), ("RU", "Русский"), ("ES", "Español"), ("DE", "Deutsch"),
@@ -170,8 +171,6 @@ class _WizardWindow(Gtk.ApplicationWindow):
             "DeepL key", self._config.deepl_api_key, self._validate_deepl)
         self._ms_entry, self._ms_btn = key_row(
             "Microsoft key", self._config.microsoft_api_key, self._validate_ms)
-        self._google_entry, self._google_btn = key_row(
-            "Google key", getattr(self._config, "google_api_key", ""), self._validate_google)
 
         region_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         region_lbl = Gtk.Label(label="MS region")
@@ -184,17 +183,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
         region_row.append(self._ms_region)
         box.append(region_row)
 
-        self._argos_check = Gtk.CheckButton(
-            label="No API key — use offline translation (Argos, downloads models on first use)")
-        self._argos_check.set_active(bool(getattr(self._config, "argos_enabled", False)))
-        box.append(self._argos_check)
 
         prio_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         prio_lbl = Gtk.Label(label="Prefer")
         prio_lbl.set_width_chars(14)
         prio_lbl.set_xalign(0.0)
         self._priority = self._dropdown(
-            [("deepl", "DeepL"), ("microsoft", "Microsoft"), ("google", "Google"), ("argos", "Offline (Argos)")],
+            [("deepl", "DeepL"), ("microsoft", "Microsoft")],
             self._config.translator_priority or "deepl")
         prio_row.append(prio_lbl)
         prio_row.append(self._priority)
@@ -255,8 +250,6 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._summary.set_markup(
             f"DeepL key: <b>{deepl}</b>\n"
             f"Microsoft key: <b>{ms}</b>\n"
-            f"Google key: <b>{'set' if self._google_entry.get_text().strip() else '—'}</b>\n"
-            f"Offline (Argos): <b>{'on' if self._argos_check.get_active() else 'off'}</b>\n"
             f"WoW path: <b>{GLib.markup_escape_text(self._wow_entry.get_text().strip() or '—')}</b>\n"
             f"Own language: <b>{self._dd_code(self._own_lang)}</b>\n"
             f"Target language: <b>{self._dd_code(self._target_lang)}</b>"
@@ -265,9 +258,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
     # ── API validation (off-thread) ───────────────────────────────────────
     def _has_any_key(self) -> bool:
         return bool(self._deepl_entry.get_text().strip()
-                    or self._ms_entry.get_text().strip()
-                    or self._google_entry.get_text().strip()
-                    or self._argos_check.get_active())
+                    or self._ms_entry.get_text().strip())
 
     def _validate_deepl(self, btn: Gtk.Button) -> None:
         key = self._deepl_entry.get_text().strip()
@@ -284,12 +275,6 @@ class _WizardWindow(Gtk.ApplicationWindow):
         region = self._ms_region.get_text().strip()
         self._run_validation(btn, lambda: validate_microsoft_key(key, region), "Microsoft")
 
-    def _validate_google(self, btn: Gtk.Button) -> None:
-        key = self._google_entry.get_text().strip()
-        if not key:
-            self._api_status.set_markup('<span foreground="#cc6666">Enter a Google key first.</span>')
-            return
-        self._run_validation(btn, lambda: validate_google_key(key), "Google")
 
     def _run_validation(self, btn: Gtk.Button, fn, name: str) -> None:
         btn.set_sensitive(False)
@@ -346,8 +331,6 @@ class _WizardWindow(Gtk.ApplicationWindow):
         c.microsoft_api_key = self._ms_entry.get_text().strip()
         c.microsoft_region = self._ms_region.get_text().strip()
         c.translator_priority = self._dd_code(self._priority)
-        c.google_api_key = self._google_entry.get_text().strip()
-        c.argos_enabled = self._argos_check.get_active()
         c.wow_path = self._wow_entry.get_text().strip()
         c.own_language = self._dd_code(self._own_lang)
         c.target_language = self._dd_code(self._target_lang)

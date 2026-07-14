@@ -50,8 +50,6 @@ class AppConfig:
     deepl_api_key: str = ""
     microsoft_api_key: str = ""
     microsoft_region: str = ""
-    google_api_key: str = ""
-    argos_enabled: bool = False
     translator_priority: str = "deepl"  # "deepl" or "microsoft"
 
     # Paths
