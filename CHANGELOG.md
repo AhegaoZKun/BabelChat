@@ -16,7 +16,6 @@
 
 ### Fixed / Исправлено / Corregido
 
-- **Wayland input focus** — the overlay input field can now be typed into on Wayland (Qt `Tool` windows never receive keyboard focus from the compositor; the overlay is now a frameless always-on-top normal window)
 - **Windows: high CPU while chat idle** — losing the buffer address during idle no longer triggers continuous full memory scans; scans are now rate-limited with a tri-state fast path in both Rust scanners
 - Settings save no longer resets the translation toggle state
 
