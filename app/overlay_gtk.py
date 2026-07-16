@@ -66,35 +66,37 @@ gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
-from app.config import AppConfig  # noqa: E402
+from app.config import AppConfig
+from app.overlay_theme import OverlayTheme, hex_to_rgb, resolve_theme  # noqa: E402
 from app.parser import Channel  # noqa: E402
 from app.pipeline import TranslatedMessage  # noqa: E402
 from app.translator import TranslatorService  # noqa: E402
 
-# Channel → display color (ARGB hex for Pango markup). Ported from the PyQt UI.
-_CHANNEL_COLORS: dict[Channel, str] = {
-    Channel.SAY: "#FFFFFF",
-    Channel.YELL: "#FF4040",
-    Channel.PARTY: "#AAAAFF",
-    Channel.PARTY_LEADER: "#AAAAFF",
-    Channel.RAID: "#FF7F00",
-    Channel.RAID_LEADER: "#FF7F00",
-    Channel.RAID_WARNING: "#FF4800",
-    Channel.GUILD: "#40FF40",
-    Channel.OFFICER: "#40C040",
-    Channel.WHISPER_FROM: "#FF80FF",
-    Channel.WHISPER_TO: "#FF80FF",
-    Channel.INSTANCE: "#FF7F00",
-    Channel.INSTANCE_LEADER: "#FF7F00",
-    Channel.TRADE: "#FFC0C0",
-    Channel.GENERAL: "#FFC0C0",
-    Channel.SERVICES: "#FFC0C0",
-    Channel.LOOKING_FOR_GROUP: "#FFC0C0",
+# Channel → theme color slot (see app/overlay_theme.py). Related channels share
+# a slot the same way WoW colors them; the active theme supplies the colors.
+_CHANNEL_SLOT: dict[Channel, str] = {
+    Channel.SAY: "say",
+    Channel.YELL: "yell",
+    Channel.PARTY: "party",
+    Channel.PARTY_LEADER: "party",
+    Channel.RAID: "raid",
+    Channel.RAID_LEADER: "raid",
+    Channel.RAID_WARNING: "raid_warning",
+    Channel.GUILD: "guild",
+    Channel.OFFICER: "officer",
+    Channel.WHISPER_FROM: "whisper",
+    Channel.WHISPER_TO: "whisper",
+    Channel.INSTANCE: "instance",
+    Channel.INSTANCE_LEADER: "instance",
+    Channel.TRADE: "public",
+    Channel.GENERAL: "public",
+    Channel.SERVICES: "public",
+    Channel.LOOKING_FOR_GROUP: "public",
 }
 
 _CHANNEL_BADGE: dict[Channel, str] = {
-    Channel.SAY: "[S]",
-    Channel.YELL: "[Y]",
+    Channel.SAY: "[Say]",
+    Channel.YELL: "[Yell]",
     Channel.PARTY: "[P]",
     Channel.PARTY_LEADER: "[PL]",
     Channel.RAID: "[R]",
@@ -102,8 +104,8 @@ _CHANNEL_BADGE: dict[Channel, str] = {
     Channel.RAID_WARNING: "[RW]",
     Channel.GUILD: "[G]",
     Channel.OFFICER: "[O]",
-    Channel.WHISPER_FROM: "[W]",
-    Channel.WHISPER_TO: "[W→]",
+    Channel.WHISPER_FROM: "[W From]",
+    Channel.WHISPER_TO: "[W To]",
     Channel.INSTANCE: "[I]",
     Channel.INSTANCE_LEADER: "[IL]",
     Channel.TRADE: "[Trade]",
@@ -145,9 +147,11 @@ class _MessageRow(Gtk.Box):
     same msg_id arrives (original shown first, translation filled in later).
     """
 
-    def __init__(self, msg: TranslatedMessage, font_px: int) -> None:
+    def __init__(self, msg: TranslatedMessage, font_px: int, theme: OverlayTheme) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._font_px = font_px
+        self._theme = theme
+        self._msg = msg
         self.channel = msg.original.channel  # used by the filter bar
         self._label = Gtk.Label()
         self._label.set_xalign(0.0)
@@ -158,28 +162,47 @@ class _MessageRow(Gtk.Box):
         self.update_content(msg)
 
     def update_content(self, msg: TranslatedMessage) -> None:
+        self._msg = msg
         cm = msg.original
-        color = _CHANNEL_COLORS.get(cm.channel, "#FFFFFF")
+        theme = self._theme
+        slot = _CHANNEL_SLOT.get(cm.channel, "say")
+        color = theme.channel_colors.get(slot, theme.text_color)
         badge = _CHANNEL_BADGE.get(cm.channel, "")
         esc = GLib.markup_escape_text
         author = esc(cm.author or "")
         original = esc(cm.text or "")
 
+        # Dim "21:30 " prefix, matching the Windows overlay.
+        ts = cm.timestamp or ""
+        time_part = ts.split(" ", 1)[-1] if " " in ts else ts
+        short_time = ":".join(time_part.split(":")[:2])
+        stamp = (
+            f'<span foreground="{theme.timestamp_color}">{esc(short_time)} </span>'
+            if short_time
+            else ""
+        )
+
         head = (
-            f'<span foreground="{color}" size="{self._font_px * 1000}">'
+            f'{stamp}<span foreground="{color}">'
             f"{esc(badge)} <b>{author}</b>:</span>"
         )
         if msg.translation and msg.translation.success and msg.translation.translated:
             translated = esc(msg.translation.translated)
             body = (
-                f'<span foreground="#cfcfcf"> {original}</span>'
-                f'<span foreground="#ffffff">  →  {translated}</span>'
+                f'<span foreground="{theme.original_color}"> {original}</span>'
+                f'<span foreground="{theme.translation_color}"> → {translated}</span>'
             )
         else:
-            # Translation not ready yet (streaming) — show original only.
-            body = f'<span foreground="#ffffff"> {original}</span>'
+            # No translation (yet) — channel color, like the Windows overlay.
+            body = f'<span foreground="{color}"> {original}</span>'
 
-        self._label.set_markup(head + body)
+        self._label.set_markup(f'<span size="{self._font_px * 1000}">{head}{body}</span>')
+
+    def restyle(self, font_px: int, theme: OverlayTheme) -> None:
+        """Re-render with a new theme/font (live settings apply)."""
+        self._font_px = font_px
+        self._theme = theme
+        self.update_content(self._msg)
 
 
 class ChatOverlayGtk:
@@ -187,6 +210,7 @@ class ChatOverlayGtk:
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config
+        self._theme: OverlayTheme = resolve_theme(config)
         self._translator: TranslatorService | None = None
         self._reply_lang = "EN"
         self._rows: dict[int, _MessageRow] = {}  # msg_id → row (streaming updates)
@@ -251,7 +275,7 @@ class ChatOverlayGtk:
                 self._scroll_to_bottom()
             return False  # one-shot idle
 
-        row = _MessageRow(msg, font_px)
+        row = _MessageRow(msg, font_px, self._theme)
         self._rows[msg.msg_id] = row
         self._row_order.append(msg.msg_id)
         self._list.append(row)
@@ -634,19 +658,35 @@ class ChatOverlayGtk:
         """
         if getattr(self, "_css_provider", None) is None:
             return
+        self._theme = resolve_theme(self._config)
+        theme = self._theme
         opacity = max(0.1, min(1.0, (self._config.overlay_opacity or 200) / 255.0))
         font_px = max(8, int(self._config.overlay_font_size or 12))
+        r, g, b = hex_to_rgb(theme.bg_color)
+        family = (self._config.overlay_font_family or "").replace('"', "").strip()
+        font_css = f' font-family: "{family}";' if family else ""
+        # Text shadow only helps on dark backgrounds; drop it for light themes.
+        luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        shadow = "text-shadow: 0 1px 2px rgba(0,0,0,0.9);" if luma < 128 else ""
         self._css_provider.load_from_data((
             f"window.bc-window {{ background-color: transparent; }}"
-            f".bc-root {{ background-color: rgba(0,0,0,{opacity:.3f}); padding: 6px;"
-            f" border-radius: 8px; }}"
+            f".bc-root {{ background-color: rgba({r},{g},{b},{opacity:.3f}); padding: 6px;"
+            f" border-radius: {theme.corner_radius}px;{font_css} }}"
             f".bc-bar {{ color: #b3b3b3; }}"
-            f".bc-filter button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px; }}"
+            f".bc-filter button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px;"
+            f" background: rgba(40,40,40,0.6); color: #999999; border: 1px solid #555555;"
+            f" border-radius: 3px; box-shadow: none; }}"
+            f".bc-filter button:hover {{ color: #cccccc; border-color: #888888; }}"
+            f".bc-filter button:checked {{ background: rgba(80,80,80,0.8);"
+            f" color: {theme.translation_color}; border-color: {theme.translation_color}; }}"
             f".bc-chat {{ padding: 4px; }}"
-            f".bc-chat label {{ text-shadow: 0 1px 2px rgba(0,0,0,0.9); }}"
+            f".bc-chat label {{ {shadow} }}"
             f".bc-grip {{ color: #888888; padding: 0 4px; }}"
             f".bc-reply entry {{ font-size: {font_px}px; }}"
         ).encode())
+        # Restyle already-visible messages so theme changes apply instantly.
+        for row in self._rows.values():
+            row.restyle(font_px, theme)
 
     def _build_filter_bar(self) -> Gtk.Widget:
         # Horizontal scroller so the tabs don't force the overlay wider.

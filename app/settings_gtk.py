@@ -6,7 +6,8 @@ written to config.json on Save; an on_saved callback lets the app apply changes
 to the running pipeline/overlay live (channels, languages, etc.).
 
 Covers: channels, languages (own/target/UI), translator priority + API keys,
-overlay opacity/font, and the skip-own-messages toggle.
+overlay appearance (theme presets, colors, font, corner radius), and the
+skip-own-messages toggle.
 """
 
 from __future__ import annotations
@@ -16,9 +17,17 @@ from collections.abc import Callable  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
 
 from app.config import AppConfig  # noqa: E402
+from app.overlay_theme import (  # noqa: E402
+    PRESET_LABELS,
+    PRESET_ORDER,
+    PRESETS,
+    SLOT_LABELS,
+    SLOT_ORDER,
+    resolve_theme,
+)
 
 # (label, attribute) pairs for the channel checkboxes.
 _CHANNELS: list[tuple[str, str]] = [
@@ -36,6 +45,38 @@ _CHANNELS: list[tuple[str, str]] = [
 ]
 
 _LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
+
+_DEFAULT_FONT = "System default"
+# Curated overlay-friendly fonts; only the ones actually installed are shown.
+# The generic Pango families (Sans/Serif/Monospace) always resolve.
+_COMMON_FONTS = [
+    "Sans",
+    "Serif",
+    "Monospace",
+    "DejaVu Sans",
+    "Noto Sans",
+    "Liberation Sans",
+    "Cantarell",
+    "Ubuntu",
+    "Inter",
+    "Roboto",
+    "Open Sans",
+    "Fira Sans",
+    "Hack",
+    "Hack Nerd Font",
+    "JetBrains Mono",
+    "Fira Code",
+]
+
+
+def _installed_font_options() -> list[str]:
+    """Curated fonts filtered to what's installed, generics always included."""
+    try:
+        families = {f.get_name().lower() for f in PangoCairo.FontMap.get_default().list_families()}
+    except Exception:  # noqa: BLE001 — never break settings over font probing
+        families = set()
+    generics = {"sans", "serif", "monospace"}
+    return [f for f in _COMMON_FONTS if f.lower() in generics or f.lower() in families]
 
 
 class SettingsWindowGtk:
@@ -103,6 +144,7 @@ class SettingsWindowGtk:
         root.append(self._section("Appearance"))
         self._opacity = self._scale_row(root, "Opacity", self._config.overlay_opacity, 40, 255)
         self._font = self._scale_row(root, "Font size", self._config.overlay_font_size, 8, 28)
+        self._build_appearance(root)
 
         # Behavior
         root.append(self._section("Behavior"))
@@ -126,6 +168,129 @@ class SettingsWindowGtk:
 
         scroller.set_child(root)
         self._win.set_child(scroller)
+
+    # ── appearance (theme) UI ─────────────────────────────────────────────
+    def _build_appearance(self, root: Gtk.Box) -> None:
+        cfg = self._config
+        theme = resolve_theme(cfg)
+        self._suppress_custom = True  # don't flip to Custom while populating
+
+        # Preset dropdown
+        labels = [PRESET_LABELS[p] for p in PRESET_ORDER]
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label="Theme preset")
+        lbl.set_xalign(0.0)
+        lbl.set_size_request(140, -1)
+        self._preset = Gtk.DropDown.new_from_strings(labels)
+        cur = cfg.overlay_theme if cfg.overlay_theme in PRESET_ORDER else "custom"
+        self._preset.set_selected(PRESET_ORDER.index(cur))
+        self._preset.connect("notify::selected", self._on_preset_changed)
+        row.append(lbl)
+        row.append(self._preset)
+        root.append(row)
+
+        # Base colors
+        self._col_bg = self._color_row(root, "Background", theme.bg_color)
+        self._col_ts = self._color_row(root, "Timestamp", theme.timestamp_color)
+        self._col_orig = self._color_row(root, "Original text", theme.original_color)
+        self._col_tl = self._color_row(root, "Translated text", theme.translation_color)
+
+        # Corner radius
+        self._radius = self._scale_row(root, "Corner radius", theme.corner_radius, 0, 24)
+        self._radius.connect("value-changed", lambda _s: self._mark_custom())
+
+        # Font family: dropdown of common installed fonts, still free-typable
+        frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        flbl = Gtk.Label(label="Font")
+        flbl.set_xalign(0.0)
+        flbl.set_size_request(140, -1)
+        self._font_family = Gtk.ComboBoxText.new_with_entry()
+        self._font_family.set_hexpand(True)
+        options = [_DEFAULT_FONT, *_installed_font_options()]
+        for opt in options:
+            self._font_family.append_text(opt)
+        current = cfg.overlay_font_family or ""
+        if not current:
+            self._font_family.set_active(0)
+        elif current in options:
+            self._font_family.set_active(options.index(current))
+        else:
+            self._font_family.get_child().set_text(current)
+        frow.append(flbl)
+        frow.append(self._font_family)
+        root.append(frow)
+
+        # Per-channel colors
+        exp = Gtk.Expander(label="Channel colors")
+        grid = Gtk.Grid()
+        grid.set_row_spacing(4)
+        grid.set_column_spacing(8)
+        grid.set_margin_top(6)
+        self._slot_buttons: dict[str, Gtk.ColorButton] = {}
+        for i, slot in enumerate(SLOT_ORDER):
+            slbl = Gtk.Label(label=SLOT_LABELS[slot])
+            slbl.set_xalign(0.0)
+            btn = self._color_button(theme.channel_colors.get(slot, "#FFFFFF"))
+            self._slot_buttons[slot] = btn
+            grid.attach(slbl, 0, i, 1, 1)
+            grid.attach(btn, 1, i, 1, 1)
+        exp.set_child(grid)
+        root.append(exp)
+
+        self._suppress_custom = False
+
+    def _color_button(self, hex_color: str) -> Gtk.ColorButton:
+        rgba = Gdk.RGBA()
+        rgba.parse(hex_color)
+        btn = Gtk.ColorButton()
+        btn.set_rgba(rgba)
+        btn.connect("color-set", lambda _b: self._mark_custom())
+        return btn
+
+    def _color_row(self, parent: Gtk.Box, label: str, hex_color: str) -> Gtk.ColorButton:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label=label)
+        lbl.set_xalign(0.0)
+        lbl.set_size_request(140, -1)
+        btn = self._color_button(hex_color)
+        row.append(lbl)
+        row.append(btn)
+        parent.append(row)
+        return btn
+
+    @staticmethod
+    def _rgba_hex(btn: Gtk.ColorButton) -> str:
+        c = btn.get_rgba()
+        return f"#{round(c.red * 255):02X}{round(c.green * 255):02X}{round(c.blue * 255):02X}"
+
+    def _mark_custom(self) -> None:
+        """Any manual color/radius edit switches the preset to Custom."""
+        if getattr(self, "_suppress_custom", True):
+            return
+        self._preset.set_selected(PRESET_ORDER.index("custom"))
+
+    def _on_preset_changed(self, dd: Gtk.DropDown, _p: object) -> None:
+        if getattr(self, "_suppress_custom", True):
+            return
+        name = PRESET_ORDER[dd.get_selected()]
+        if name == "custom" or name not in PRESETS:
+            return
+        theme = PRESETS[name]
+        self._suppress_custom = True
+        rgba = Gdk.RGBA()
+        for btn, color in (
+            (self._col_bg, theme.bg_color),
+            (self._col_ts, theme.timestamp_color),
+            (self._col_orig, theme.original_color),
+            (self._col_tl, theme.translation_color),
+        ):
+            rgba.parse(color)
+            btn.set_rgba(rgba)
+        for slot, btn in self._slot_buttons.items():
+            rgba.parse(theme.channel_colors.get(slot, "#FFFFFF"))
+            btn.set_rgba(rgba)
+        self._radius.set_value(theme.corner_radius)
+        self._suppress_custom = False
 
     def _section(self, text: str) -> Gtk.Label:
         lbl = Gtk.Label()
@@ -202,6 +367,15 @@ class SettingsWindowGtk:
         c.microsoft_region = self._ms_region.get_text()
         c.overlay_opacity = int(self._opacity.get_value())
         c.overlay_font_size = int(self._font.get_value())
+        c.overlay_theme = PRESET_ORDER[self._preset.get_selected()]
+        c.overlay_bg_color = self._rgba_hex(self._col_bg)
+        c.overlay_timestamp_color = self._rgba_hex(self._col_ts)
+        c.overlay_original_color = self._rgba_hex(self._col_orig)
+        c.overlay_translation_color = self._rgba_hex(self._col_tl)
+        c.overlay_corner_radius = int(self._radius.get_value())
+        family = self._font_family.get_child().get_text().strip()
+        c.overlay_font_family = "" if family == _DEFAULT_FONT else family
+        c.overlay_channel_colors = {slot: self._rgba_hex(btn) for slot, btn in self._slot_buttons.items()}
         c.skip_own_messages = self._skip_own.get_active()
 
         try:
