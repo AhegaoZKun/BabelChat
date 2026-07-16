@@ -17,7 +17,7 @@ from collections.abc import Callable  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
 
 from app.config import AppConfig  # noqa: E402
 from app.overlay_theme import (  # noqa: E402
@@ -45,6 +45,38 @@ _CHANNELS: list[tuple[str, str]] = [
 ]
 
 _LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
+
+_DEFAULT_FONT = "System default"
+# Curated overlay-friendly fonts; only the ones actually installed are shown.
+# The generic Pango families (Sans/Serif/Monospace) always resolve.
+_COMMON_FONTS = [
+    "Sans",
+    "Serif",
+    "Monospace",
+    "DejaVu Sans",
+    "Noto Sans",
+    "Liberation Sans",
+    "Cantarell",
+    "Ubuntu",
+    "Inter",
+    "Roboto",
+    "Open Sans",
+    "Fira Sans",
+    "Hack",
+    "Hack Nerd Font",
+    "JetBrains Mono",
+    "Fira Code",
+]
+
+
+def _installed_font_options() -> list[str]:
+    """Curated fonts filtered to what's installed, generics always included."""
+    try:
+        families = {f.get_name().lower() for f in PangoCairo.FontMap.get_default().list_families()}
+    except Exception:  # noqa: BLE001 — never break settings over font probing
+        families = set()
+    generics = {"sans", "serif", "monospace"}
+    return [f for f in _COMMON_FONTS if f.lower() in generics or f.lower() in families]
 
 
 class SettingsWindowGtk:
@@ -167,15 +199,23 @@ class SettingsWindowGtk:
         self._radius = self._scale_row(root, "Corner radius", theme.corner_radius, 0, 24)
         self._radius.connect("value-changed", lambda _s: self._mark_custom())
 
-        # Font family
+        # Font family: dropdown of common installed fonts, still free-typable
         frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         flbl = Gtk.Label(label="Font")
         flbl.set_xalign(0.0)
         flbl.set_size_request(140, -1)
-        self._font_family = Gtk.Entry()
+        self._font_family = Gtk.ComboBoxText.new_with_entry()
         self._font_family.set_hexpand(True)
-        self._font_family.set_placeholder_text("System default")
-        self._font_family.set_text(cfg.overlay_font_family or "")
+        options = [_DEFAULT_FONT, *_installed_font_options()]
+        for opt in options:
+            self._font_family.append_text(opt)
+        current = cfg.overlay_font_family or ""
+        if not current:
+            self._font_family.set_active(0)
+        elif current in options:
+            self._font_family.set_active(options.index(current))
+        else:
+            self._font_family.get_child().set_text(current)
         frow.append(flbl)
         frow.append(self._font_family)
         root.append(frow)
@@ -333,7 +373,8 @@ class SettingsWindowGtk:
         c.overlay_original_color = self._rgba_hex(self._col_orig)
         c.overlay_translation_color = self._rgba_hex(self._col_tl)
         c.overlay_corner_radius = int(self._radius.get_value())
-        c.overlay_font_family = self._font_family.get_text().strip()
+        family = self._font_family.get_child().get_text().strip()
+        c.overlay_font_family = "" if family == _DEFAULT_FONT else family
         c.overlay_channel_colors = {slot: self._rgba_hex(btn) for slot, btn in self._slot_buttons.items()}
         c.skip_own_messages = self._skip_own.get_active()
 
