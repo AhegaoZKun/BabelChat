@@ -191,7 +191,7 @@ class SettingsWindowGtk:
 
         # Base colors
         self._col_bg = self._color_row(root, "Background", theme.bg_color)
-        self._col_text = self._color_row(root, "Plain text", theme.text_color)
+        self._col_ts = self._color_row(root, "Timestamp", theme.timestamp_color)
         self._col_orig = self._color_row(root, "Original text", theme.original_color)
         self._col_tl = self._color_row(root, "Translated text", theme.translation_color)
 
@@ -280,7 +280,7 @@ class SettingsWindowGtk:
         rgba = Gdk.RGBA()
         for btn, color in (
             (self._col_bg, theme.bg_color),
-            (self._col_text, theme.text_color),
+            (self._col_ts, theme.timestamp_color),
             (self._col_orig, theme.original_color),
             (self._col_tl, theme.translation_color),
         ):
@@ -369,7 +369,7 @@ class SettingsWindowGtk:
         c.overlay_font_size = int(self._font.get_value())
         c.overlay_theme = PRESET_ORDER[self._preset.get_selected()]
         c.overlay_bg_color = self._rgba_hex(self._col_bg)
-        c.overlay_text_color = self._rgba_hex(self._col_text)
+        c.overlay_timestamp_color = self._rgba_hex(self._col_ts)
         c.overlay_original_color = self._rgba_hex(self._col_orig)
         c.overlay_translation_color = self._rgba_hex(self._col_tl)
         c.overlay_corner_radius = int(self._radius.get_value())

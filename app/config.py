@@ -67,8 +67,9 @@ class AppConfig:
     overlay_theme: str = "wow"  # preset id from overlay_theme.PRESETS, or "custom"
     overlay_bg_color: str = "#000000"
     overlay_text_color: str = "#FFFFFF"
-    overlay_original_color: str = "#CFCFCF"
+    overlay_original_color: str = "#888888"
     overlay_translation_color: str = "#FFD200"
+    overlay_timestamp_color: str = "#666666"
     overlay_corner_radius: int = 8
     overlay_font_family: str = ""  # empty = system default
     overlay_channel_colors: dict = field(default_factory=dict)  # slot → "#RRGGBB"
