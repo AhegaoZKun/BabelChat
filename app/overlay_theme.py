@@ -46,6 +46,7 @@ class OverlayTheme:
     text_color: str          # untranslated / plain message text
     original_color: str      # original text once a translation is shown
     translation_color: str   # translated text
+    timestamp_color: str     # dim leading "21:30" timestamp
     corner_radius: int
     channel_colors: dict[str, str] = field(default_factory=dict)
 
@@ -68,8 +69,9 @@ PRESETS: dict[str, OverlayTheme] = {
     "wow": OverlayTheme(
         bg_color="#000000",
         text_color="#FFFFFF",
-        original_color="#CFCFCF",
+        original_color="#888888",
         translation_color="#FFD200",
+        timestamp_color="#666666",
         corner_radius=8,
         channel_colors=dict(_WOW_CHANNELS),
     ),
@@ -78,6 +80,7 @@ PRESETS: dict[str, OverlayTheme] = {
         text_color="#E2E8F0",
         original_color="#94A3B8",
         translation_color="#7DD3FC",
+        timestamp_color="#475569",
         corner_radius=10,
         channel_colors={
             "say": "#E2E8F0",
@@ -97,6 +100,7 @@ PRESETS: dict[str, OverlayTheme] = {
         text_color="#D0D0D0",
         original_color="#7A7A7A",
         translation_color="#E8E8E8",
+        timestamp_color="#5A5A5A",
         corner_radius=6,
         channel_colors={
             "say": "#D0D0D0",
@@ -116,6 +120,7 @@ PRESETS: dict[str, OverlayTheme] = {
         text_color="#111111",
         original_color="#555555",
         translation_color="#8A6D00",
+        timestamp_color="#999999",
         corner_radius=8,
         channel_colors={
             "say": "#111111",
@@ -135,6 +140,7 @@ PRESETS: dict[str, OverlayTheme] = {
         text_color="#FFFFFF",
         original_color="#FFFFFF",
         translation_color="#FFFF00",
+        timestamp_color="#BBBBBB",
         corner_radius=0,
         channel_colors={
             "say": "#FFFFFF",
@@ -191,6 +197,7 @@ def resolve_theme(config) -> OverlayTheme:
         text_color=_color("overlay_text_color", base.text_color),
         original_color=_color("overlay_original_color", base.original_color),
         translation_color=_color("overlay_translation_color", base.translation_color),
+        timestamp_color=_color("overlay_timestamp_color", base.timestamp_color),
         corner_radius=max(0, min(32, int(getattr(config, "overlay_corner_radius", base.corner_radius)))),
         channel_colors=channels,
     )

@@ -95,8 +95,8 @@ _CHANNEL_SLOT: dict[Channel, str] = {
 }
 
 _CHANNEL_BADGE: dict[Channel, str] = {
-    Channel.SAY: "[S]",
-    Channel.YELL: "[Y]",
+    Channel.SAY: "[Say]",
+    Channel.YELL: "[Yell]",
     Channel.PARTY: "[P]",
     Channel.PARTY_LEADER: "[PL]",
     Channel.RAID: "[R]",
@@ -104,8 +104,8 @@ _CHANNEL_BADGE: dict[Channel, str] = {
     Channel.RAID_WARNING: "[RW]",
     Channel.GUILD: "[G]",
     Channel.OFFICER: "[O]",
-    Channel.WHISPER_FROM: "[W]",
-    Channel.WHISPER_TO: "[W→]",
+    Channel.WHISPER_FROM: "[W From]",
+    Channel.WHISPER_TO: "[W To]",
     Channel.INSTANCE: "[I]",
     Channel.INSTANCE_LEADER: "[IL]",
     Channel.TRADE: "[Trade]",
@@ -172,21 +172,31 @@ class _MessageRow(Gtk.Box):
         author = esc(cm.author or "")
         original = esc(cm.text or "")
 
+        # Dim "21:30 " prefix, matching the Windows overlay.
+        ts = cm.timestamp or ""
+        time_part = ts.split(" ", 1)[-1] if " " in ts else ts
+        short_time = ":".join(time_part.split(":")[:2])
+        stamp = (
+            f'<span foreground="{theme.timestamp_color}">{esc(short_time)} </span>'
+            if short_time
+            else ""
+        )
+
         head = (
-            f'<span foreground="{color}" size="{self._font_px * 1000}">'
+            f'{stamp}<span foreground="{color}">'
             f"{esc(badge)} <b>{author}</b>:</span>"
         )
         if msg.translation and msg.translation.success and msg.translation.translated:
             translated = esc(msg.translation.translated)
             body = (
                 f'<span foreground="{theme.original_color}"> {original}</span>'
-                f'<span foreground="{theme.translation_color}">  →  {translated}</span>'
+                f'<span foreground="{theme.translation_color}"> → {translated}</span>'
             )
         else:
-            # Translation not ready yet (streaming) — show original only.
-            body = f'<span foreground="{theme.text_color}"> {original}</span>'
+            # No translation (yet) — channel color, like the Windows overlay.
+            body = f'<span foreground="{color}"> {original}</span>'
 
-        self._label.set_markup(head + body)
+        self._label.set_markup(f'<span size="{self._font_px * 1000}">{head}{body}</span>')
 
     def restyle(self, font_px: int, theme: OverlayTheme) -> None:
         """Re-render with a new theme/font (live settings apply)."""
@@ -663,7 +673,12 @@ class ChatOverlayGtk:
             f".bc-root {{ background-color: rgba({r},{g},{b},{opacity:.3f}); padding: 6px;"
             f" border-radius: {theme.corner_radius}px;{font_css} }}"
             f".bc-bar {{ color: #b3b3b3; }}"
-            f".bc-filter button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px; }}"
+            f".bc-filter button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px;"
+            f" background: rgba(40,40,40,0.6); color: #999999; border: 1px solid #555555;"
+            f" border-radius: 3px; box-shadow: none; }}"
+            f".bc-filter button:hover {{ color: #cccccc; border-color: #888888; }}"
+            f".bc-filter button:checked {{ background: rgba(80,80,80,0.8);"
+            f" color: {theme.translation_color}; border-color: {theme.translation_color}; }}"
             f".bc-chat {{ padding: 4px; }}"
             f".bc-chat label {{ {shadow} }}"
             f".bc-grip {{ color: #888888; padding: 0 4px; }}"
