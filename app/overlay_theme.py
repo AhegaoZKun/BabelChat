@@ -47,6 +47,10 @@ class OverlayTheme:
     original_color: str      # original text once a translation is shown
     translation_color: str   # translated text
     timestamp_color: str     # dim leading "21:30" timestamp
+    tl_on_color: str         # TR: ON toggle (text/border; background derived)
+    tl_off_color: str        # TR: OFF toggle
+    close_color: str         # ✕ close button
+    tool_color: str          # neutral bar buttons (settings)
     corner_radius: int
     channel_colors: dict[str, str] = field(default_factory=dict)
 
@@ -72,6 +76,10 @@ PRESETS: dict[str, OverlayTheme] = {
         original_color="#888888",
         translation_color="#FFD200",
         timestamp_color="#666666",
+        tl_on_color="#40FF40",
+        tl_off_color="#FF4040",
+        close_color="#FF4040",
+        tool_color="#CCCCCC",
         corner_radius=8,
         channel_colors=dict(_WOW_CHANNELS),
     ),
@@ -81,6 +89,10 @@ PRESETS: dict[str, OverlayTheme] = {
         original_color="#94A3B8",
         translation_color="#7DD3FC",
         timestamp_color="#475569",
+        tl_on_color="#6EE7B7",
+        tl_off_color="#FB7185",
+        close_color="#FB7185",
+        tool_color="#94A3B8",
         corner_radius=10,
         channel_colors={
             "say": "#E2E8F0",
@@ -101,6 +113,10 @@ PRESETS: dict[str, OverlayTheme] = {
         original_color="#7A7A7A",
         translation_color="#E8E8E8",
         timestamp_color="#5A5A5A",
+        tl_on_color="#A9E0B4",
+        tl_off_color="#E0A9A9",
+        close_color="#E0A9A9",
+        tool_color="#9A9A9A",
         corner_radius=6,
         channel_colors={
             "say": "#D0D0D0",
@@ -121,6 +137,10 @@ PRESETS: dict[str, OverlayTheme] = {
         original_color="#555555",
         translation_color="#8A6D00",
         timestamp_color="#999999",
+        tl_on_color="#15803D",
+        tl_off_color="#B91C1C",
+        close_color="#B91C1C",
+        tool_color="#444444",
         corner_radius=8,
         channel_colors={
             "say": "#111111",
@@ -141,6 +161,10 @@ PRESETS: dict[str, OverlayTheme] = {
         original_color="#FFFFFF",
         translation_color="#FFFF00",
         timestamp_color="#BBBBBB",
+        tl_on_color="#00FF00",
+        tl_off_color="#FF0000",
+        close_color="#FF0000",
+        tool_color="#FFFFFF",
         corner_radius=0,
         channel_colors={
             "say": "#FFFFFF",
@@ -198,6 +222,10 @@ def resolve_theme(config) -> OverlayTheme:
         original_color=_color("overlay_original_color", base.original_color),
         translation_color=_color("overlay_translation_color", base.translation_color),
         timestamp_color=_color("overlay_timestamp_color", base.timestamp_color),
+        tl_on_color=_color("overlay_tl_on_color", base.tl_on_color),
+        tl_off_color=_color("overlay_tl_off_color", base.tl_off_color),
+        close_color=_color("overlay_close_color", base.close_color),
+        tool_color=_color("overlay_tool_color", base.tool_color),
         corner_radius=max(0, min(32, int(getattr(config, "overlay_corner_radius", base.corner_radius)))),
         channel_colors=channels,
     )
@@ -211,6 +239,12 @@ def _is_hex(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def dim(value: str, factor: float) -> str:
+    """Darken '#RRGGBB' by factor (0..1) — used to derive button backgrounds."""
+    r, g, b = hex_to_rgb(value)
+    return f"rgba({int(r * factor)},{int(g * factor)},{int(b * factor)},0.85)"
 
 
 def hex_to_rgb(value: str) -> tuple[int, int, int]:

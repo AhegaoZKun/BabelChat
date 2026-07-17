@@ -25,6 +25,7 @@ from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_gtk import SettingsWindowGtk
 from app.translator import TranslatorService
+from app.tray_sni import MenuItem, TrayIcon
 
 _LANG_CODE_TO_LINGUA: dict[str, Language] = {
     "EN": Language.ENGLISH,
@@ -114,6 +115,8 @@ def main() -> int:
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
     overlay.set_translator(reply_translator, reply_lang)
 
+    tray = None  # created below; referenced by _quit
+
     # Pipeline: deliver each TranslatedMessage to the overlay (thread-safe).
     pipeline = TranslationPipeline(
         config=_build_pipeline_config(config),
@@ -122,6 +125,8 @@ def main() -> int:
 
     def _quit() -> None:
         try:
+            if tray is not None:
+                tray.shutdown()
             pipeline.stop()
         finally:
             overlay._app.quit()
@@ -167,10 +172,44 @@ def main() -> int:
 
     overlay.on_settings = _open_settings
 
+    # ── system tray (StatusNotifierItem) ─────────────────────────────────
+    def _icon_path() -> str | None:
+        import sys as _sys
+        base = getattr(_sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(base, "assets", "icon.png")
+        return path if os.path.exists(path) else None
+
+    def _tray_toggle_overlay() -> None:
+        visible = overlay.toggle_visible()
+        if tray is not None:
+            tray.update_item("overlay", label="Hide overlay" if visible else "Show overlay")
+
+    def _tray_toggle_tr() -> None:
+        overlay.set_translation_active(not pipeline.translation_enabled)
+
     def _toggle_translation(enabled: bool) -> None:
         pipeline.translation_enabled = enabled
+        if tray is not None:
+            tray.update_item("tr", checked=enabled)
 
     overlay.on_toggle_translation = _toggle_translation
+
+    try:
+        tray = TrayIcon(
+            icon_png=_icon_path(),
+            on_activate=_tray_toggle_overlay,
+            on_secondary_activate=_tray_toggle_tr,
+            items=[
+                MenuItem("overlay", "Hide overlay", _tray_toggle_overlay),
+                MenuItem("tr", "Translation", _tray_toggle_tr, checkable=True,
+                         checked=bool(config.translation_enabled_default)),
+                MenuItem("settings", "Settings…", _open_settings),
+                MenuItem(),  # separator
+                MenuItem("quit", "Quit", _quit),
+            ],
+        )
+    except Exception:  # noqa: BLE001 — tray is optional; never block startup
+        logging.exception("tray icon unavailable (continuing without it)")
 
     # Show recent history on launch (same as the PyQt frontend). These queue in
     # the overlay's pending list and render once the window is built.

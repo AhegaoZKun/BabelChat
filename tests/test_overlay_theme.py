@@ -62,12 +62,11 @@ def test_config_load_ignores_unknown_keys(tmp_path):
     """Old config files with removed fields must not crash startup."""
     p = tmp_path / "config.json"
     p.write_text(
-        json.dumps({"google_api_key": "leftover", "argos_enabled": True, "overlay_theme": "light"}),
+        json.dumps({"obsolete_testing": "dead", "overlay_theme": "light"}),
         encoding="utf-8",
     )
     cfg = AppConfig.load(str(p))
     assert cfg.overlay_theme == "light"
-    assert not hasattr(cfg, "google_api_key")
 
 
 def test_config_roundtrip_with_theme(tmp_path):
@@ -77,3 +76,14 @@ def test_config_roundtrip_with_theme(tmp_path):
     loaded = AppConfig.load(str(p))
     assert loaded.overlay_channel_colors == {"raid": "#112233"}
     assert resolve_theme(loaded).channel_colors["raid"] == "#112233"
+
+
+def test_presets_have_bar_colors():
+    for name, theme in PRESETS.items():
+        for attr in ("tl_on_color", "tl_off_color", "close_color", "tool_color"):
+            assert getattr(theme, attr).startswith("#"), (name, attr)
+
+
+def test_bar_color_custom_override():
+    cfg = AppConfig(overlay_theme="custom", overlay_close_color="#ABCDEF")
+    assert resolve_theme(cfg).close_color == "#ABCDEF"

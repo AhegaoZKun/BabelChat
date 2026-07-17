@@ -220,6 +220,28 @@ class SettingsWindowGtk:
         frow.append(self._font_family)
         root.append(frow)
 
+        # Title bar button colors
+        bexp = Gtk.Expander(label="Title bar colors")
+        bgrid = Gtk.Grid()
+        bgrid.set_row_spacing(4)
+        bgrid.set_column_spacing(8)
+        bgrid.set_margin_top(6)
+        self._bar_buttons: dict[str, Gtk.ColorButton] = {}
+        for i, (key, label, color) in enumerate((
+            ("tl_on", "TR: ON toggle", theme.tl_on_color),
+            ("tl_off", "TR: OFF toggle", theme.tl_off_color),
+            ("close", "Close button", theme.close_color),
+            ("tool", "Other buttons", theme.tool_color),
+        )):
+            blbl = Gtk.Label(label=label)
+            blbl.set_xalign(0.0)
+            btn = self._color_button(color)
+            self._bar_buttons[key] = btn
+            bgrid.attach(blbl, 0, i, 1, 1)
+            bgrid.attach(btn, 1, i, 1, 1)
+        bexp.set_child(bgrid)
+        root.append(bexp)
+
         # Per-channel colors
         exp = Gtk.Expander(label="Channel colors")
         grid = Gtk.Grid()
@@ -288,6 +310,9 @@ class SettingsWindowGtk:
             btn.set_rgba(rgba)
         for slot, btn in self._slot_buttons.items():
             rgba.parse(theme.channel_colors.get(slot, "#FFFFFF"))
+            btn.set_rgba(rgba)
+        for key, btn in self._bar_buttons.items():
+            rgba.parse(getattr(theme, f"{key}_color"))
             btn.set_rgba(rgba)
         self._radius.set_value(theme.corner_radius)
         self._suppress_custom = False
@@ -376,6 +401,10 @@ class SettingsWindowGtk:
         family = self._font_family.get_child().get_text().strip()
         c.overlay_font_family = "" if family == _DEFAULT_FONT else family
         c.overlay_channel_colors = {slot: self._rgba_hex(btn) for slot, btn in self._slot_buttons.items()}
+        c.overlay_tl_on_color = self._rgba_hex(self._bar_buttons["tl_on"])
+        c.overlay_tl_off_color = self._rgba_hex(self._bar_buttons["tl_off"])
+        c.overlay_close_color = self._rgba_hex(self._bar_buttons["close"])
+        c.overlay_tool_color = self._rgba_hex(self._bar_buttons["tool"])
         c.skip_own_messages = self._skip_own.get_active()
 
         try:

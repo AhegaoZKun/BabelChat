@@ -67,7 +67,7 @@ from gi.repository import GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
 from app.config import AppConfig
-from app.overlay_theme import OverlayTheme, hex_to_rgb, resolve_theme  # noqa: E402
+from app.overlay_theme import OverlayTheme, dim, hex_to_rgb, resolve_theme  # noqa: E402
 from app.parser import Channel  # noqa: E402
 from app.pipeline import TranslatedMessage  # noqa: E402
 from app.translator import TranslatorService  # noqa: E402
@@ -428,13 +428,17 @@ class ChatOverlayGtk:
         title.set_hexpand(True)
         # Quick translation on/off toggle. Reflects/controls pipeline state via
         # the on_toggle_translation callback wired by main.
-        self._translate_toggle = Gtk.ToggleButton(label="TL")
-        self._translate_toggle.set_active(bool(self._config.translation_enabled_default))
+        active = bool(self._config.translation_enabled_default)
+        self._translate_toggle = Gtk.ToggleButton(label="TR: ON" if active else "TR: OFF")
+        self._translate_toggle.set_active(active)
         self._translate_toggle.set_tooltip_text("Toggle translation on/off")
+        self._translate_toggle.add_css_class("bc-tl")
         self._translate_toggle.connect("toggled", self._on_translate_toggled)
         settings_btn = Gtk.Button(label="⚙")
+        settings_btn.add_css_class("bc-tool")
         settings_btn.connect("clicked", lambda _b: self.on_settings and self.on_settings())
         quit_btn = Gtk.Button(label="✕")
+        quit_btn.add_css_class("bc-close")
         quit_btn.connect("clicked", lambda _b: self.on_quit and self.on_quit())
         bar.append(title)
         bar.append(self._translate_toggle)
@@ -651,6 +655,19 @@ class ChatOverlayGtk:
                 self._add_or_update_row(queued)
 
     # ── reply handling ────────────────────────────────────────────────────
+    def toggle_visible(self) -> bool:
+        """Show/hide the overlay window; returns the new visibility."""
+        if self._win is None:
+            return False
+        visible = not self._win.get_visible()
+        self._win.set_visible(visible)
+        return visible
+
+    def set_translation_active(self, enabled: bool) -> None:
+        """Set the TR toggle state (fires the normal toggled handler)."""
+        if getattr(self, "_translate_toggle", None) is not None:
+            self._translate_toggle.set_active(enabled)
+
     def apply_appearance(self) -> None:
         """(Re)build the overlay CSS from current config — opacity, font size.
 
@@ -682,6 +699,20 @@ class ChatOverlayGtk:
             f".bc-chat {{ padding: 4px; }}"
             f".bc-chat label {{ {shadow} }}"
             f".bc-grip {{ color: #888888; padding: 0 4px; }}"
+            # Title-bar controls, ported from the PyQt overlay stylesheets.
+            f".bc-bar button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px;"
+            f" border-radius: 3px; box-shadow: none; font-weight: bold; }}"
+            f".bc-tl {{ background: {dim(theme.tl_off_color, 0.4)}; color: {theme.tl_off_color};"
+            f" border: 1px solid {theme.tl_off_color}; }}"
+            f".bc-tl:hover {{ background: {dim(theme.tl_off_color, 0.55)}; }}"
+            f".bc-tl:checked {{ background: {dim(theme.tl_on_color, 0.4)}; color: {theme.tl_on_color};"
+            f" border-color: {theme.tl_on_color}; }}"
+            f".bc-tl:checked:hover {{ background: {dim(theme.tl_on_color, 0.55)}; }}"
+            f".bc-tool {{ background: rgba(60,60,60,0.8); color: {theme.tool_color}; border: 1px solid #555555; }}"
+            f".bc-tool:hover {{ color: {theme.translation_color}; border-color: {theme.translation_color}; }}"
+            f".bc-close {{ background: {dim(theme.close_color, 0.4)}; color: {theme.close_color};"
+            f" border: 1px solid {theme.close_color}; }}"
+            f".bc-close:hover {{ background: {dim(theme.close_color, 0.55)}; }}"
             f".bc-reply entry {{ font-size: {font_px}px; }}"
         ).encode())
         # Restyle already-visible messages so theme changes apply instantly.
@@ -728,7 +759,7 @@ class ChatOverlayGtk:
 
     def _on_translate_toggled(self, btn: Gtk.ToggleButton) -> None:
         active = btn.get_active()
-        btn.set_label("TL" if active else "TL✗")
+        btn.set_label("TR: ON" if active else "TR: OFF")
         if self.on_toggle_translation is not None:
             self.on_toggle_translation(active)
 

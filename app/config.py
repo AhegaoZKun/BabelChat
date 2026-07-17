@@ -70,6 +70,10 @@ class AppConfig:
     overlay_original_color: str = "#888888"
     overlay_translation_color: str = "#FFD200"
     overlay_timestamp_color: str = "#666666"
+    overlay_tl_on_color: str = "#40FF40"
+    overlay_tl_off_color: str = "#FF4040"
+    overlay_close_color: str = "#FF4040"
+    overlay_tool_color: str = "#CCCCCC"
     overlay_corner_radius: int = 8
     overlay_font_family: str = ""  # empty = system default
     overlay_channel_colors: dict = field(default_factory=dict)  # slot → "#RRGGBB"
