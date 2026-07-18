@@ -246,9 +246,6 @@ class _MicrosoftBackend:
             return False
 
 
-# ── Unified TranslatorService ─────────────────────────────────────────────────
-
-
 class TranslatorService:
     """Unified translation service supporting DeepL and Microsoft Translator.
 
@@ -282,12 +279,14 @@ class TranslatorService:
             except Exception as e:
                 logger.warning("Failed to initialize Microsoft Translator backend: %s", e)
 
-        if not self._deepl and not self._microsoft:
+
+
+        if not self.has_backend:
             logger.warning("No translation backend configured")
 
     @property
     def has_backend(self) -> bool:
-        return self._deepl is not None or self._microsoft is not None
+        return any((self._deepl, self._microsoft))
 
     def translate(
         self,
@@ -305,9 +304,9 @@ class TranslatorService:
                 success=True,
             )
 
-        primary, fallback = self._get_backends()
+        chain = self._get_backends()
 
-        if primary is None:
+        if not chain:
             return TranslationResult(
                 original=text,
                 translated=text,
@@ -317,14 +316,13 @@ class TranslatorService:
                 error="no_backend",
             )
 
-        result = primary.translate(text, target_lang, source_lang)
-
-        # Fall back to secondary if primary failed and secondary is available
-        if not result.success and fallback is not None:
-            logger.info("Primary backend failed (%s), trying fallback", result.error)
-            result = fallback.translate(text, target_lang, source_lang)
-
-        return result
+        result: TranslationResult | None = None
+        for backend in chain:
+            result = backend.translate(text, target_lang, source_lang)
+            if result.success:
+                return result
+            logger.info("Backend %s failed (%s), trying next", result.backend, result.error)
+        return result  # last failure
 
     def get_usage(self) -> deepl.Usage | None:
         """Get DeepL usage stats if available."""
@@ -332,19 +330,18 @@ class TranslatorService:
             return self._deepl.get_usage()
         return None
 
-    def _get_backends(
-        self,
-    ) -> tuple[_DeepLBackend | _MicrosoftBackend | None, _DeepLBackend | _MicrosoftBackend | None]:
-        """Return (primary, fallback) backends based on priority and availability."""
-        if self._deepl and self._microsoft:
-            if self._priority == "microsoft":
-                return self._microsoft, self._deepl
-            return self._deepl, self._microsoft
-        if self._deepl:
-            return self._deepl, None
-        if self._microsoft:
-            return self._microsoft, None
-        return None, None
+    def _get_backends(self) -> list:
+        """Configured backends, priority first."""
+        order = {
+            "deepl": self._deepl,
+            "microsoft": self._microsoft,
+        }
+        chain = []
+        primary = order.pop(self._priority, None)
+        if primary is not None:
+            chain.append(primary)
+        chain.extend(b for b in order.values() if b is not None)
+        return chain
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -376,6 +373,7 @@ def validate_deepl_key(api_key: str) -> tuple[bool, str]:
         return False, "auth_failed"
     except Exception as e:
         return False, f"error: {e}"
+
 
 
 def validate_microsoft_key(api_key: str, region: str = "") -> tuple[bool, str]:

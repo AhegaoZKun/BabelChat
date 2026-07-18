@@ -1,0 +1,418 @@
+"""GTK4 settings window for BabelChat.
+
+A normal (non-layer-shell) window — it needs to be freely movable, closable, and
+able to take keyboard input, which a regular GTK window does natively. Edits are
+written to config.json on Save; an on_saved callback lets the app apply changes
+to the running pipeline/overlay live (channels, languages, etc.).
+
+Covers: channels, languages (own/target/UI), translator priority + API keys,
+overlay appearance (theme presets, colors, font, corner radius), and the
+skip-own-messages toggle.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable  # noqa: E402
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
+
+from app.config import AppConfig  # noqa: E402
+from app.overlay_theme import (  # noqa: E402
+    PRESET_LABELS,
+    PRESET_ORDER,
+    PRESETS,
+    SLOT_LABELS,
+    SLOT_ORDER,
+    resolve_theme,
+)
+
+# (label, attribute) pairs for the channel checkboxes.
+_CHANNELS: list[tuple[str, str]] = [
+    ("Say", "channels_say"),
+    ("Yell", "channels_yell"),
+    ("Party", "channels_party"),
+    ("Raid", "channels_raid"),
+    ("Guild", "channels_guild"),
+    ("Whisper", "channels_whisper"),
+    ("Instance", "channels_instance"),
+    ("Trade", "channels_trade"),
+    ("General", "channels_general"),
+    ("Services", "channels_services"),
+    ("LFG", "channels_lfg"),
+]
+
+_LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
+
+_DEFAULT_FONT = "System default"
+# Curated overlay-friendly fonts; only the ones actually installed are shown.
+# The generic Pango families (Sans/Serif/Monospace) always resolve.
+_COMMON_FONTS = [
+    "Sans",
+    "Serif",
+    "Monospace",
+    "DejaVu Sans",
+    "Noto Sans",
+    "Liberation Sans",
+    "Cantarell",
+    "Ubuntu",
+    "Inter",
+    "Roboto",
+    "Open Sans",
+    "Fira Sans",
+    "Hack",
+    "Hack Nerd Font",
+    "JetBrains Mono",
+    "Fira Code",
+]
+
+
+def _installed_font_options() -> list[str]:
+    """Curated fonts filtered to what's installed, generics always included."""
+    try:
+        families = {f.get_name().lower() for f in PangoCairo.FontMap.get_default().list_families()}
+    except Exception:  # noqa: BLE001 — never break settings over font probing
+        families = set()
+    generics = {"sans", "serif", "monospace"}
+    return [f for f in _COMMON_FONTS if f.lower() in generics or f.lower() in families]
+
+
+class SettingsWindowGtk:
+    """Settings editor. Construct with the live AppConfig and an on_saved cb."""
+
+    def __init__(
+        self,
+        config: AppConfig,
+        on_saved: Callable[[AppConfig], None] | None = None,
+        app: Gtk.Application | None = None,
+    ) -> None:
+        self._config = config
+        self._on_saved = on_saved
+        self._checks: dict[str, Gtk.CheckButton] = {}
+
+        self._win = Gtk.Window()
+        if app is not None:
+            self._win.set_application(app)
+        self._win.set_title("BabelChat Settings")
+        self._win.set_default_size(460, 640)
+        self._build()
+
+    def present(self) -> None:
+        self._win.present()
+
+    # ── UI ────────────────────────────────────────────────────────────────
+    def _build(self) -> None:
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        root.set_margin_top(16)
+        root.set_margin_bottom(16)
+        root.set_margin_start(16)
+        root.set_margin_end(16)
+
+        # Channels
+        root.append(self._section("Channels"))
+        grid = Gtk.Grid()
+        grid.set_row_spacing(4)
+        grid.set_column_spacing(16)
+        for i, (label, attr) in enumerate(_CHANNELS):
+            cb = Gtk.CheckButton(label=label)
+            cb.set_active(bool(getattr(self._config, attr)))
+            self._checks[attr] = cb
+            grid.attach(cb, i % 2, i // 2, 1, 1)
+        root.append(grid)
+
+        # Languages
+        root.append(self._section("Languages"))
+        self._own = self._combo_row(root, "Own language", self._config.own_language)
+        self._target = self._combo_row(root, "Target language", self._config.target_language)
+        self._ui = self._combo_row(root, "UI language", self._config.ui_language)
+
+        # Translation API
+        root.append(self._section("Translation API"))
+        self._priority = self._combo_row(
+            root, "Priority", self._config.translator_priority, options=["deepl", "microsoft"]
+        )
+        self._deepl = self._entry_row(root, "DeepL API key", self._config.deepl_api_key, secret=True)
+        self._ms_key = self._entry_row(root, "Microsoft API key", self._config.microsoft_api_key, secret=True)
+        self._ms_region = self._entry_row(root, "Microsoft region", self._config.microsoft_region)
+
+        # Appearance
+        root.append(self._section("Appearance"))
+        self._opacity = self._scale_row(root, "Opacity", self._config.overlay_opacity, 40, 255)
+        self._font = self._scale_row(root, "Font size", self._config.overlay_font_size, 8, 28)
+        self._build_appearance(root)
+
+        # Behavior
+        root.append(self._section("Behavior"))
+        self._skip_own = Gtk.CheckButton(label="Skip my own messages")
+        self._skip_own.set_active(bool(self._config.skip_own_messages))
+        root.append(self._skip_own)
+
+        # Actions
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        save = Gtk.Button(label="Save")
+        save.connect("clicked", self._on_save)
+        close = Gtk.Button(label="Close")
+        close.connect("clicked", lambda _b: self._win.close())
+        self._status = Gtk.Label(label="")
+        self._status.set_hexpand(True)
+        self._status.set_xalign(0.0)
+        actions.append(save)
+        actions.append(close)
+        actions.append(self._status)
+        root.append(actions)
+
+        scroller.set_child(root)
+        self._win.set_child(scroller)
+
+    # ── appearance (theme) UI ─────────────────────────────────────────────
+    def _build_appearance(self, root: Gtk.Box) -> None:
+        cfg = self._config
+        theme = resolve_theme(cfg)
+        self._suppress_custom = True  # don't flip to Custom while populating
+
+        # Preset dropdown
+        labels = [PRESET_LABELS[p] for p in PRESET_ORDER]
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label="Theme preset")
+        lbl.set_xalign(0.0)
+        lbl.set_size_request(140, -1)
+        self._preset = Gtk.DropDown.new_from_strings(labels)
+        cur = cfg.overlay_theme if cfg.overlay_theme in PRESET_ORDER else "custom"
+        self._preset.set_selected(PRESET_ORDER.index(cur))
+        self._preset.connect("notify::selected", self._on_preset_changed)
+        row.append(lbl)
+        row.append(self._preset)
+        root.append(row)
+
+        # Base colors
+        self._col_bg = self._color_row(root, "Background", theme.bg_color)
+        self._col_ts = self._color_row(root, "Timestamp", theme.timestamp_color)
+        self._col_orig = self._color_row(root, "Original text", theme.original_color)
+        self._col_tl = self._color_row(root, "Translated text", theme.translation_color)
+
+        # Corner radius
+        self._radius = self._scale_row(root, "Corner radius", theme.corner_radius, 0, 24)
+        self._radius.connect("value-changed", lambda _s: self._mark_custom())
+
+        # Font family: dropdown of common installed fonts, still free-typable
+        frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        flbl = Gtk.Label(label="Font")
+        flbl.set_xalign(0.0)
+        flbl.set_size_request(140, -1)
+        self._font_family = Gtk.ComboBoxText.new_with_entry()
+        self._font_family.set_hexpand(True)
+        options = [_DEFAULT_FONT, *_installed_font_options()]
+        for opt in options:
+            self._font_family.append_text(opt)
+        current = cfg.overlay_font_family or ""
+        if not current:
+            self._font_family.set_active(0)
+        elif current in options:
+            self._font_family.set_active(options.index(current))
+        else:
+            self._font_family.get_child().set_text(current)
+        frow.append(flbl)
+        frow.append(self._font_family)
+        root.append(frow)
+
+        # Title bar button colors
+        bexp = Gtk.Expander(label="Title bar colors")
+        bgrid = Gtk.Grid()
+        bgrid.set_row_spacing(4)
+        bgrid.set_column_spacing(8)
+        bgrid.set_margin_top(6)
+        self._bar_buttons: dict[str, Gtk.ColorButton] = {}
+        for i, (key, label, color) in enumerate((
+            ("tl_on", "TR: ON toggle", theme.tl_on_color),
+            ("tl_off", "TR: OFF toggle", theme.tl_off_color),
+            ("close", "Close button", theme.close_color),
+            ("tool", "Other buttons", theme.tool_color),
+        )):
+            blbl = Gtk.Label(label=label)
+            blbl.set_xalign(0.0)
+            btn = self._color_button(color)
+            self._bar_buttons[key] = btn
+            bgrid.attach(blbl, 0, i, 1, 1)
+            bgrid.attach(btn, 1, i, 1, 1)
+        bexp.set_child(bgrid)
+        root.append(bexp)
+
+        # Per-channel colors
+        exp = Gtk.Expander(label="Channel colors")
+        grid = Gtk.Grid()
+        grid.set_row_spacing(4)
+        grid.set_column_spacing(8)
+        grid.set_margin_top(6)
+        self._slot_buttons: dict[str, Gtk.ColorButton] = {}
+        for i, slot in enumerate(SLOT_ORDER):
+            slbl = Gtk.Label(label=SLOT_LABELS[slot])
+            slbl.set_xalign(0.0)
+            btn = self._color_button(theme.channel_colors.get(slot, "#FFFFFF"))
+            self._slot_buttons[slot] = btn
+            grid.attach(slbl, 0, i, 1, 1)
+            grid.attach(btn, 1, i, 1, 1)
+        exp.set_child(grid)
+        root.append(exp)
+
+        self._suppress_custom = False
+
+    def _color_button(self, hex_color: str) -> Gtk.ColorButton:
+        rgba = Gdk.RGBA()
+        rgba.parse(hex_color)
+        btn = Gtk.ColorButton()
+        btn.set_rgba(rgba)
+        btn.connect("color-set", lambda _b: self._mark_custom())
+        return btn
+
+    def _color_row(self, parent: Gtk.Box, label: str, hex_color: str) -> Gtk.ColorButton:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label=label)
+        lbl.set_xalign(0.0)
+        lbl.set_size_request(140, -1)
+        btn = self._color_button(hex_color)
+        row.append(lbl)
+        row.append(btn)
+        parent.append(row)
+        return btn
+
+    @staticmethod
+    def _rgba_hex(btn: Gtk.ColorButton) -> str:
+        c = btn.get_rgba()
+        return f"#{round(c.red * 255):02X}{round(c.green * 255):02X}{round(c.blue * 255):02X}"
+
+    def _mark_custom(self) -> None:
+        """Any manual color/radius edit switches the preset to Custom."""
+        if getattr(self, "_suppress_custom", True):
+            return
+        self._preset.set_selected(PRESET_ORDER.index("custom"))
+
+    def _on_preset_changed(self, dd: Gtk.DropDown, _p: object) -> None:
+        if getattr(self, "_suppress_custom", True):
+            return
+        name = PRESET_ORDER[dd.get_selected()]
+        if name == "custom" or name not in PRESETS:
+            return
+        theme = PRESETS[name]
+        self._suppress_custom = True
+        rgba = Gdk.RGBA()
+        for btn, color in (
+            (self._col_bg, theme.bg_color),
+            (self._col_ts, theme.timestamp_color),
+            (self._col_orig, theme.original_color),
+            (self._col_tl, theme.translation_color),
+        ):
+            rgba.parse(color)
+            btn.set_rgba(rgba)
+        for slot, btn in self._slot_buttons.items():
+            rgba.parse(theme.channel_colors.get(slot, "#FFFFFF"))
+            btn.set_rgba(rgba)
+        for key, btn in self._bar_buttons.items():
+            rgba.parse(getattr(theme, f"{key}_color"))
+            btn.set_rgba(rgba)
+        self._radius.set_value(theme.corner_radius)
+        self._suppress_custom = False
+
+    def _section(self, text: str) -> Gtk.Label:
+        lbl = Gtk.Label()
+        lbl.set_markup(f"<b>{text}</b>")
+        lbl.set_xalign(0.0)
+        lbl.set_margin_top(6)
+        return lbl
+
+    def _entry_row(self, parent: Gtk.Box, label: str, value: str, secret: bool = False) -> Gtk.Entry:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label=label)
+        lbl.set_width_chars(18)
+        lbl.set_xalign(0.0)
+        entry = Gtk.Entry()
+        entry.set_text(value or "")
+        entry.set_hexpand(True)
+        if secret:
+            entry.set_visibility(False)
+        row.append(lbl)
+        row.append(entry)
+        parent.append(row)
+        return entry
+
+    def _combo_row(self, parent: Gtk.Box, label: str, value: str, options: list[str] | None = None) -> Gtk.DropDown:
+        opts = options or _LANGS
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label=label)
+        lbl.set_width_chars(18)
+        lbl.set_xalign(0.0)
+        model = Gtk.StringList()
+        for o in opts:
+            model.append(o)
+        dd = Gtk.DropDown(model=model)
+        try:
+            dd.set_selected(opts.index(value))
+        except ValueError:
+            dd.set_selected(0)
+        dd._opts = opts  # stash for read-back
+        row.append(lbl)
+        row.append(dd)
+        parent.append(row)
+        return dd
+
+    def _scale_row(self, parent: Gtk.Box, label: str, value: int, lo: int, hi: int) -> Gtk.Scale:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl = Gtk.Label(label=label)
+        lbl.set_width_chars(18)
+        lbl.set_xalign(0.0)
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, lo, hi, 1)
+        scale.set_value(value)
+        scale.set_hexpand(True)
+        scale.set_draw_value(True)
+        row.append(lbl)
+        row.append(scale)
+        parent.append(row)
+        return scale
+
+    # ── save ──────────────────────────────────────────────────────────────
+    def _dd_value(self, dd: Gtk.DropDown) -> str:
+        opts = getattr(dd, "_opts", _LANGS)
+        idx = dd.get_selected()
+        return opts[idx] if 0 <= idx < len(opts) else opts[0]
+
+    def _on_save(self, _btn: Gtk.Button) -> None:
+        c = self._config
+        for attr, cb in self._checks.items():
+            setattr(c, attr, cb.get_active())
+        c.own_language = self._dd_value(self._own)
+        c.target_language = self._dd_value(self._target)
+        c.ui_language = self._dd_value(self._ui)
+        c.translator_priority = self._dd_value(self._priority)
+        c.deepl_api_key = self._deepl.get_text()
+        c.microsoft_api_key = self._ms_key.get_text()
+        c.microsoft_region = self._ms_region.get_text()
+        c.overlay_opacity = int(self._opacity.get_value())
+        c.overlay_font_size = int(self._font.get_value())
+        c.overlay_theme = PRESET_ORDER[self._preset.get_selected()]
+        c.overlay_bg_color = self._rgba_hex(self._col_bg)
+        c.overlay_timestamp_color = self._rgba_hex(self._col_ts)
+        c.overlay_original_color = self._rgba_hex(self._col_orig)
+        c.overlay_translation_color = self._rgba_hex(self._col_tl)
+        c.overlay_corner_radius = int(self._radius.get_value())
+        family = self._font_family.get_child().get_text().strip()
+        c.overlay_font_family = "" if family == _DEFAULT_FONT else family
+        c.overlay_channel_colors = {slot: self._rgba_hex(btn) for slot, btn in self._slot_buttons.items()}
+        c.overlay_tl_on_color = self._rgba_hex(self._bar_buttons["tl_on"])
+        c.overlay_tl_off_color = self._rgba_hex(self._bar_buttons["tl_off"])
+        c.overlay_close_color = self._rgba_hex(self._bar_buttons["close"])
+        c.overlay_tool_color = self._rgba_hex(self._bar_buttons["tool"])
+        c.skip_own_messages = self._skip_own.get_active()
+
+        try:
+            c.save()
+            self._status.set_markup('<span foreground="#33aa33">Saved.</span>')
+        except Exception as exc:  # noqa: BLE001
+            self._status.set_markup(f'<span foreground="#cc3333">Save failed: {exc}</span>')
+            return
+
+        if self._on_saved is not None:
+            self._on_saved(c)

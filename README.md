@@ -243,7 +243,7 @@ pyinstaller build-linux.spec    # Linux binary
 
 ## Support the Project
 
-This project is a collaboration between two authors:
+This project is a collaboration between three authors:
 
 | Component                                                                | Author              | Support                                                 |
 | ------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------- |

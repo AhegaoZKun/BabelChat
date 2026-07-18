@@ -34,8 +34,6 @@ a = Analysis(
         "app.settings_dialog",
         "app.setup_wizard",
         "app.about_dialog",
-        "app.reply_widget",
-        "app.lang_selector",
         "app.hotkeys",
         "app.hotkeys_windows",
         "app.text_utils",

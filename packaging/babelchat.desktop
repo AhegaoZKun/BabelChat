@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BabelChat
+Comment=Real-time WoW chat translation overlay
+Exec=BabelChat
+Icon=babelchat
+Categories=Game;Utility;
+Terminal=false

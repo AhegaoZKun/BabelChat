@@ -118,6 +118,14 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         enabled_channels |= {Channel.WHISPER_FROM, Channel.WHISPER_TO}
     if config.channels_instance:
         enabled_channels |= {Channel.INSTANCE, Channel.INSTANCE_LEADER}
+    if config.channels_trade:
+        enabled_channels |= {Channel.TRADE}
+    if config.channels_general:
+        enabled_channels |= {Channel.GENERAL}
+    if config.channels_services:
+        enabled_channels |= {Channel.SERVICES}
+    if config.channels_lfg:
+        enabled_channels |= {Channel.LOOKING_FOR_GROUP}
 
     return PipelineConfig(
         chatlog_path=chatlog,
@@ -148,6 +156,14 @@ def _enabled_filter_names(config: AppConfig) -> set[str]:
         names.add("Whisper")
     if config.channels_instance:
         names.add("Instance")
+    if config.channels_trade:
+        names.add("Trade")
+    if config.channels_general:
+        names.add("General")
+    if config.channels_services:
+        names.add("Services")
+    if config.channels_lfg:
+        names.add("LookingForGroup")
     return names
 
 

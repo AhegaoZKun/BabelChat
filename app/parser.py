@@ -22,6 +22,10 @@ class Channel(Enum):
     WHISPER_TO = "Whisper To"
     INSTANCE = "Instance"
     INSTANCE_LEADER = "Instance Leader"
+    TRADE = "Trade"
+    GENERAL = "General"
+    SERVICES = "Services"
+    LOOKING_FOR_GROUP = "LookingForGroup"
 
 
 # Map raw log channel names to enum (English + Russian client)
@@ -37,6 +41,11 @@ _CHANNEL_MAP: dict[str, Channel] = {
     "Officer": Channel.OFFICER,
     "Instance": Channel.INSTANCE,
     "Instance Leader": Channel.INSTANCE_LEADER,
+    "Trade": Channel.TRADE,
+    "General": Channel.GENERAL,
+    "Services": Channel.SERVICES,
+    "LookingForGroup": Channel.LOOKING_FOR_GROUP,
+    "LFG": Channel.LOOKING_FOR_GROUP,
     # Russian client channel names
     "Сказать": Channel.SAY,
     "Крик": Channel.YELL,

@@ -167,6 +167,10 @@ class TranslationPipeline:
         """
         old_own = self._config.own_language
         old_target = self._config.target_lang
+        # Preserve the RUNTIME translation on/off state: the incoming config
+        # carries translation_enabled_default, which would silently override a
+        # user's live TL toggle (and desync the toggle button) on settings save.
+        config.translation_enabled = self._config.translation_enabled
         self._config = config
         self._detector.own_language = config.own_language
         if old_own != config.own_language:

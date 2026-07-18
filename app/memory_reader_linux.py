@@ -333,7 +333,7 @@ class WoWAddonBufReader:
 
                 msg_text = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", msg_text)
 
-                if event and author:
+                if event:
                     log_line = self._make_synthetic_log_line(event, author, msg_text)
                     if not log_line:
                         t = time.localtime()
@@ -357,6 +357,29 @@ class WoWAddonBufReader:
 
     @staticmethod
     def _make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
+        # Public/numbered channels arrive as "CHANNEL:<Name>" (e.g.
+        # "CHANNEL:Trade - City"). Classify the name into a log channel so the
+        # parser/filter can treat Trade / Services / General / LFG distinctly.
+        if channel.startswith("CHANNEL:"):
+            name = channel.split(":", 1)[1].strip().lower()
+            if "trade" in name:
+                log_channel = "Trade"
+            elif "service" in name or "comercio" in name:
+                log_channel = "Services"
+            elif "lookingforgroup" in name or "looking for group" in name or "lfg" in name:
+                log_channel = "LookingForGroup"
+            elif "general" in name:
+                log_channel = "General"
+            else:
+                log_channel = "General"
+            t = time.localtime()
+            ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
+            # Author can be empty for some channel messages; use a placeholder so
+            # the line still matches the parser's "[Channel] Author: text" form
+            # instead of being dropped.
+            who = author if author else "Unknown"
+            return f"{ts}  [{log_channel}] {who}: {text}"
+
         _ADDON_CHANNEL_TO_LOG = {
             "SAY": "Say",
             "YELL": "Yell",
@@ -383,7 +406,8 @@ class WoWAddonBufReader:
         log_channel = _ADDON_CHANNEL_TO_LOG.get(channel)
         if log_channel is None:
             return None
-        return f"{ts}  [{log_channel}] {author}: {text}"
+        who = author if author else "Unknown"
+        return f"{ts}  [{log_channel}] {who}: {text}"
 
 
 class MemoryChatWatcher:

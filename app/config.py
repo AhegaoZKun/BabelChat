@@ -8,7 +8,7 @@ import os
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -64,6 +64,19 @@ class AppConfig:
     # Overlay
     overlay_opacity: int = 180
     overlay_font_size: int = 10
+    overlay_theme: str = "wow"  # preset id from overlay_theme.PRESETS, or "custom"
+    overlay_bg_color: str = "#000000"
+    overlay_text_color: str = "#FFFFFF"
+    overlay_original_color: str = "#888888"
+    overlay_translation_color: str = "#FFD200"
+    overlay_timestamp_color: str = "#666666"
+    overlay_tl_on_color: str = "#40FF40"
+    overlay_tl_off_color: str = "#FF4040"
+    overlay_close_color: str = "#FF4040"
+    overlay_tool_color: str = "#CCCCCC"
+    overlay_corner_radius: int = 8
+    overlay_font_family: str = ""  # empty = system default
+    overlay_channel_colors: dict = field(default_factory=dict)  # slot → "#RRGGBB"
     overlay_x: int = 100
     overlay_y: int = 100
     overlay_width: int = 450
@@ -82,6 +95,10 @@ class AppConfig:
     channels_whisper: bool = True
     channels_yell: bool = False
     channels_instance: bool = True
+    channels_trade: bool = False
+    channels_general: bool = False
+    channels_services: bool = False
+    channels_lfg: bool = False
 
     # Translation
     skip_own_messages: bool = True
@@ -127,7 +144,9 @@ class AppConfig:
             try:
                 data = json.loads(try_path.read_text(encoding="utf-8"))
                 defaults = asdict(cls())
-                defaults.update(data)
+                # Ignore unknown keys (e.g. fields removed in newer versions)
+                # instead of crashing cls(**...) with a TypeError.
+                defaults.update({k: v for k, v in data.items() if k in defaults})
                 return cls(**defaults)
             except FileNotFoundError:
                 continue
