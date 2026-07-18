@@ -116,6 +116,7 @@ _CHANNEL_BADGE: dict[Channel, str] = {
 
 _MAX_ROWS = 200
 _APP_ID = "com.babelchat.Overlay"
+_WOW_STATUS_INTERVAL = 2  # seconds between WoW connection status polls
 _MIN_W = 240
 _MIN_H = 140
 # Languages offered in the reply target-language selector (ISO codes).
@@ -235,6 +236,7 @@ class ChatOverlayGtk:
 
         # Callbacks wired by main (so this module stays UI-only).
         self.on_quit: Callable[[], None] | None = None
+        self.on_visibility_changed: Callable[[bool], None] | None = None
         self.on_settings: Callable[[], None] | None = None
         self.on_reply_send: Callable[[str], None] | None = None
         self.on_toggle_translation: Callable[[bool], None] | None = None
@@ -381,6 +383,13 @@ class ChatOverlayGtk:
         return 100, 100
 
     def _on_activate(self, app: Gtk.Application) -> None:
+        # Gtk.Application is single-instance per app id: launching the binary/
+        # AppImage again (e.g. from a pinned taskbar launcher) forwards a
+        # second "activate" here instead of starting a new process. Treat that
+        # as a show/hide toggle so the pinned icon acts like a taskbar button.
+        if self._win is not None:
+            self.toggle_visible()
+            return
         width = max(_MIN_W, int(self._config.overlay_width or 480))
         height = max(_MIN_H, int(self._config.overlay_height or 320))
         self._cur_w = width
@@ -426,6 +435,10 @@ class ChatOverlayGtk:
         title = Gtk.Label(label="BabelChat")
         title.set_xalign(0.0)
         title.set_hexpand(True)
+        # WoW connection status ("WoW: ✔ / … / ✖"), polled via the checker
+        # wired by main — same behavior as the PyQt overlay.
+        self._wow_status = Gtk.Label(label="WoW: ?")
+        self._wow_status.add_css_class("bc-wow")
         # Quick translation on/off toggle. Reflects/controls pipeline state via
         # the on_toggle_translation callback wired by main.
         active = bool(self._config.translation_enabled_default)
@@ -441,6 +454,7 @@ class ChatOverlayGtk:
         quit_btn.add_css_class("bc-close")
         quit_btn.connect("clicked", lambda _b: self.on_quit and self.on_quit())
         bar.append(title)
+        bar.append(self._wow_status)
         bar.append(self._translate_toggle)
         bar.append(settings_btn)
         bar.append(quit_btn)
@@ -548,6 +562,10 @@ class ChatOverlayGtk:
         self._copy_btn.connect("clicked", self._on_copy_clicked)
         result_row.append(self._reply_status)
         result_row.append(self._copy_btn)
+        # Empty status + disabled Copy are dead space — keep the row hidden
+        # until a reply translation is in flight or done.
+        result_row.set_visible(False)
+        self._result_row = result_row
         self._last_reply_text: str = ""
 
         root.append(bar)
@@ -560,15 +578,14 @@ class ChatOverlayGtk:
         # is cleanest from the bottom-right (the anchored corner stays put).
         # Like dragging, live resize would jitter, so we show a ghost outline at
         # the proposed size and commit to the real window on release.
-        grip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        spacer = Gtk.Box()
-        spacer.set_hexpand(True)
-        grip = Gtk.Label(label="⤡")
+        # Floated over the content via Gtk.Overlay so it doesn't cost a row.
+        grip = Gtk.Label(label="⌟")
         grip.add_css_class("bc-grip")
         grip.set_tooltip_text("Drag to resize")
-        grip_row.append(spacer)
-        grip_row.append(grip)
-        root.append(grip_row)
+        grip.set_halign(Gtk.Align.END)
+        grip.set_valign(Gtk.Align.END)
+        grip.set_margin_end(0)
+        grip.set_margin_bottom(0)
 
         resize = Gtk.GestureDrag.new()
         self._resize_start: tuple[int, int] = (0, 0)
@@ -625,8 +642,10 @@ class ChatOverlayGtk:
         resize.connect("drag-update", _resize_update)
         resize.connect("drag-end", _resize_end)
         grip.add_controller(resize)
-        root.append(self._reply_status)
-        win.set_child(root)
+        overlay_stack = Gtk.Overlay()
+        overlay_stack.set_child(root)
+        overlay_stack.add_overlay(grip)
+        win.set_child(overlay_stack)
 
         # Styling: only THIS overlay window's background is made transparent
         # (scoped via the .bc-window class) — using a bare `window` selector
@@ -655,12 +674,45 @@ class ChatOverlayGtk:
                 self._add_or_update_row(queued)
 
     # ── reply handling ────────────────────────────────────────────────────
+    def set_wow_status_checker(self, checker) -> None:
+        """Set a callable returning 'attached' / 'searching' / other and start
+        polling it every _WOW_STATUS_INTERVAL seconds."""
+        self._wow_checker = checker
+        GLib.timeout_add_seconds(_WOW_STATUS_INTERVAL, self._update_wow_status)
+        self._update_wow_status()
+
+    def _update_wow_status(self) -> bool:
+        checker = getattr(self, "_wow_checker", None)
+        label = getattr(self, "_wow_status", None)
+        if checker is None:
+            return False  # stop polling
+        if label is None:
+            return True  # window not built yet — keep polling
+        try:
+            status = checker()
+        except Exception:  # noqa: BLE001 — status polling must never crash the UI
+            status = "offline"
+        for cls in ("bc-wow-ok", "bc-wow-search", "bc-wow-off"):
+            label.remove_css_class(cls)
+        if status == "attached":
+            label.set_label("WoW: \u2714")
+            label.add_css_class("bc-wow-ok")
+        elif status == "searching":
+            label.set_label("WoW: \u2026")
+            label.add_css_class("bc-wow-search")
+        else:
+            label.set_label("WoW: \u2716")
+            label.add_css_class("bc-wow-off")
+        return True  # keep the GLib timer running
+
     def toggle_visible(self) -> bool:
         """Show/hide the overlay window; returns the new visibility."""
         if self._win is None:
             return False
         visible = not self._win.get_visible()
         self._win.set_visible(visible)
+        if self.on_visibility_changed is not None:
+            self.on_visibility_changed(visible)
         return visible
 
     def set_translation_active(self, enabled: bool) -> None:
@@ -699,6 +751,10 @@ class ChatOverlayGtk:
             f".bc-chat {{ padding: 4px; }}"
             f".bc-chat label {{ {shadow} }}"
             f".bc-grip {{ color: #888888; padding: 0 4px; }}"
+            f".bc-wow {{ font-size: {max(8, font_px - 2)}px; padding: 0 4px; color: #888888; }}"
+            f".bc-wow-ok {{ color: {theme.tl_on_color}; }}"
+            f".bc-wow-search {{ color: {theme.translation_color}; }}"
+            f".bc-wow-off {{ color: #888888; }}"
             # Title-bar controls, ported from the PyQt overlay stylesheets.
             f".bc-bar button {{ padding: 0 6px; min-height: 0; font-size: {max(8, font_px - 2)}px;"
             f" border-radius: 3px; box-shadow: none; font-weight: bold; }}"
@@ -769,6 +825,8 @@ class ChatOverlayGtk:
             return
         entry.set_text("")
         if self._reply_status is not None:
+            if getattr(self, "_result_row", None) is not None:
+                self._result_row.set_visible(True)
             self._reply_status.set_markup(
                 '<span foreground="#cccc66">translating…</span>'
             )

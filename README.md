@@ -153,7 +153,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # In WoW (once): /run BabelChatDB.companion = {enabled = true}
-QT_QPA_PLATFORM=xcb python -m app.main
+python -m app.main_gtk
 ```
 
 ### WoW Addon (Manual)
