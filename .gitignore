@@ -41,6 +41,8 @@ AutoChatLog/
 # Build artifacts
 build/
 dist/
+AppDir/
+tools/
 
 # Rust build artifacts
 babelchat_scanner/target/
@@ -76,3 +78,4 @@ babelchat_scanner_*/target/
 # Local dev tools (fork-local)
 .frai/
 .claude-lib/
+

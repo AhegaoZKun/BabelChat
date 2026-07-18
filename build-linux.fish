@@ -83,7 +83,32 @@ end
 
 # desktop file + icon (names must match: Icon=babelchat)
 cp packaging/babelchat.desktop $APPDIR/usr/share/applications/babelchat.desktop
-cp assets/icon.png $APPDIR/usr/share/icons/hicolor/256x256/apps/babelchat.png
+# linuxdeploy only accepts standard icon resolutions — scale to exact 256x256
+# (source is 784x784). GdkPixbuf is guaranteed present on a GTK4 host.
+python -c "
+import gi; gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import GdkPixbuf
+pb = GdkPixbuf.Pixbuf.new_from_file_at_scale('assets/icon.png', 256, 256, True)
+pb.savev('$APPDIR/usr/share/icons/hicolor/256x256/apps/babelchat.png', 'png', [], [])
+"
+or begin; echo "✗  Icon scaling failed."; exit 1; end
+
+# gtk4-layer-shell must be loaded BEFORE libwayland-client for its Wayland
+# interposition to work (see its README on language bindings). Inside the
+# AppImage the runtime-CDLL approach isn't enough (two copies of the lib can
+# exist: PyInstaller _internal + usr/lib, and gi's loads too late), so force
+# a single early copy via LD_PRELOAD in an AppRun hook — linuxdeploy sources
+# every file in apprun_hooks/ before launching the app.
+mkdir -p $APPDIR/apprun_hooks
+printf '%s\n' \
+    '# Load gtk4-layer-shell before libwayland-client (interposition requirement)' \
+    'for _bc_lsh in "$APPDIR"/usr/lib/libgtk4-layer-shell.so.0 "$APPDIR"/usr/lib/libgtk4-layer-shell.so; do' \
+    '    if [ -f "$_bc_lsh" ]; then' \
+    '        export LD_PRELOAD="$_bc_lsh${LD_PRELOAD:+:$LD_PRELOAD}"' \
+    '        break' \
+    '    fi' \
+    'done' \
+    > $APPDIR/apprun_hooks/00-gtk4-layer-shell-preload.sh
 
 # ── 4. locate tooling ─────────────────────────────────────────────────────
 set -l LD (command -v linuxdeploy-x86_64.AppImage; or echo $TOOLS_DIR/linuxdeploy-x86_64.AppImage)
@@ -98,10 +123,28 @@ if not test -f $GTKPLUGIN
 end
 chmod +x $LD $GTKPLUGIN
 
+# Patch the GTK plugin for modern GTK4 hosts (e.g. Arch): they ship no
+# /usr/lib/gtk-4.0 module dir, and the plugin's unconditional copy of it is
+# fatal. Make it conditional. Idempotent; only touches a writable local copy.
+if test -w $GTKPLUGIN; and grep -q 'copy_lib_tree "$gtk4_libdir" "$APPDIR/"' $GTKPLUGIN
+    sed -i 's|copy_lib_tree "$gtk4_libdir" "$APPDIR/"|if [ -d "$gtk4_libdir" ]; then copy_lib_tree "$gtk4_libdir" "$APPDIR/"; else echo "No GTK4 module dir on host - skipping"; fi|' $GTKPLUGIN
+    echo "▶  Patched GTK plugin: GTK4 module copy is now conditional"
+end
+# The plugin's AppRun hook hard-forces GDK_BACKEND=x11 (a GTK3-era Wayland
+# crash workaround) which makes layer-shell impossible — the overlay came up
+# as a plain X11 window. Only force x11 when there is no Wayland session.
+if test -w $GTKPLUGIN; and grep -q '^export GDK_BACKEND=x11' $GTKPLUGIN
+    sed -i 's|^export GDK_BACKEND=x11.*|if [ -z "$WAYLAND_DISPLAY" ]; then export GDK_BACKEND=x11; fi|' $GTKPLUGIN
+    echo "▶  Patched GTK plugin: GDK_BACKEND=x11 now only on non-Wayland sessions"
+end
+
 # ── 5. run linuxdeploy + GTK plugin → AppImage ────────────────────────────
 echo "▶  Bundling GTK stack + building AppImage…"
 # The gtk plugin reads these; keep PATH visible to it.
 set -x DEPLOY_GTK_VERSION 4
+# Arch libs carry .relr.dyn sections that linuxdeploy's bundled strip can't
+# parse; skip stripping (cosmetic, slightly larger AppImage).
+set -x NO_STRIP 1
 env PATH="$TOOLS_DIR:$PATH" $LD \
     --appdir $APPDIR \
     --plugin gtk \
