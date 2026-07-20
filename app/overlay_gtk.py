@@ -374,6 +374,13 @@ class ChatOverlayGtk:
             return "x11"
         return "plain"
 
+    def _sync_cur_size(self) -> None:
+        """Refresh tracked size from the real window (WMs may constrain it)."""
+        if self._win is not None:
+            w, h = self._win.get_width(), self._win.get_height()
+            if w > 0 and h > 0:
+                self._cur_w, self._cur_h = w, h
+
     def _position_ghost(self, ghost: Gtk.Window, top: int, left: int) -> None:
         if self._mode == "layer":
             LayerShell.set_margin(ghost, LayerShell.Edge.TOP, top)
@@ -531,6 +538,7 @@ class ChatOverlayGtk:
         # Top bar: title + settings/quit buttons.
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         bar.add_css_class("bc-bar")
+        bar.set_cursor_from_name("grab")
         title = Gtk.Label(label="BabelChat")
         title.set_xalign(0.0)
         title.set_hexpand(True)
@@ -545,12 +553,15 @@ class ChatOverlayGtk:
         self._translate_toggle.set_active(active)
         self._translate_toggle.set_tooltip_text("Toggle translation on/off")
         self._translate_toggle.add_css_class("bc-tl")
+        self._translate_toggle.set_cursor_from_name("pointer")
         self._translate_toggle.connect("toggled", self._on_translate_toggled)
         settings_btn = Gtk.Button(label="⚙")
         settings_btn.add_css_class("bc-tool")
+        settings_btn.set_cursor_from_name("pointer")
         settings_btn.connect("clicked", lambda _b: self.on_settings and self.on_settings())
         quit_btn = Gtk.Button(label="✕")
         quit_btn.add_css_class("bc-close")
+        quit_btn.set_cursor_from_name("pointer")
         quit_btn.connect("clicked", lambda _b: self.on_quit and self.on_quit())
         bar.append(title)
         bar.append(self._wow_status)
@@ -573,6 +584,7 @@ class ChatOverlayGtk:
             # — a press without movement (e.g. clicking a titlebar button) fires
             # drag-begin too, and we don't want the ghost to flash on a click.
             self._drag_start = (self._margin_top, self._margin_left)
+            self._sync_cur_size()
 
         def _drag_update(_g: Gtk.GestureDrag, ox: float, oy: float) -> None:
             if self._mode == "plain":
@@ -583,8 +595,9 @@ class ChatOverlayGtk:
             # Create the ghost lazily on first real movement.
             if self._ghost is None:
                 self._ghost = self._make_ghost(
-                    width, height, self._drag_start[0], self._drag_start[1]
+                    self._cur_w, self._cur_h, self._drag_start[0], self._drag_start[1]
                 )
+                bar.set_cursor_from_name("grabbing")
             st, sl = self._drag_start
             top = max(0, st + int(oy))
             left = max(0, sl + int(ox))
@@ -599,6 +612,7 @@ class ChatOverlayGtk:
             self._margin_left = max(0, sl + int(ox))
             self._ghost.destroy()
             self._ghost = None
+            bar.set_cursor_from_name("grab")
             if self._win is not None:
                 if self._mode == "layer":
                     LayerShell.set_margin(self._win, LayerShell.Edge.TOP, self._margin_top)
@@ -647,6 +661,7 @@ class ChatOverlayGtk:
             self._reply_lang_dd.set_selected(_REPLY_LANGS.index(self._reply_lang))
         except ValueError:
             self._reply_lang_dd.set_selected(0)
+        self._reply_lang_dd.set_cursor_from_name("pointer")
         self._reply_lang_dd.set_tooltip_text("Translate reply into…")
         self._reply_lang_dd.connect("notify::selected", self._on_reply_lang_changed)
 
@@ -662,6 +677,7 @@ class ChatOverlayGtk:
         self._reply_status.set_wrap(True)
         self._reply_status.set_selectable(True)
         self._copy_btn = Gtk.Button(label="Copy")
+        self._copy_btn.set_cursor_from_name("pointer")
         self._copy_btn.set_sensitive(False)
         self._copy_btn.set_tooltip_text("Copy translation to clipboard")
         self._copy_btn.connect("clicked", self._on_copy_clicked)
@@ -691,6 +707,7 @@ class ChatOverlayGtk:
         grip.set_content_height(16)
         grip.add_css_class("bc-grip")
         grip.set_tooltip_text("Drag to resize")
+        grip.set_cursor_from_name("nwse-resize")
         grip.set_halign(Gtk.Align.END)
         grip.set_valign(Gtk.Align.END)
 
@@ -710,6 +727,7 @@ class ChatOverlayGtk:
         self._resize_start: tuple[int, int] = (0, 0)
 
         def _resize_begin(_g: Gtk.GestureDrag, _sx: float, _sy: float) -> None:
+            self._sync_cur_size()
             self._resize_start = (self._cur_w, self._cur_h)
 
         def _resize_update(_g: Gtk.GestureDrag, ox: float, oy: float) -> None:
@@ -910,6 +928,7 @@ class ChatOverlayGtk:
                 btn.set_group(first)  # radio behavior: only one active
             btn.set_active(name == self._active_filter)
             btn.connect("toggled", self._on_filter_toggled, name)
+            btn.set_cursor_from_name("pointer")
             self._filter_buttons[name] = btn
             bar.append(btn)
         scroller.set_child(bar)
