@@ -56,14 +56,16 @@ def _load_layer_shell() -> None:
 _load_layer_shell()
 
 import contextlib
+import logging
 import threading  # noqa: E402
 from collections.abc import Callable  # noqa: E402
 
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
 
 from app.config import AppConfig
@@ -71,6 +73,9 @@ from app.overlay_theme import OverlayTheme, dim, hex_to_rgb, resolve_theme  # no
 from app.parser import Channel  # noqa: E402
 from app.pipeline import TranslatedMessage  # noqa: E402
 from app.translator import TranslatorService  # noqa: E402
+from app.x11_window import apply_overlay_hints, get_xid, move_window  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 # Channel → theme color slot (see app/overlay_theme.py). Related channels share
 # a slot the same way WoW colors them; the active theme supplies the colors.
@@ -212,6 +217,9 @@ class ChatOverlayGtk:
     def __init__(self, config: AppConfig) -> None:
         self._config = config
         self._theme: OverlayTheme = resolve_theme(config)
+        # "layer" (Wayland + layer-shell), "x11" (EWMH always-on-top), or
+        # "plain" (no overlay mechanism, e.g. GNOME Wayland).
+        self._mode: str = "layer"
         self._translator: TranslatorService | None = None
         self._reply_lang = "EN"
         self._rows: dict[int, _MessageRow] = {}  # msg_id → row (streaming updates)
@@ -317,6 +325,58 @@ class ChatOverlayGtk:
         GLib.idle_add(_do)
 
     # ── UI construction ───────────────────────────────────────────────────
+    def _show_plain_mode_notice(self, win: Gtk.Window) -> None:
+        """One-time heads-up when no overlay mechanism exists (GNOME Wayland)."""
+        if getattr(self._config, "fallback_notice_shown", False):
+            return
+        self._config.fallback_notice_shown = True
+        with contextlib.suppress(Exception):
+            self._config.save()
+        msg = (
+            "This compositor doesn't support overlay windows (no layer-shell "
+            "protocol — this is the case on GNOME Wayland), so BabelChat is "
+            "running as a regular window.\n\n"
+            "Tip: right-click the title bar and enable \u201cAlways on "
+            "Top\u201d, and run the game in borderless windowed mode."
+        )
+        try:
+            dlg = Gtk.AlertDialog()
+            dlg.set_message("Overlay not available on this desktop")
+            dlg.set_detail(msg)
+            dlg.show(win)
+        except Exception:  # noqa: BLE001 — a missing dialog must not break startup
+            logger.info("plain mode notice: %s", msg)
+
+    def _detect_mode(self) -> str:
+        """Pick the overlay mechanism for the current session.
+
+        Wayland + a compositor that advertises layer-shell → "layer".
+        X11 (or XWayland) → "x11": EWMH _NET_WM_STATE_ABOVE fallback.
+        Anything else (notably GNOME Wayland, where Mutter refuses the
+        layer-shell protocol) → "plain" regular window.
+        """
+        display = Gdk.Display.get_default()
+        backend = type(display).__name__ if display is not None else ""
+        if "Wayland" in backend:
+            try:
+                if LayerShell.is_supported():
+                    return "layer"
+            except Exception:  # noqa: BLE001 — old bindings without is_supported
+                logger.debug("layer-shell support probe failed", exc_info=True)
+            return "plain"
+        if "X11" in backend:
+            return "x11"
+        return "plain"
+
+    def _position_ghost(self, ghost: Gtk.Window, top: int, left: int) -> None:
+        if self._mode == "layer":
+            LayerShell.set_margin(ghost, LayerShell.Edge.TOP, top)
+            LayerShell.set_margin(ghost, LayerShell.Edge.LEFT, left)
+        elif self._mode == "x11":
+            xid = get_xid(ghost)
+            if xid:
+                move_window(xid, left, top)
+
     def _make_ghost(self, width: int, height: int, top: int, left: int) -> Gtk.Window:
         """Create a transparent layer-shell outline window for drag feedback."""
         ghost = Gtk.Window()
@@ -325,14 +385,28 @@ class ChatOverlayGtk:
         # freely resized smaller during the preview — set_size_request is a
         # minimum, and pinning it to the start size would block inward preview.
         ghost.set_size_request(_MIN_W, _MIN_H)
-        LayerShell.init_for_window(ghost)
-        LayerShell.set_layer(ghost, LayerShell.Layer.OVERLAY)
-        LayerShell.set_anchor(ghost, LayerShell.Edge.TOP, True)
-        LayerShell.set_anchor(ghost, LayerShell.Edge.LEFT, True)
-        LayerShell.set_margin(ghost, LayerShell.Edge.TOP, top)
-        LayerShell.set_margin(ghost, LayerShell.Edge.LEFT, left)
+        if self._mode == "layer":
+            LayerShell.init_for_window(ghost)
+            LayerShell.set_layer(ghost, LayerShell.Layer.OVERLAY)
+            LayerShell.set_anchor(ghost, LayerShell.Edge.TOP, True)
+            LayerShell.set_anchor(ghost, LayerShell.Edge.LEFT, True)
+            LayerShell.set_margin(ghost, LayerShell.Edge.TOP, top)
+            LayerShell.set_margin(ghost, LayerShell.Edge.LEFT, left)
+        elif self._mode == "x11":
+            ghost.set_decorated(False)
+
+            def _ghost_mapped(g: Gtk.Window) -> None:
+                xid = get_xid(g)
+                if xid:
+                    apply_overlay_hints(xid)
+                    move_window(xid, left, top)
+
+            ghost.connect("map", _ghost_mapped)
         # Ghost must never take input — it's purely visual feedback.
-        LayerShell.set_keyboard_mode(ghost, LayerShell.KeyboardMode.NONE)
+        if self._mode == "layer":
+            LayerShell.set_keyboard_mode(ghost, LayerShell.KeyboardMode.NONE)
+        else:
+            ghost.set_can_focus(False)
 
         # Bright outline + faint fill so it's visible over busy game scenes.
         frame = Gtk.Box()
@@ -410,11 +484,29 @@ class ChatOverlayGtk:
         # window can be dragged (margins are the reference frame the drag
         # adjusts). We compute initial margins that center it on the output the
         # first time, then drag/persist from there.
-        LayerShell.init_for_window(win)
-        LayerShell.set_layer(win, LayerShell.Layer.OVERLAY)
-        LayerShell.set_anchor(win, LayerShell.Edge.TOP, True)
-        LayerShell.set_anchor(win, LayerShell.Edge.LEFT, True)
-        LayerShell.set_keyboard_mode(win, LayerShell.KeyboardMode.ON_DEMAND)
+        self._mode = self._detect_mode()
+        logger.info("overlay mode: %s", self._mode)
+        if self._mode == "layer":
+            LayerShell.init_for_window(win)
+            LayerShell.set_layer(win, LayerShell.Layer.OVERLAY)
+            LayerShell.set_anchor(win, LayerShell.Edge.TOP, True)
+            LayerShell.set_anchor(win, LayerShell.Edge.LEFT, True)
+            LayerShell.set_keyboard_mode(win, LayerShell.KeyboardMode.ON_DEMAND)
+        elif self._mode == "x11":
+            # EWMH fallback: undecorated, always-on-top, sticky, off the
+            # taskbar — the same overlay behavior the PyQt frontend gets on
+            # Windows/X11. Hints must be (re)sent once the window is mapped.
+            win.set_decorated(False)
+
+            def _win_mapped(w: Gtk.Window) -> None:
+                xid = get_xid(w)
+                if xid:
+                    apply_overlay_hints(xid)
+                    move_window(xid, self._margin_left, self._margin_top)
+
+            win.connect("map", _win_mapped)
+        else:
+            self._show_plain_mode_notice(win)
 
         # Initial margins: use stored values if they look on-screen, else center
         # on the primary monitor. Stored absolute coords from the old Qt build
@@ -423,8 +515,9 @@ class ChatOverlayGtk:
         margin_top, margin_left = self._initial_margins(win, width, height)
         self._margin_top = margin_top
         self._margin_left = margin_left
-        LayerShell.set_margin(win, LayerShell.Edge.TOP, margin_top)
-        LayerShell.set_margin(win, LayerShell.Edge.LEFT, margin_left)
+        if self._mode == "layer":
+            LayerShell.set_margin(win, LayerShell.Edge.TOP, margin_top)
+            LayerShell.set_margin(win, LayerShell.Edge.LEFT, margin_left)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         root.add_css_class("bc-root")
@@ -476,6 +569,8 @@ class ChatOverlayGtk:
             self._drag_start = (self._margin_top, self._margin_left)
 
         def _drag_update(_g: Gtk.GestureDrag, ox: float, oy: float) -> None:
+            if self._mode == "plain":
+                return  # the WM's own decorations move the window
             # Ignore sub-threshold jitter so a click isn't treated as a drag.
             if abs(ox) < 3 and abs(oy) < 3 and self._ghost is None:
                 return
@@ -487,8 +582,7 @@ class ChatOverlayGtk:
             st, sl = self._drag_start
             top = max(0, st + int(oy))
             left = max(0, sl + int(ox))
-            LayerShell.set_margin(self._ghost, LayerShell.Edge.TOP, top)
-            LayerShell.set_margin(self._ghost, LayerShell.Edge.LEFT, left)
+            self._position_ghost(self._ghost, top, left)
 
         def _drag_end(_g: Gtk.GestureDrag, ox: float, oy: float) -> None:
             # If no ghost was created, this was a click, not a drag — do nothing.
@@ -500,8 +594,13 @@ class ChatOverlayGtk:
             self._ghost.destroy()
             self._ghost = None
             if self._win is not None:
-                LayerShell.set_margin(self._win, LayerShell.Edge.TOP, self._margin_top)
-                LayerShell.set_margin(self._win, LayerShell.Edge.LEFT, self._margin_left)
+                if self._mode == "layer":
+                    LayerShell.set_margin(self._win, LayerShell.Edge.TOP, self._margin_top)
+                    LayerShell.set_margin(self._win, LayerShell.Edge.LEFT, self._margin_left)
+                elif self._mode == "x11":
+                    xid = get_xid(self._win)
+                    if xid:
+                        move_window(xid, self._margin_left, self._margin_top)
             self._config.overlay_y = self._margin_top
             self._config.overlay_x = self._margin_left
             with contextlib.suppress(Exception):
@@ -579,13 +678,27 @@ class ChatOverlayGtk:
         # Like dragging, live resize would jitter, so we show a ghost outline at
         # the proposed size and commit to the real window on release.
         # Floated over the content via Gtk.Overlay so it doesn't cost a row.
-        grip = Gtk.Label(label="⌟")
+        # Drawn corner bracket instead of a font glyph: glyphs never fill
+        # their em box, so a Label can't sit flush in the corner.
+        grip = Gtk.DrawingArea()
+        grip.set_content_width(16)
+        grip.set_content_height(16)
         grip.add_css_class("bc-grip")
         grip.set_tooltip_text("Drag to resize")
         grip.set_halign(Gtk.Align.END)
         grip.set_valign(Gtk.Align.END)
-        grip.set_margin_end(0)
-        grip.set_margin_bottom(0)
+
+        def _draw_grip(area: Gtk.DrawingArea, cr, w: int, h: int) -> None:
+            c = area.get_color()  # follows .bc-grip CSS color
+            cr.set_source_rgba(c.red, c.green, c.blue, c.alpha)
+            cr.set_line_width(2.0)
+            # corner bracket: along the bottom edge and up the right edge
+            cr.move_to(w * 0.3, h - 1.0)
+            cr.line_to(w - 1.0, h - 1.0)
+            cr.line_to(w - 1.0, h * 0.3)
+            cr.stroke()
+
+        grip.set_draw_func(_draw_grip)
 
         resize = Gtk.GestureDrag.new()
         self._resize_start: tuple[int, int] = (0, 0)
@@ -750,7 +863,7 @@ class ChatOverlayGtk:
             f" color: {theme.translation_color}; border-color: {theme.translation_color}; }}"
             f".bc-chat {{ padding: 4px; }}"
             f".bc-chat label {{ {shadow} }}"
-            f".bc-grip {{ color: #888888; padding: 0 4px; }}"
+            f".bc-grip {{ color: #888888; }}"
             f".bc-wow {{ font-size: {max(8, font_px - 2)}px; padding: 0 4px; color: #888888; }}"
             f".bc-wow-ok {{ color: {theme.tl_on_color}; }}"
             f".bc-wow-search {{ color: {theme.translation_color}; }}"
