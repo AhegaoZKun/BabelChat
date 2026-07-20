@@ -64,9 +64,15 @@ import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-gi.require_version("Gtk4LayerShell", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
-from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
+
+# gtk4-layer-shell is only needed for the Wayland layer mode; X11-only
+# distros often don't package it, and the x11/plain fallbacks must still run.
+try:
+    gi.require_version("Gtk4LayerShell", "1.0")
+    from gi.repository import Gtk4LayerShell as LayerShell  # noqa: E402
+except (ValueError, ImportError):  # typelib not installed
+    LayerShell = None
 
 from app.config import AppConfig
 from app.overlay_theme import OverlayTheme, dim, hex_to_rgb, resolve_theme  # noqa: E402
@@ -359,7 +365,7 @@ class ChatOverlayGtk:
         backend = type(display).__name__ if display is not None else ""
         if "Wayland" in backend:
             try:
-                if LayerShell.is_supported():
+                if LayerShell is not None and LayerShell.is_supported():
                     return "layer"
             except Exception:  # noqa: BLE001 — old bindings without is_supported
                 logger.debug("layer-shell support probe failed", exc_info=True)
