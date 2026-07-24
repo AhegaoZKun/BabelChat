@@ -20,7 +20,16 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint
-        run: ruff check app/ tests/
+        run: ruff check app/ tests/ .github/scripts/
 
       - name: Test
-        run: pytest
+        run: pytest --junitxml=report.xml
+
+      # A green pytest cannot tell "all tests pass" from "the tests are gone".
+      # Ratchet: raising MIN_TESTS is free, lowering it has to be deliberate.
+      # The number is junit's `tests` attribute — passed plus skipped, which is
+      # one more than pytest's "collected N items" line.
+      - name: Guard test count
+        env:
+          MIN_TESTS: "169"
+        run: python .github/scripts/check_test_count.py report.xml ${{ env.MIN_TESTS }}
