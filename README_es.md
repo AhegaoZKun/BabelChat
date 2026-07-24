@@ -206,7 +206,7 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 ## Limitaciones
 
 - **Requiere acceso elevado a la memoria** — Administrador en Windows; `ptrace_scope=0` en Linux
-- **Linux: el overlay requiere XWayland** — ejecutar con `QT_QPA_PLATFORM=xcb`; Wayland puro sin XWayland no está soportado
+- **Compositor de Linux** – Requiere que el compositor sea compatible con layer-shell (GNOME no lo es).
 - **Límite DeepL Free** — 500K caracteres/mes (~10K mensajes). Hay planes de pago
 - **Mensajes salientes** — copiar → pegar en chat WoW (por diseño, cumplimiento ToS)
 

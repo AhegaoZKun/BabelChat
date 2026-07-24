@@ -89,7 +89,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
     def _on_next(self, _btn: Gtk.Button) -> None:
         if self._index == 1 and not self._has_any_key():
             self._api_status.set_markup(
-                '<span foreground="#cc6666">Enter an API key or enable offline translation to continue.</span>'
+                '<span foreground="#cc6666">Enter an API key to continue.</span>'
             )
             return
         if self._index == len(self._pages) - 1:

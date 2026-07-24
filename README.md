@@ -153,7 +153,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # In WoW (once): /run BabelChatDB.companion = {enabled = true}
-QT_QPA_PLATFORM=xcb python -m app.main
+python -m app.main_gtk
 ```
 
 ### WoW Addon (Manual)
@@ -208,9 +208,10 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 ## Limitations
 
 - **Requires elevated memory access** — Administrator on Windows; `ptrace_scope=0` on Linux
-- **Linux: overlay requires XWayland** — run with `QT_QPA_PLATFORM=xcb`; pure Wayland without XWayland is not supported
+- **Linux Compositor** – Requires compositor to support layer-shell (GNOME doesn't)
 - **DeepL Free limit** — 500K chars/month (~10K messages). Paid plans available
 - **Outgoing messages** — copy → paste in WoW chat (by design, ToS compliance)
+- **
 
 ## Tech Stack
 
