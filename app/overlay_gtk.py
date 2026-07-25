@@ -18,18 +18,25 @@ from __future__ import annotations
 
 # gtk4-layer-shell MUST be loaded before libwayland-client (i.e. before gi pulls
 # in GTK). Loading the shared object explicitly guarantees link order.
+import logging as _logging
 import os as _os
 import sys as _sys
 from ctypes import CDLL
 
 
-def _load_layer_shell() -> None:
-    """Load libgtk4-layer-shell before gi imports GTK.
+def _load_layer_shell() -> bool:
+    """Preload libgtk4-layer-shell before gi imports GTK, if it is available.
 
     Must happen before `gi` pulls in libwayland-client. In a PyInstaller
-    onefile bundle the .so is extracted to sys._MEIPASS (not on the system
-    loader path), so try the bundled copy first, then fall back to the system
-    library name.
+    bundle the .so is placed under sys._MEIPASS (not on the system loader
+    path), so try the bundled copy first, then fall back to the system name.
+
+    Returns True if the library was loaded. A missing library is NOT fatal:
+    layer-shell is only needed for the Wayland layer mode, and X11-only
+    distros often don't package it. Callers below fall back to X11/plain when
+    the Gtk4LayerShell typelib can't be imported, so here we only warn and let
+    that path take over — raising would crash the app before the fallback the
+    surrounding code already provides could ever run.
     """
     candidates = []
     meipass = getattr(_sys, "_MEIPASS", None)
@@ -44,16 +51,19 @@ def _load_layer_shell() -> None:
     for cand in candidates:
         try:
             CDLL(cand)
-            return
+            return True
         except OSError as exc:  # not found at this path; try next
             last_err = exc
-    raise OSError(
-        "Could not load libgtk4-layer-shell.so. Install it "
-        "(e.g. `sudo pacman -S gtk4-layer-shell`)."
-    ) from last_err
+    _logging.getLogger(__name__).warning(
+        "gtk4-layer-shell not loadable (%s); the Wayland overlay layer is "
+        "unavailable, falling back to X11/plain. Install gtk4-layer-shell for "
+        "the layer-shell overlay (e.g. `sudo pacman -S gtk4-layer-shell`).",
+        last_err,
+    )
+    return False
 
 
-_load_layer_shell()
+_layer_shell_loaded = _load_layer_shell()
 
 import contextlib
 import logging
