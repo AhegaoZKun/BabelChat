@@ -211,7 +211,6 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 - **Linux Compositor** – Requires compositor to support layer-shell (GNOME doesn't)
 - **DeepL Free limit** — 500K chars/month (~10K messages). Paid plans available
 - **Outgoing messages** — copy → paste in WoW chat (by design, ToS compliance)
-- **
 
 ## Tech Stack
 
