@@ -1,6 +1,6 @@
 # Changelog / История изменений / Registro de cambios
 
-## [3.3.0] — 2026-07-14
+## [3.3.0] — 2026-07-25
 
 ### Added / Добавлено / Añadido
 
@@ -10,12 +10,17 @@
   - Quick translation on/off toggle and reply-language selector
   - Settings window with live apply — no restart needed
   - First-run setup wizard (GTK)
+- **Linux packages: AppImage, `.deb` and `.rpm`** — the release now builds all three on `ubuntu-24.04` and attaches them to the GitHub Release. Each artefact is verified by installing it into a clean `debian:13` / `ubuntu:24.04` / `fedora:41` container and confirming it links and reaches GTK init — not by the fact that it built.
 - **Automatic backend fallback** — if your priority backend (DeepL or Microsoft) fails or hits quota, the other configured backend is tried automatically instead of dropping the message
 - **New chat channels** — Trade, General, and Services are now captured, filterable, and translated end-to-end (addon + app)
 - `packaging/` with `babelchat.desktop` and a fish build script (`build-linux.fish`) that produces a self-contained Linux AppImage (Rust scanner → PyInstaller → linuxdeploy + GTK bundling)
 
 ### Fixed / Исправлено / Corregido
 
+- **Linux build didn't run off a clean machine** — three defects that only surfaced without the GTK4 dev packages installed, so a developer's box never showed them:
+  - the GTK4 core typelibs (`Gtk-4.0`, `Gdk-4.0`, `Graphene-1.0`, `Gsk-4.0`) were never bundled — the app died with `Namespace Gtk not available`
+  - the bundled `libgtk4-layer-shell` was staged under a name the loader never tried, and its `LD_LIBRARY_PATH` was set in an AppRun hook linuxdeploy doesn't source — the AppImage couldn't load layer-shell
+  - `overlay_gtk` crashed at import when gtk4-layer-shell was absent instead of falling back to X11/plain, contradicting its own fallback path
 - **Windows: high CPU while chat idle** — losing the buffer address during idle no longer triggers continuous full memory scans; scans are now rate-limited with a tri-state fast path in both Rust scanners
 - Settings save no longer resets the translation toggle state
 
@@ -24,6 +29,11 @@
 - Merged upstream 3.2.0: Endgame/Midnight dictionary category, discord.gg link fix, dictionary engine pre-indexing, release workflow and lint fixes
 - Removed the unused `lang_selector.py` / `reply_widget.py` modules — reply-language selection lives inline in both overlays
 - `ruff check app/` is fully clean, including the new GTK modules
+
+### Tests / Тесты / Pruebas
+
+- Restored 124 unit tests covering the translation core (parser, pipeline, cache, glossary, phrasebook, dedup) that a snapshot import had silently deleted, taking coverage of `app/` from 2% back to 18%
+- CI now fails when the test suite shrinks — a test-count floor guards against the same silent loss recurring
 
 
 ## [3.2.0] — 2026-06-15
