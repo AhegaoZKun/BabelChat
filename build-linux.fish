@@ -93,22 +93,21 @@ pb.savev('$APPDIR/usr/share/icons/hicolor/256x256/apps/babelchat.png', 'png', []
 "
 or begin; echo "✗  Icon scaling failed."; exit 1; end
 
-# gtk4-layer-shell must be loaded BEFORE libwayland-client for its Wayland
-# interposition to work (see its README on language bindings). Inside the
-# AppImage the runtime-CDLL approach isn't enough (two copies of the lib can
-# exist: PyInstaller _internal + usr/lib, and gi's loads too late), so force
-# a single early copy via LD_PRELOAD in an AppRun hook — linuxdeploy sources
-# every file in apprun_hooks/ before launching the app.
-mkdir -p $APPDIR/apprun_hooks
-printf '%s\n' \
-    '# Load gtk4-layer-shell before libwayland-client (interposition requirement)' \
-    'for _bc_lsh in "$APPDIR"/usr/lib/libgtk4-layer-shell.so.0 "$APPDIR"/usr/lib/libgtk4-layer-shell.so; do' \
-    '    if [ -f "$_bc_lsh" ]; then' \
-    '        export LD_PRELOAD="$_bc_lsh${LD_PRELOAD:+:$LD_PRELOAD}"' \
-    '        break' \
-    '    fi' \
-    'done' \
-    > $APPDIR/apprun_hooks/00-gtk4-layer-shell-preload.sh
+# gtk4-layer-shell loading, the real story. app/overlay_gtk.py dlopen()s the
+# bundled libgtk4-layer-shell before gi pulls in GTK (correct link order), and
+# build-linux.spec stages it under the exact soname the loader asks for. What
+# that dlopen still needs is a library search path: layer-shell's own deps
+# (libwayland-egl, libgtk-4) live in the bundled usr/lib and the PyInstaller
+# _internal dir, and neither is on the loader path when the app starts.
+#
+# The previous approach dropped an LD_PRELOAD script into apprun_hooks/ (note
+# the underscore) on the belief that "linuxdeploy sources every file in
+# apprun_hooks/". It does not: the AppRun linuxdeploy generates sources exactly
+# one file, apprun-hooks/ (hyphen) /linuxdeploy-plugin-gtk.sh. That preload
+# never ran, and the AppImage died with "Could not load libgtk4-layer-shell.so"
+# on any host without the system library. So instead of a hook nobody sources,
+# the LD_LIBRARY_PATH is appended to the hook that IS sourced — see step 4's
+# plugin patch below.
 
 # ── 4. locate tooling ─────────────────────────────────────────────────────
 set -l LD (command -v linuxdeploy-x86_64.AppImage; or echo $TOOLS_DIR/linuxdeploy-x86_64.AppImage)
@@ -136,6 +135,22 @@ end
 if test -w $GTKPLUGIN; and grep -q '^export GDK_BACKEND=x11' $GTKPLUGIN
     sed -i 's|^export GDK_BACKEND=x11.*|if [ -z "$WAYLAND_DISPLAY" ]; then export GDK_BACKEND=x11; fi|' $GTKPLUGIN
     echo "▶  Patched GTK plugin: GDK_BACKEND=x11 now only on non-Wayland sessions"
+end
+# The plugin's generated hook (apprun-hooks/linuxdeploy-plugin-gtk.sh) is the
+# ONE file the generated AppRun sources, but it never sets LD_LIBRARY_PATH — so
+# overlay_gtk's dlopen of layer-shell can't reach the deps bundled in usr/lib
+# and _internal. Append that path to the hook the plugin writes. The plugin
+# builds $HOOKFILE top-to-bottom and the variable is still in scope at its end,
+# so appending this block to the plugin runs after its own writes. Idempotent.
+if test -w $GTKPLUGIN; and not grep -q 'BabelChat LD_LIBRARY_PATH' $GTKPLUGIN
+    printf '\n%s\n' \
+        '# BabelChat: let overlay_gtk dlopen the bundled layer-shell + its deps' \
+        'cat >> "$HOOKFILE" <<'\''BCEOF'\''' \
+        '# BabelChat LD_LIBRARY_PATH: bundled usr/lib + PyInstaller _internal' \
+        'export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/bin/_internal${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' \
+        'BCEOF' \
+        >> $GTKPLUGIN
+    echo "▶  Patched GTK plugin: hook now exports LD_LIBRARY_PATH for bundled libs"
 end
 
 # ── 5. run linuxdeploy + GTK plugin → AppImage ────────────────────────────

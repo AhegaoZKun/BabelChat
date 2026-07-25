@@ -12,6 +12,8 @@ Build:  pyinstaller build-linux.spec
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 import glob
 import os
+import shutil
+import tempfile
 
 # --- Locate the gtk4-layer-shell native lib + typelib so they get bundled ----
 def _find(paths):
@@ -33,12 +35,43 @@ _layer_typelib = _find([
 
 _extra_binaries = []
 if _layer_so:
-    _extra_binaries.append((_layer_so, "."))
+    # The glob resolves to the real file, libgtk4-layer-shell.so.1.0.4, but
+    # overlay_gtk._load_layer_shell() only tries the names "libgtk4-layer-shell.so"
+    # and ".so.0" under sys._MEIPASS. Bundling the versioned name alone means
+    # its explicit ctypes.CDLL never finds it and the app dies with
+    # "Could not load libgtk4-layer-shell.so" — regardless of any AppRun hook,
+    # which is why the AppImage failed on a clean system even with the .so present.
+    # Stage a copy under the soname the loader actually asks for.
+    _staged = os.path.join(tempfile.gettempdir(), "libgtk4-layer-shell.so.0")
+    shutil.copy2(os.path.realpath(_layer_so), _staged)
+    _extra_binaries.append((_staged, "."))
 
 _extra_datas = []
 if _layer_typelib:
     # PyGObject's loader looks for typelibs under gi_typelibs/ in the bundle.
     _extra_datas.append((_layer_typelib, "gi_typelibs"))
+
+# collect_all("gi") pulls GLib/GObject/Gio/Pango/GdkPixbuf/cairo typelibs but
+# NOT the GTK4 core — Gtk-4.0, Gdk-4.0, Graphene-1.0, Gsk-4.0. PyInstaller's gi
+# hook resolves GTK3 automatically; for GTK4 these four are never collected, so
+# the app starts, points GI_TYPELIB_PATH at gi_typelibs/, finds no Gtk-4.0 and
+# dies with "Namespace Gtk not available" — but only on a machine without the
+# system gir1.2-gtk-4.0 installed, which is why a dev box never sees it.
+# Their shared libraries DO get bundled by collect_all; only the typelibs are
+# missing. Collect them the same way as layer-shell above.
+for _ns in ("Gtk-4.0", "Gdk-4.0", "Graphene-1.0", "Gsk-4.0"):
+    _tl = _find([
+        f"/usr/lib/girepository-1.0/{_ns}.typelib",
+        f"/usr/lib/*/girepository-1.0/{_ns}.typelib",
+        f"/usr/lib64/girepository-1.0/{_ns}.typelib",
+    ])
+    if _tl:
+        _extra_datas.append((_tl, "gi_typelibs"))
+    else:
+        raise SystemExit(
+            f"build-linux.spec: required typelib {_ns} not found — "
+            "install the GTK4 introspection data (gir1.2-gtk-4.0 / gtk4-devel)"
+        )
 
 # PyGObject + GTK collection (typelibs, libs, data) via the gi hooks.
 gi_datas, gi_binaries, gi_hidden = collect_all("gi")[:3]
