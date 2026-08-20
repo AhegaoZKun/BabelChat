@@ -5184,7 +5184,10 @@ lib:SetBaseTranslations
 	["zzOld - Tankworks"] = "zzOld - Tankworks",
 }
 
-if GetLocale() == "enUS" then
+-- BabelChat: enGB shares these names with enUS; without it the library
+-- loads with no current translations and the Zones toggle does nothing.
+local locale = GetLocale()
+if locale == "enUS" or locale == "enGB" then
 	lib:SetCurrentTranslations(true)
 end
 

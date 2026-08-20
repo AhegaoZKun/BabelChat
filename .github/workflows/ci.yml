@@ -31,5 +31,5 @@ jobs:
       # one more than pytest's "collected N items" line.
       - name: Guard test count
         env:
-          MIN_TESTS: "200"
+          MIN_TESTS: "245"
         run: python .github/scripts/check_test_count.py report.xml ${{ env.MIN_TESTS }}
