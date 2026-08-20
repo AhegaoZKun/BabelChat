@@ -12,7 +12,7 @@ addon/BabelChat/
 ├── Locales.lua         # UI strings (EN, RU, ES)
 ├── Data/               # 12 dictionary files (347 terms × 14 languages)
 ├── Libs/               # Embedded libraries (LibStub, LibBabble, LibDBIcon, etc.)
-└── img/logo_wt.tga     # Addon icon
+└── img/icon.tga        # Addon icon (128x128 TGA, tools/make_addon_icon.py)
 ```
 
 ## Chat Filter (Core.lua)

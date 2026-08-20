@@ -120,7 +120,7 @@ L["WELCOME_SETTINGS"] = "Settings"
 -- RUSSIAN (ruRU)
 -- ==========================================
 if locale == "ruRU" then
-    L["UI_TITLE"] = "Настройки переводчика чата"
+    L["UI_TITLE"] = "Настройки BabelChat"
     L["UI_ENABLE_TEXT"] = " Включить словарный перевод"
     L["UI_COLOR_LABEL"] = "Цвет перевода:"
     L["UI_COLOR_BTN"] = "Выбрать цвет"
@@ -135,7 +135,7 @@ if locale == "ruRU" then
     L["SLASH_TEST_RESULT"] = "Результат: "
     L["SLASH_TEST_ERROR"] = "Переводы отключены."
     L["TEST_NO_MATCH"] = "Совпадений в словаре не найдено."
-    L["HELP_HEADER"] = "--- Помощь по переводчику чата ---"
+    L["HELP_HEADER"] = "--- Помощь BabelChat ---"
     L["HELP_CONFIG_MSG"] = "Открыть настройки."
     L["HELP_ONOFF_MSG"] = "Включить или выключить переводы."
     L["HELP_TEST_MSG"] = "Запустить тест перевода."

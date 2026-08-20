@@ -5,7 +5,7 @@
 local ADDON_NAME, addonTable = ...
 local L = addonTable.L
 
-local PREFIX = "|cffffff00[|r|cffd597ffChat Translator|r|cffffff00]|r "
+local PREFIX = "|cffffff00[|r|cffd597ffBabelChat|r|cffffff00]|r "
 
 local function Print(msg)
     print(PREFIX .. msg)
@@ -361,7 +361,7 @@ initFrame:SetScript("OnEvent", function(self, event)
     if LDB and LDBIcon then
         local dataObject = LDB:NewDataObject("BabelChat", {
             type = "launcher",
-            icon = "Interface\\Addons\\BabelChat\\img\\logo_wt",
+            icon = "Interface\\AddOns\\BabelChat\\img\\icon",
             OnClick = function()
                 if Settings and Settings.OpenToCategory and addonTable.categoryID then
                     Settings.OpenToCategory(addonTable.categoryID)

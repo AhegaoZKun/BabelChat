@@ -18,8 +18,8 @@ end
 
 function addonTable.CreateConfigUI()
     local db = BabelChatDB
-    local panel = CreateFrame("Frame", "ChatTranslatorPanel", UIParent)
-    panel.name = "Chat Translator"
+    local panel = CreateFrame("Frame", "BabelChatPanel", UIParent)
+    panel.name = "BabelChat"
 
     local yOffset = -16
 
@@ -32,7 +32,7 @@ function addonTable.CreateConfigUI()
     local logo = panel:CreateTexture(nil, "ARTWORK")
     logo:SetSize(64, 64)
     logo:SetPoint("TOPRIGHT", -20, -10)
-    logo:SetTexture("Interface\\Addons\\BabelChat\\img\\logo_wt")
+    logo:SetTexture("Interface\\AddOns\\BabelChat\\img\\icon")
 
     local version = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     version:SetPoint("TOP", logo, "BOTTOM", 0, -2)

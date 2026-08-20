@@ -1,0 +1,12 @@
+{
+  "filesize": {
+    "_comment": "The filesize gate counts newline bytes, so a binary asset registers as thousands of 'lines' (addon/BabelChat/img/icon.tga: 958). Binary assets carry no source complexity, so the line cap is meaningless for them. Exemptions are directory-scoped here rather than file-scoped because these directories hold binaries exclusively — no source file may live in them.",
+    "exempt_dirs": [
+      "addon/BabelChat/img/",
+      "addon/BabelChat/Libs/",
+      "assets/",
+      "babelchat_scanner_win/",
+      "temp/"
+    ]
+  }
+}

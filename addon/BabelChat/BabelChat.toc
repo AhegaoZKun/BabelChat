@@ -1,4 +1,4 @@
-## Interface: 120001, 120005
+## Interface: 120100, 120007, 120005, 120001
 ## Title: |cffd597ffBabelChat|r
 ## Notes: |cFF33CCFFReal-time chat translation — built-in dictionary + companion app overlay.|r
 ## Notes-ruRU: |cFF33CCFFПеревод чата в реальном времени — встроенный словарь + оверлей через приложение-компаньон.|r
