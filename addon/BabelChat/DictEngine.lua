@@ -39,17 +39,17 @@ function addonTable.RebuildMasterDict()
     if not db or not db.dict then return end
 
     local map = {
-        { key = "showMazz",        dict = addonTable.MazzRaidDict },
+        { key = "showDungeons",        dict = addonTable.MazzRaidDict },
         { key = "showSocial",      dict = addonTable.SocialDict },
-        { key = "showClases",      dict = addonTable.ClasesDict },
-        { key = "showCombate",     dict = addonTable.CombateDict },
-        { key = "showComercio",    dict = addonTable.ComercioDict },
+        { key = "showClasses",      dict = addonTable.ClasesDict },
+        { key = "showCombat",     dict = addonTable.CombateDict },
+        { key = "showTrade",    dict = addonTable.ComercioDict },
         { key = "showStats",       dict = addonTable.EstadisticasDict },
-        { key = "showGrupos",      dict = addonTable.GruposDict },
-        { key = "showHermandad",   dict = addonTable.HermandadDict },
-        { key = "showProfesiones", dict = addonTable.ProfesionesDict },
+        { key = "showGroups",      dict = addonTable.GruposDict },
+        { key = "showGuild",   dict = addonTable.HermandadDict },
+        { key = "showProfessions", dict = addonTable.ProfesionesDict },
         { key = "showRoles",       dict = addonTable.RolesDict },
-        { key = "showEstado",      dict = addonTable.EstadoDict },
+        { key = "showStatus",      dict = addonTable.EstadoDict },
         { key = "showSlang",       dict = addonTable.SlangDict },
         { key = "showEndgame",     dict = addonTable.EndgameDict },
     }

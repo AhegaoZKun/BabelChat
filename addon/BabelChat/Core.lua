@@ -21,17 +21,17 @@ local DEFAULTS = {
         targetLocale = "esES",
         chatColor = "00ff00",
         settings = {
-            showMazz = true,
+            showDungeons = true,
             showSocial = true,
-            showClases = true,
-            showCombate = true,
-            showComercio = true,
+            showClasses = true,
+            showCombat = true,
+            showTrade = true,
             showStats = true,
-            showGrupos = true,
-            showHermandad = true,
-            showProfesiones = true,
+            showGroups = true,
+            showGuild = true,
+            showProfessions = true,
             showRoles = true,
-            showEstado = true,
+            showStatus = true,
             showSlang = true,
             showEndgame = true,
             showZones = true,
@@ -53,6 +53,47 @@ local DEFAULTS = {
     -- Minimap icon
     minimap = {},
 }
+
+-- ==========================================
+-- SETTING KEY MIGRATION
+-- ==========================================
+-- The category toggles were named after the Spanish source this dictionary came
+-- from — showMazz (mazmorras), showClases, showComercio — which meant nobody
+-- reading their own SavedVariables could tell what they controlled.
+--
+-- Renaming them without moving the values would silently re-enable every
+-- category a player had switched off: the old key stops being read, the new one
+-- is absent, and ApplyDefaults fills it with `true`.
+addonTable.SETTING_RENAMES = {
+    showMazz        = "showDungeons",
+    showClases      = "showClasses",
+    showCombate     = "showCombat",
+    showComercio    = "showTrade",
+    showGrupos      = "showGroups",
+    showHermandad   = "showGuild",
+    showEstado      = "showStatus",
+    showProfesiones = "showProfessions",
+}
+
+-- Returns how many values it moved, which makes the migration testable and
+-- makes "it ran and found nothing" distinguishable from "it did not run".
+function addonTable.MigrateSettingKeys(settings)
+    if type(settings) ~= "table" then return 0 end
+    local moved = 0
+    for old, new in pairs(addonTable.SETTING_RENAMES) do
+        if settings[old] ~= nil then
+            -- A value already under the new name wins: it is what the player
+            -- last chose in a version that used it. Running this twice is
+            -- therefore a no-op, which matters because it runs on every load.
+            if settings[new] == nil then
+                settings[new] = settings[old]
+                moved = moved + 1
+            end
+            settings[old] = nil
+        end
+    end
+    return moved
+end
 
 -- Deep merge defaults into db (non-destructive)
 local function ApplyDefaults(db, defaults)
@@ -319,6 +360,12 @@ initFrame:SetScript("OnEvent", function(self, event)
     -- Initialize database
     if not BabelChatDB then
         BabelChatDB = {}
+    end
+    -- Rename the Spanish-derived setting keys BEFORE defaults are filled in.
+    -- The other order would see the new keys missing, default them to `true`,
+    -- and hand every player back the categories they had switched off.
+    if BabelChatDB.dict and BabelChatDB.dict.settings then
+        addonTable.MigrateSettingKeys(BabelChatDB.dict.settings)
     end
     ApplyDefaults(BabelChatDB, DEFAULTS)
 
