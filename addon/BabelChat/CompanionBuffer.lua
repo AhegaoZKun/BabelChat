@@ -22,9 +22,57 @@ local DEDUP_TTL = 2.0  -- seconds
 local dedupRing = {}   -- { key = "author\0text", time = GetTime() }
 local dedupIdx = 0
 
+-- ── Secret-value probe ──────────────────────────────────────
+-- Under chat messaging lockdown (encounters, challenge mode, PvP matches, and
+-- any communication-restricted map — i.e. every dungeon and raid) the chat
+-- event arguments arrive as secret values. Tainted code may CONCATENATE a
+-- secret, but any comparison, boolean test or length query on one raises.
+--
+-- string.len is therefore the cheapest probe available: it fails on exactly
+-- the class of operation we are about to perform. It also fails on nil and on
+-- non-strings, which is what we want — all three cases mean "do not put this
+-- in the buffer".
+--
+-- The probe belongs at the door, not at serialize time. Probing during
+-- RebuildBuffer (as this file used to) is too late: the value has already been
+-- compared inside IsDuplicate, stored in the dedup ring, and stored in wctBuf.
+local string_len = string.len
+local string_gsub = string.gsub
+
+local function IsUsable(value)
+    return (pcall(string_len, value))
+end
+
+-- ── Field sanitising ────────────────────────────────────────
+-- The buffer is newline-delimited, pipe-separated, and framed by the literal
+-- __WCT_BUF_NNNN__ / __WCT_END__ markers the companion scans for. Any of those
+-- appearing inside a field breaks the record — and one of them is reachable by
+-- anyone: a player can type "__WCT_END__" into Trade chat, and the companion
+-- would then treat the buffer as ending there, silently dropping every entry
+-- after it.
+--
+-- Replacing rather than escaping is deliberate. A newline and a tab carry no
+-- meaning in a chat message, and a channel name cannot contain a pipe, so there
+-- is nothing on the other side worth reconstructing. Escaping would buy exact
+-- fidelity for characters nobody can see, at the price of an escape alphabet, a
+-- protocol version negotiation, and an ambiguity against buffers written by
+-- older addon versions.
+local function SanitizeText(value)
+    local out = string_gsub(value, "[\n\r\t]", " ")
+    out = string_gsub(out, "__WCT_", "_ WCT_")
+    return out
+end
+
+-- Structural fields additionally lose the pipe. Message text keeps its pipes:
+-- WoW hyperlinks and colour codes are built from them and the reader splits
+-- with a field limit, so trailing pipes in the text are already safe.
+local function SanitizeField(value)
+    return (string_gsub(SanitizeText(value), "|", "/"))
+end
+
 local function IsDuplicate(author, text)
     local now = GetTime()
-    local key = (author or "") .. "\0" .. (text or "")
+    local key = author .. "\0" .. text
     -- Check existing entries
     for i = 1, #dedupRing do
         if dedupRing[i].key == key and (now - dedupRing[i].time) < DEDUP_TTL then
@@ -56,23 +104,24 @@ end
 -- Concatenate ring buffer into a single string with markers.
 -- Seq number embedded in header for fast staleness check:
 --   __WCT_BUF_0042__\nline1\nline2\n__WCT_END__
--- Secret-tainted entries (instance chat) are silently skipped.
+-- Secret-tainted entries are rejected at insert time (see IsUsable), so every
+-- entry here is a plain string and the buffer can be joined in one pass.
 local function RebuildBuffer()
     local seqHeader = string.format("__WCT_BUF_%04d__", wctSeq % 10000)
     -- Include player name so companion can identify own messages
     local playerName = UnitName("player")
     local realmName = GetNormalizedRealmName() or ""
     local fullName = playerName and (playerName .. "-" .. realmName) or ""
-    local result = seqHeader .. "\n0|META|PLAYER|" .. fullName
+    -- One table.concat instead of rebuilding a growing string 50 times. The old
+    -- loop re-concatenated the whole buffer per entry and probed the result each
+    -- time — quadratic work and ~190 KB of garbage per flush, four times a
+    -- second, forever.
+    local parts = { seqHeader, "0|META|PLAYER|" .. fullName }
     for idx = 1, #wctBuf do
-        local candidate = result .. "\n" .. wctBuf[idx]
-        local ok = pcall(string.len, candidate)
-        if ok then
-            result = candidate
-        end
+        parts[#parts + 1] = wctBuf[idx]
     end
-    result = result .. "\n__WCT_END__"
-    BabelChatDB.wctbuf = result
+    parts[#parts + 1] = "__WCT_END__"
+    BabelChatDB.wctbuf = table.concat(parts, "\n")
     BabelChatDB.wctSeq = wctSeq
     bufDirty = false
 end
@@ -80,26 +129,44 @@ end
 -- ── Public API ───────────────────────────────────────────────
 
 -- Add a chat entry to the ring buffer.
--- kind: "RAW" (needs DeepL) or "DICT" (dictionary-translated)
+-- kind: "RAW" (untouched) or "DICT" (the addon glossed this line in chat)
 -- event: short event name (e.g. "SAY", "GUILD", "WHISPER")
 -- author: sender name (e.g. "Thrall-Sargeras")
--- translated: dictionary-translated text (only for DICT kind)
-function addonTable.BufferAddEntry(text, kind, event, author, translated)
+--
+-- Both kinds carry the same fields. The gloss text itself is deliberately NOT
+-- transmitted: the companion discards it on arrival (pipeline._on_new_line
+-- logs "Dict message ignored, using DeepL") because a full sentence
+-- translation is strictly better than a list of term pairs. Sending it cost a
+-- duplicate copy of every glossed message in a 50-entry ring buffer, and — via
+-- the newline DictEngine embeds in its display string — was splitting the
+-- record in half, so the field never survived the trip anyway. `kind` is kept
+-- because it tells the companion the line was already glossed in chat.
+function addonTable.BufferAddEntry(text, kind, event, author)
     local db = BabelChatDB
     if not db or not db.companion or not db.companion.enabled then return end
 
+    -- Probe every caller-supplied value BEFORE it is tested, compared or stored.
+    -- `kind` is not probed: it is one of our own string literals, never a chat
+    -- event argument, so it can never be secret.
+    if not IsUsable(text) then return end
+
+    -- A missing author and a secret author get the same treatment, and we do not
+    -- need to tell them apart — neither can be written to the buffer. Assigning
+    -- inside the branch avoids any boolean test on the value itself.
+    local safeAuthor = "Unknown"
+    if IsUsable(author) then safeAuthor = SanitizeField(author) end
+    local safeEvent = "SAY"
+    if IsUsable(event) then safeEvent = SanitizeField(event) end
+    local safeText = SanitizeText(text)
+
     -- Dedup: skip if same (author, text) seen within TTL
-    if IsDuplicate(author, text) then return end
+    if IsDuplicate(safeAuthor, safeText) then return end
 
     wctSeq = wctSeq + 1
-    local entry
-    if kind == "DICT" and translated then
-        -- DICT format: SEQ|DICT|EVENT|author|original\ttranslated (tab separates original from translated)
-        entry = wctSeq .. "|DICT|" .. (event or "SAY") .. "|" .. (author or "Unknown") .. "|" .. text .. "\t" .. translated
-    else
-        -- RAW format: SEQ|RAW|EVENT|author|text
-        entry = wctSeq .. "|RAW|" .. (event or "SAY") .. "|" .. (author or "Unknown") .. "|" .. text
-    end
+    -- Record: SEQ|KIND|EVENT|author|text
+    local safeKind = "RAW"
+    if kind == "DICT" then safeKind = "DICT" end
+    local entry = wctSeq .. "|" .. safeKind .. "|" .. safeEvent .. "|" .. safeAuthor .. "|" .. safeText
     tinsert(wctBuf, entry)
     while #wctBuf > MSG_LIMIT do
         tremove(wctBuf, 1)

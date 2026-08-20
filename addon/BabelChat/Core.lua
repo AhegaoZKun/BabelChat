@@ -108,10 +108,17 @@ local function ChatFilter(self, event, text, author, ...)
     -- a '|', so the pipe-delimited buffer format stays intact).
     if event == "CHAT_MSG_CHANNEL" then
         local channelString = select(2, ...)
-        if channelString and channelString ~= "" then
+        -- channelString is a chat event argument, so under chat messaging
+        -- lockdown it is a secret value — and both the truthiness test and the
+        -- gsub below are operations a secret rejects. Probe first: string.len
+        -- fails on a secret, on nil, and on a non-string alike, which is
+        -- exactly the set of values we must not touch.
+        if pcall(string.len, channelString) then
             -- Strip a leading "N. " channel-number prefix if present.
             local name = channelString:gsub("^%d+%.%s*", "")
-            shortEvent = "CHANNEL:" .. name
+            if name ~= "" then
+                shortEvent = "CHANNEL:" .. name
+            end
         end
     end
 
@@ -126,11 +133,16 @@ local function ChatFilter(self, event, text, author, ...)
         end
     end
 
-    -- Buffer for companion app — ALL channels, regardless of dict filter
+    -- Buffer for companion app — ALL channels, regardless of dict filter.
+    -- Wrapped in pcall for the same reason TranslateChat is: this runs inside a
+    -- chat event filter, and an error escaping here does not just lose one
+    -- message — it breaks the filter for every chat line that follows, for the
+    -- whole encounter. BufferAddEntry probes its own arguments, so this is the
+    -- second layer, not the first.
     if wasChanged then
-        addonTable.BufferAddEntry(text, "DICT", shortEvent, author, translated)
+        pcall(addonTable.BufferAddEntry, text, "DICT", shortEvent, author)
     else
-        addonTable.BufferAddEntry(text, "RAW", shortEvent, author)
+        pcall(addonTable.BufferAddEntry, text, "RAW", shortEvent, author)
     end
 
     -- Return modified text for inline chat display

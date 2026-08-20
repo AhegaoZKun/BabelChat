@@ -23,6 +23,15 @@ import threading
 import time
 from collections.abc import Callable
 
+from app.addon_protocol import (
+    MARKER_END,
+    bare_log_line,
+    extract_max_seq,
+    find_content_start,
+    is_system_noise,
+    make_synthetic_log_line,
+)
+
 logger = logging.getLogger(__name__)
 
 # ── DLL loading ───────────────────────────────────────────────────────────────
@@ -57,9 +66,6 @@ _OUT_BUF_SIZE = 131072  # 128KB
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-MARKER_START = b"__WCT_BUF_"
-MARKER_START_LEGACY = b"__WCT_BUF__"
-MARKER_END = b"__WCT_END__"
 POLL_INTERVAL = 0.25
 ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
@@ -115,14 +121,6 @@ def _find_wow_pid() -> int | None:
     return None
 
 
-def _is_system_noise(text: str) -> bool:
-    t = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", text.lstrip())
-    if t.startswith(("<DBM>", "<BW>", "<WA>", "|TInterface", "[WCT]", "[MoveAny")):
-        return True
-    if "|Hachievement:" in t:
-        return True
-    return any(phrase in t for phrase in ("has earned", "achievement", "creates:", "создает:"))
-
 
 # ── Rust scanner call ─────────────────────────────────────────────────────────
 
@@ -168,14 +166,14 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
                 raw = pm.read_bytes(a, MAX_BUF_READ)
             except Exception:
                 continue
-            co = _find_content_start(raw)
+            co = find_content_start(raw)
             if co == -1:
                 continue
             end_idx = raw.find(MARKER_END, co)
             if end_idx == -1:
                 continue
             content = raw[co:end_idx]
-            seq = _extract_max_seq(content)
+            seq = extract_max_seq(content)
             if seq > best_seq:
                 best_seq = seq
                 best_content = content.decode("utf-8", errors="replace")
@@ -185,32 +183,6 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
         return None
 
 
-def _find_content_start(raw: bytes) -> int:
-    if raw.startswith(b"__WCT_BUF_"):
-        end = raw.find(b"__", 10)
-        if end != -1:
-            return end + 2
-    if raw.startswith(MARKER_START_LEGACY):
-        return len(MARKER_START_LEGACY)
-    return -1
-
-
-def _extract_max_seq(content: bytes) -> int:
-    max_seq = 0
-    for line in content.split(b"\n"):
-        line = line.strip()
-        if not line:
-            continue
-        idx = line.find(b"|")
-        if idx <= 0:
-            continue
-        try:
-            seq = int(line[:idx])
-            if seq > max_seq:
-                max_seq = seq
-        except ValueError:
-            continue
-    return max_seq
 
 
 # ── Main reader class ─────────────────────────────────────────────────────────
@@ -396,24 +368,18 @@ class WoWAddonBufReader:
                 event = ""
                 author = ""
                 msg_text = payload
-                dict_translated_text = ""
 
-                if kind == "DICT":
-                    sub_parts = payload.split("|", 2)
-                    if len(sub_parts) >= 3:
-                        event = sub_parts[0]
-                        author = sub_parts[1]
-                        text_and_translated = sub_parts[2]
-                        if "\t" in text_and_translated:
-                            msg_text, dict_translated_text = text_and_translated.split("\t", 1)
-                        else:
-                            msg_text = text_and_translated
-                else:
-                    sub_parts = payload.split("|", 2)
-                    if len(sub_parts) >= 3:
-                        event = sub_parts[0]
-                        author = sub_parts[1]
-                        msg_text = sub_parts[2]
+                # RAW and DICT carry identical fields; `kind` only records
+                # whether the addon also glossed the line in chat. The addon
+                # used to append its gloss after a tab, but the gloss contained
+                # a newline and the buffer is newline-delimited, so the record
+                # split and the field never arrived. It is no longer sent —
+                # this pipeline discards it regardless (see _on_new_line).
+                sub_parts = payload.split("|", 2)
+                if len(sub_parts) >= 3:
+                    event = sub_parts[0]
+                    author = sub_parts[1]
+                    msg_text = sub_parts[2]
 
                 try:
                     with open(RAW_LOG_FILE, "a", encoding="utf-8") as f:
@@ -423,26 +389,19 @@ class WoWAddonBufReader:
                 except OSError:
                     pass
 
-                if _is_system_noise(msg_text):
+                if is_system_noise(msg_text):
                     continue
 
                 msg_text = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", msg_text)
 
                 if event:
-                    log_line = self._make_synthetic_log_line(event, author, msg_text)
+                    log_line = make_synthetic_log_line(event, author, msg_text)
                     if not log_line:
-                        t = time.localtime()
-                        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                        log_line = f"{ts}  {msg_text}"
+                        log_line = bare_log_line(msg_text)
                 else:
-                    t = time.localtime()
-                    ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                    log_line = f"{ts}  {msg_text}"
+                    log_line = bare_log_line(msg_text)
 
-                if kind == "DICT":
-                    self._on_new_line(log_line, dict_translated=True, dict_text=dict_translated_text)
-                else:
-                    self._on_new_line(log_line)
+                self._on_new_line(log_line, dict_translated=(kind == "DICT"))
 
         if self._pre_reset_texts and time.monotonic() > self._pre_reset_expire:
             self._pre_reset_texts.clear()
@@ -450,56 +409,6 @@ class WoWAddonBufReader:
         if new_count > 0:
             self._last_new_msg_time = time.monotonic()
 
-    @staticmethod
-    def _make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
-        # Public/numbered channels arrive as "CHANNEL:<Name>" (e.g.
-        # "CHANNEL:Trade - City"). Classify the name into a log channel so the
-        # parser/filter can treat Trade / Services / General / LFG distinctly.
-        if channel.startswith("CHANNEL:"):
-            name = channel.split(":", 1)[1].strip().lower()
-            if "trade" in name:
-                log_channel = "Trade"
-            elif "service" in name or "comercio" in name:
-                log_channel = "Services"
-            elif "lookingforgroup" in name or "looking for group" in name or "lfg" in name:
-                log_channel = "LookingForGroup"
-            elif "general" in name:
-                log_channel = "General"
-            else:
-                log_channel = "General"
-            t = time.localtime()
-            ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-            who = author if author else "Unknown"
-            return f"{ts}  [{log_channel}] {who}: {text}"
-
-        _ADDON_CHANNEL_TO_LOG = {
-            "SAY": "Say",
-            "YELL": "Yell",
-            "PARTY": "Party",
-            "PARTY_LEADER": "Party Leader",
-            "RAID": "Raid",
-            "RAID_LEADER": "Raid Leader",
-            "RAID_WARNING": "Raid Warning",
-            "GUILD": "Guild",
-            "OFFICER": "Officer",
-            "INSTANCE_CHAT": "Instance",
-            "INSTANCE_CHAT_LEADER": "Instance Leader",
-            "CHANNEL": "Say",
-            "EMOTE": "Say",
-            "BATTLEGROUND": "Instance",
-            "BATTLEGROUND_LEADER": "Instance Leader",
-        }
-        t = time.localtime()
-        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-        if channel in ("WHISPER", "BN_WHISPER"):
-            return f"{ts}  [{author}] whispers: {text}"
-        if channel == "WHISPER_INFORM":
-            return f"{ts}  To [{author}]: {text}"
-        log_channel = _ADDON_CHANNEL_TO_LOG.get(channel)
-        if log_channel is None:
-            return None
-        who = author if author else "Unknown"
-        return f"{ts}  [{log_channel}] {who}: {text}"
 
 
 class MemoryChatWatcher:

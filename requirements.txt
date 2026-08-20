@@ -19,6 +19,9 @@ pyinstaller>=6.0.0
 # Dev
 pytest>=8.0.0
 ruff==0.15.6
+# lupa embeds a real Lua 5.1 interpreter — the same version WoW runs — so the
+# addon's Lua can be tested directly instead of re-implemented in Python.
+lupa>=2.0
 
 # Utils
 python-dotenv>=1.0.0
