@@ -229,16 +229,15 @@ class TranslationPipeline:
             dict_translated: If True, the addon's dictionary already translated
                 this message inline in chat.
         """
-        logger.debug("New line: %s", line[:120])
+        # Length, not content: this runs before parsing and therefore before
+        # the channel filter, so quoting the line here would put a whisper in
+        # the log of a user who had unticked Whispers. The opt-in capture
+        # trace is where the full text belongs.
+        logger.debug("New line (%d chars)", len(line))
         msg = parse_line(line)
         if msg is None:
-            logger.info("Parse returned None for: %s", line[:150])
+            logger.debug("Parse returned None for: %s", line[:150])
             return
-
-        logger.info(
-            "Parsed: [%s] %s: %s (dict=%s)",
-            msg.channel.value, msg.author, msg.text[:_LOG_PREVIEW], dict_translated,
-        )
 
         # Snapshot config for consistent reads within this method.
         # Reference assignment is atomic under CPython's GIL, so this is safe
@@ -255,6 +254,15 @@ class TranslationPipeline:
             logger.debug("Channel %s not enabled", msg.channel)
             return
 
+        # Only now, past the channel filter, and at DEBUG. This line carries the
+        # author and the message text, and it used to run BEFORE the filter at
+        # INFO — the default level — so a user who had unticked Whispers still
+        # got other people's whispers written to their log file.
+        logger.debug(
+            "Parsed: [%s] %s: %s (dict=%s)",
+            msg.channel.value, msg.author, msg.text[:_LOG_PREVIEW], dict_translated,
+        )
+
         # NPC filter: NPC names contain spaces (e.g. "High King Anduin"),
         # player names never do. Only applies to Say/Yell channels.
         if msg.channel in (Channel.SAY, Channel.YELL) and " " in msg.author:
@@ -270,7 +278,7 @@ class TranslationPipeline:
             and own_char
             and msg.author == own_char
         ):
-            logger.info("Skip own message (no translate): %s", msg.text[:_LOG_PREVIEW])
+            logger.debug("Skip own message (no translate): %s", msg.text[:_LOG_PREVIEW])
             self._on_message(TranslatedMessage(original=msg, translation=None))
             return
 
@@ -283,7 +291,7 @@ class TranslationPipeline:
         # Addon dict adds inline translations like "speed(Скорость)" which are
         # redundant when companion app does full DeepL translation.
         if dict_translated:
-            logger.info("Dict message ignored, using DeepL: %s", msg.text[:_LOG_PREVIEW])
+            logger.debug("Dict message ignored, translating instead: %s", msg.text[:_LOG_PREVIEW])
 
         # Clean and validate text
         cleaned_text = clean_message_text(msg.text)
@@ -310,14 +318,14 @@ class TranslationPipeline:
         detected = self._detector.detect(cleaned_text)
         if detected is None:
             # Own language or skip-phrase — emit without translation
-            logger.info("Skip (own lang / skip-phrase): %r", cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Skip (own lang / skip-phrase): %r", cleaned_text[:_LOG_PREVIEW])
             self._on_message(TranslatedMessage(original=msg, translation=None))
             return
 
         # UNKNOWN = lingua couldn't determine, let DeepL auto-detect
         if detected == ChatLanguageDetector.UNKNOWN:
             source_lang = ""
-            logger.info("Translating (auto-detect)→%s: %r", target_lang, cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Translating (auto-detect)→%s: %r", target_lang, cleaned_text[:_LOG_PREVIEW])
         else:
             source_lang = _LINGUA_TO_DEEPL.get(detected, "")
             if not source_lang:
@@ -395,7 +403,7 @@ class TranslationPipeline:
         # If DeepL auto-detected own language, skip (e.g. "zerg" detected as RU)
         own_deepl = _LINGUA_TO_DEEPL.get(cfg.own_language, "")
         if result.success and not source_lang and result.source_lang == own_deepl:
-            logger.info("DeepL detected own lang (%s), skipping: %r", own_deepl, cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Translator detected own lang (%s), skipping: %r", own_deepl, cleaned_text[:_LOG_PREVIEW])
             return  # original already emitted above
 
         # Restore preserved tokens in translated text

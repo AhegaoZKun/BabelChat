@@ -19,6 +19,7 @@ import sys
 from dotenv import load_dotenv
 from lingua import Language
 
+from app import debug_log
 from app.config import CONFIG_FILE, AppConfig, resolve_chatlog_path
 from app.overlay_gtk import ChatOverlayGtk
 from app.parser import Channel
@@ -88,6 +89,8 @@ def main() -> int:
     )
 
     config = AppConfig.load()
+    # Off unless asked for: it records every chat line in full.
+    debug_log.configure(config.debug_capture_trace)
 
     # First run: no config file yet, or no translation API configured →
     # run the setup wizard (its own blocking GTK loop) before normal startup.

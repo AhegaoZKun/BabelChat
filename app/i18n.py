@@ -446,6 +446,31 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Validate Key",
         "ES": "Validar clave",
     },
+    "settings.privacy.trace": {
+        "RU": " Записывать перехваченный чат в файл (для диагностики)",
+        "EN": " Write captured chat to a file (for troubleshooting)",
+        "ES": " Guardar el chat capturado en un archivo (diagnóstico)",
+    },
+    "settings.privacy.trace_hint": {
+        "RU": "Файл содержит текст ВСЕХ сообщений целиком, включая чужие шёпоты. Включайте только на время разбора проблемы.",
+        "EN": "The file holds the full text of every message, other players' whispers included. Turn it on only while investigating.",
+        "ES": "El archivo guarda el texto completo de cada mensaje, incluidos los susurros de otros. Actívalo solo mientras investigas.",
+    },
+    "settings.privacy.clear_cache": {
+        "RU": "Очистить кэш переводов",
+        "EN": "Clear translation cache",
+        "ES": "Borrar caché de traducciones",
+    },
+    "settings.privacy.clear_cache_hint": {
+        "RU": "Кэш хранит исходные тексты сообщений семь суток.",
+        "EN": "The cache keeps the original message text for seven days.",
+        "ES": "La caché guarda el texto original de los mensajes durante siete días.",
+    },
+    "settings.privacy.cleared": {
+        "RU": "Удалено записей: {n}",
+        "EN": "Removed {n} entries",
+        "ES": "Se eliminaron {n} entradas",
+    },
     "settings.api.reveal": {
         "RU": "Показать ключ",
         "EN": "Show key",

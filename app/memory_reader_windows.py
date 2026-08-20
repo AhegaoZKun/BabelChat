@@ -13,16 +13,14 @@ Falls back to pure-Python pymem scanner if the DLL is not found.
 
 from __future__ import annotations
 
-import contextlib
 import ctypes
 import logging
-import pathlib
 import re
-import sys
 import threading
 import time
 from collections.abc import Callable
 
+from app import debug_log
 from app.addon_protocol import (
     MARKER_END,
     bare_log_line,
@@ -47,9 +45,6 @@ ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
 MAX_BUF_READ = 65536
 
-RAW_LOG_FILE = str(
-    (pathlib.Path.home() / "babelchat_raw.log") if getattr(sys, "frozen", False) else pathlib.Path("babelchat_raw.log")
-)
 
 WOW_PROCESS_NAMES = ["Wow.exe", "WowT.exe", "WowB.exe"]
 _MAX_DELIVERED_PAYLOADS = 200
@@ -216,8 +211,6 @@ class WoWAddonBufReader:
         return self._player_name
 
     def start(self) -> None:
-        with contextlib.suppress(OSError):
-            open(RAW_LOG_FILE, "w").close()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -387,13 +380,7 @@ class WoWAddonBufReader:
                     if tab != -1:
                         msg_text = msg_text[:tab]
 
-                try:
-                    with open(RAW_LOG_FILE, "a", encoding="utf-8") as f:
-                        t = time.localtime()
-                        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                        f.write(f"[{ts}] #{seq} [{kind}] {event}|{author}|{msg_text}\n")
-                except OSError:
-                    pass
+                debug_log.record(seq, kind, event, author, msg_text)
 
                 if is_system_noise(msg_text):
                     continue

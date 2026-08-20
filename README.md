@@ -205,6 +205,29 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 | No injection   | No DLL injection, no hooking, no writing to WoW memory                      |
 | No automation  | No automated actions. Outgoing translation via manual clipboard paste       |
 
+## Privacy — what leaves your machine
+
+BabelChat translates by sending message text to a translation provider. That
+means **other players' messages go to a third party**, including whispers and
+guild chat, and those players never agreed to it. Worth knowing before you
+switch channels on:
+
+- **What is sent:** the text of messages in the channels you enabled, and
+  nothing else. Channels you untick are dropped before any request is made.
+- **Who receives it:** whichever provider you configured — GigaChat (Sber),
+  MyMemory, DeepL or Microsoft. Each has its own privacy policy.
+- **What is stored locally:** translations are cached for seven days, source
+  text included, so the same line is not paid for twice. *Settings → Clear
+  translation cache* deletes all of it.
+- **What is not stored:** nothing is written to disk about captured chat unless
+  you switch on *Write captured chat to a file* for troubleshooting. That file
+  holds every message in full — turn it off when you are done.
+- **Whispers** are the most sensitive channel and are on by default. If you
+  share a machine, or translate in a guild that would not expect it, untick it.
+
+The in-game dictionary alone sends nothing anywhere: it runs entirely inside
+WoW, so an addon-only setup has no egress at all.
+
 ## Limitations
 
 - **Reads the game's memory** — no elevation needed on Windows (the scanner asks only for read access to a process you already own); on Linux this needs `ptrace_scope=0`

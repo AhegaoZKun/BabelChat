@@ -20,14 +20,14 @@ from tests.lua_harness import load_companion_buffer  # noqa: E402
 
 
 @pytest.fixture
-def reader(tmp_path, monkeypatch):
+def reader():
     """A reader that collects delivered log lines instead of running a thread.
 
-    RAW_LOG_FILE is redirected into tmp_path: the reader appends every payload
-    to it unconditionally, and a test run must not write chat transcripts into
-    the working directory.
+    Nothing is redirected any more: the capture trace is off unless switched on,
+    so a test run leaves no chat transcript on disk. This fixture used to have
+    to point it at a temp file, which was the test compensating for the defect
+    rather than the code not having it.
     """
-    monkeypatch.setattr("app.memory_reader_windows.RAW_LOG_FILE", str(tmp_path / "raw.log"))
     delivered: list[tuple[str, bool]] = []
 
     def on_new_line(line: str, dict_translated: bool = False, **_kwargs) -> None:

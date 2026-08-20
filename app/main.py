@@ -13,6 +13,7 @@ from lingua import Language
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
+from app import debug_log
 from app.about_dialog import AboutDialog
 from app.config import AppConfig, resolve_chatlog_path
 from app.hotkeys import GlobalHotkeyManager
@@ -278,6 +279,10 @@ def main() -> int:
     # Debug console: hidden by default, show if configured
     if config.show_debug_console:
         _setup_console(visible=True)
+
+    # Capture trace: off unless asked for. It records every chat line in full,
+    # other players' whispers included, so it is never on by default.
+    debug_log.configure(config.debug_capture_trace)
 
     # Set UI language from config
     tr.set_language(config.ui_language)

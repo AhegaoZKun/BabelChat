@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app import debug_log
 from app.about_tab_qt import build_about_tab
 from app.config import AppConfig, detect_wow_path
 from app.i18n import UI_LANGUAGES, tr
@@ -301,9 +302,43 @@ class SettingsDialog(QDialog):
         self._show_console.setChecked(self._config.show_debug_console)
         behavior_layout.addWidget(self._show_console)
 
+        self._capture_trace = QCheckBox(tr("settings.privacy.trace"))
+        self._capture_trace.setChecked(self._config.debug_capture_trace)
+        behavior_layout.addWidget(self._capture_trace)
+
+        trace_hint = QLabel(tr("settings.privacy.trace_hint"))
+        trace_hint.setStyleSheet("color: #888; font-size: 11px;")
+        trace_hint.setWordWrap(True)
+        behavior_layout.addWidget(trace_hint)
+
+        clear_row = QHBoxLayout()
+        self._clear_cache_btn = QPushButton(tr("settings.privacy.clear_cache"))
+        self._clear_cache_btn.clicked.connect(self._clear_translation_cache)
+        clear_row.addWidget(self._clear_cache_btn)
+        self._clear_cache_status = QLabel(tr("settings.privacy.clear_cache_hint"))
+        self._clear_cache_status.setStyleSheet("color: #888; font-size: 11px;")
+        self._clear_cache_status.setWordWrap(True)
+        clear_row.addWidget(self._clear_cache_status, stretch=1)
+        behavior_layout.addLayout(clear_row)
+
         layout.addWidget(behavior_group)
         layout.addStretch()
         return tab
+
+    def _clear_translation_cache(self) -> None:
+        """Delete every cached translation, including the source text it kept."""
+        from app.cache import TranslationCache
+
+        try:
+            cache = TranslationCache()
+            removed = cache.clear()
+            cache.close()
+        except Exception as e:
+            self._clear_cache_status.setText(tr("settings.api.error", e=str(e)))
+            self._clear_cache_status.setStyleSheet("color: #FF4040; font-size: 11px;")
+            return
+        self._clear_cache_status.setText(tr("settings.privacy.cleared", n=removed))
+        self._clear_cache_status.setStyleSheet("color: #40FF40; font-size: 11px;")
 
     # ── Hotkeys Tab ──────────────────────────────────────────────
 
@@ -402,6 +437,8 @@ class SettingsDialog(QDialog):
         self._config.translation_enabled_default = self._translate_default.isChecked()
         self._config.skip_own_messages = self._skip_own_messages.isChecked()
         self._config.show_debug_console = self._show_console.isChecked()
+        self._config.debug_capture_trace = self._capture_trace.isChecked()
+        debug_log.configure(self._config.debug_capture_trace)
         self._config.hotkey_toggle_translate = self._hk_toggle.text()
         self._config.hotkey_clipboard_translate = self._hk_clipboard.text()
         # Apply UI language change

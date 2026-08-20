@@ -108,6 +108,10 @@ class AppConfig:
 
     # Debug
     show_debug_console: bool = False
+    # Writes every captured chat line to babelchat_raw.log, in full. Useful when
+    # capture misbehaves, and off by default because it puts other players'
+    # whispers on disk.
+    debug_capture_trace: bool = False
 
     def save(self, path: str = CONFIG_FILE) -> None:
         """Save config to JSON file atomically (write to temp, then rename)."""
