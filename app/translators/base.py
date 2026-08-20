@@ -88,12 +88,26 @@ _ORDER: list[str] = []
 
 
 def register(spec: ProviderSpec) -> ProviderSpec:
-    """Add a provider. Registration order is the order the UI lists them in."""
+    """Add a provider. Import order decides the listing order until it is set."""
     if spec.id in _REGISTRY:
         raise ValueError(f"provider {spec.id!r} is already registered")
     _REGISTRY[spec.id] = spec
     _ORDER.append(spec.id)
     return spec
+
+
+def set_listing_order(order: Iterable[str]) -> None:
+    """Fix the order providers are listed and tried in.
+
+    Leaving this to import order was a trap: the import sorter rearranged the
+    provider imports and silently reordered the fallback chain with them. The
+    order is a product decision — which provider a new player should reach for
+    first — so it is stated once, explicitly, and anything unlisted keeps its
+    registration position at the end.
+    """
+    wanted = [pid for pid in order if pid in _REGISTRY]
+    rest = [pid for pid in _ORDER if pid not in wanted]
+    _ORDER[:] = wanted + rest
 
 
 def get(provider_id: str) -> ProviderSpec | None:

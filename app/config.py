@@ -50,7 +50,9 @@ class AppConfig:
     # Generic on purpose — a new provider needs no new config field, and the
     # settings UI renders whatever fields the provider declares.
     providers: dict[str, dict[str, str]] = field(default_factory=dict)
-    translator_priority: str = "deepl"
+    # GigaChat first: free for individuals, no card, reachable from Russia
+    # without a VPN. The others take over if it fails or runs out.
+    translator_priority: str = "gigachat"
 
     # Paths
     wow_path: str = ""

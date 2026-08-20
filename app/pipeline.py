@@ -93,7 +93,7 @@ class PipelineConfig:
     chatlog_path: Path = Path("WoWChatLog.txt")
     # Provider credentials keyed by provider id — see app.translators.
     providers: dict[str, dict[str, str]] = field(default_factory=dict)
-    translator_priority: str = "deepl"
+    translator_priority: str = "gigachat"
     target_lang: str = "EN"
     own_language: Language = Language.ENGLISH
     own_character: str = ""

@@ -6,7 +6,9 @@ time, and that is how the registry gets populated.
 """
 
 from app.translators import deepl_provider as _deepl  # noqa: F401,E402  (registers "deepl")
+from app.translators import gigachat_provider as _gigachat  # noqa: F401,E402  (registers "gigachat")
 from app.translators import microsoft_provider as _microsoft  # noqa: F401,E402  (registers "microsoft")
+from app.translators import mymemory_provider as _mymemory  # noqa: F401,E402  (registers "mymemory")
 from app.translators.base import (
     FAILURE,
     ProviderField,
@@ -21,8 +23,15 @@ from app.translators.base import (
     known_ids,
     register,
     resolve_order,
+    set_listing_order,
 )
 from app.translators.service import TranslatorService
+
+# The order a new player meets these in, and the order the chain falls through.
+# GigaChat leads because it is the only one someone in Russia can sign up for
+# without a foreign card; MyMemory follows because it needs no account at all.
+# Stated here rather than left to import order, which the import sorter rewrites.
+set_listing_order(("gigachat", "mymemory", "deepl", "microsoft"))
 
 __all__ = [
     "FAILURE",
@@ -39,4 +48,5 @@ __all__ = [
     "known_ids",
     "register",
     "resolve_order",
+    "set_listing_order",
 ]
