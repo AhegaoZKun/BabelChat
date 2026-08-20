@@ -6,10 +6,9 @@ import shutil
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QIcon, QKeyEvent, QPainter, QPixmap
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -21,7 +20,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QSlider,
     QSpinBox,
@@ -30,10 +28,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from app.about_dialog import VERSION
+from app.about_tab_qt import build_about_tab
 from app.config import AppConfig, detect_wow_path
 from app.i18n import UI_LANGUAGES, tr
-from app.translator import validate_deepl_key, validate_microsoft_key
+from app.provider_settings_qt import ProviderSettingsGroup
 
 # DeepL supported target languages
 LANGUAGES = {
@@ -62,288 +60,7 @@ LANGUAGES = {
 }
 
 # WoW-inspired dark theme stylesheet
-WOW_THEME_STYLESHEET = """
-QDialog {
-    background-color: #1a1a1a;
-    color: #e0e0e0;
-}
-
-QTabWidget::pane {
-    border: 1px solid #333;
-    background: #1a1a1a;
-    border-radius: 4px;
-}
-QTabBar::tab {
-    background: #2a2a2a;
-    color: #999;
-    border: 1px solid #333;
-    padding: 8px 16px;
-    margin-right: 2px;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-}
-QTabBar::tab:selected {
-    background: #333;
-    color: #FFD200;
-    border-bottom-color: #333;
-}
-QTabBar::tab:hover:!selected {
-    color: #CCC;
-    background: #2e2e2e;
-}
-
-QGroupBox {
-    border: 1px solid #444;
-    border-radius: 4px;
-    margin-top: 12px;
-    padding-top: 16px;
-    background: #222;
-    font-weight: bold;
-    color: #FFD200;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 2px 8px;
-    color: #FFD200;
-}
-
-QLineEdit, QSpinBox {
-    background: #111;
-    color: #e0e0e0;
-    border: 1px solid #555;
-    border-radius: 3px;
-    padding: 6px;
-    selection-background-color: #FFD200;
-    selection-color: #000;
-}
-QLineEdit:focus, QSpinBox:focus {
-    border-color: #FFD200;
-}
-
-QComboBox {
-    background: #111;
-    color: #e0e0e0;
-    border: 1px solid #555;
-    border-radius: 3px;
-    padding: 6px;
-}
-QComboBox:focus { border-color: #FFD200; }
-QComboBox::drop-down {
-    border: none;
-    background: #333;
-    width: 24px;
-}
-QComboBox QAbstractItemView {
-    background: #1a1a1a;
-    color: #e0e0e0;
-    selection-background-color: #FFD200;
-    selection-color: #000;
-    border: 1px solid #555;
-}
-
-QCheckBox {
-    color: #e0e0e0;
-    spacing: 8px;
-}
-QCheckBox::indicator {
-    width: 16px;
-    height: 16px;
-    border: 1px solid #555;
-    border-radius: 3px;
-    background: #111;
-}
-QCheckBox::indicator:checked {
-    background: #FFD200;
-    border-color: #FFD200;
-}
-QCheckBox::indicator:hover {
-    border-color: #FFD200;
-}
-
-QPushButton {
-    background: #333;
-    color: #e0e0e0;
-    border: 1px solid #555;
-    border-radius: 3px;
-    padding: 6px 14px;
-}
-QPushButton:hover {
-    background: #444;
-    border-color: #FFD200;
-    color: #FFD200;
-}
-QPushButton:pressed {
-    background: #555;
-}
-
-QSlider::groove:horizontal {
-    height: 6px;
-    background: #333;
-    border-radius: 3px;
-}
-QSlider::handle:horizontal {
-    background: #FFD200;
-    width: 16px;
-    height: 16px;
-    margin: -5px 0;
-    border-radius: 8px;
-}
-QSlider::sub-page:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #997d00, stop:1 #FFD200);
-    border-radius: 3px;
-}
-
-QProgressBar {
-    border: 1px solid #555;
-    border-radius: 3px;
-    background: #111;
-    text-align: center;
-    color: #e0e0e0;
-    height: 20px;
-}
-QProgressBar::chunk {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #997d00, stop:1 #FFD200);
-    border-radius: 3px;
-}
-
-QLabel {
-    color: #ccc;
-}
-
-QDialogButtonBox QPushButton {
-    min-width: 80px;
-}
-"""
-
-
-class HotkeyEdit(QWidget):
-    """Widget for capturing keyboard shortcuts: shows current combo + Change button."""
-
-    hotkey_changed = pyqtSignal(str)
-
-    _MOD_NAMES = {
-        Qt.Key.Key_Control: "Ctrl",
-        Qt.Key.Key_Shift: "Shift",
-        Qt.Key.Key_Alt: "Alt",
-        Qt.Key.Key_Meta: "Win",
-    }
-
-    def __init__(self, current: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._hotkey = current
-        self._recording = False
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        self._label = QLabel(current or tr("settings.hk.none"))
-        self._label.setStyleSheet(
-            "color: #FFD200; font-weight: bold; font-size: 12px; padding: 4px 8px;"
-            "background: #111; border: 1px solid #555; border-radius: 3px;"
-        )
-        self._label.setMinimumWidth(140)
-        layout.addWidget(self._label)
-
-        self._btn = QPushButton(tr("settings.hk.change"))
-        self._btn.setFixedWidth(90)
-        self._btn.clicked.connect(self._start_recording)
-        layout.addWidget(self._btn)
-
-        self._clear_btn = QPushButton(tr("settings.hk.clear"))
-        self._clear_btn.setFixedWidth(70)
-        self._clear_btn.clicked.connect(self._clear)
-        layout.addWidget(self._clear_btn)
-
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-
-    def text(self) -> str:
-        return self._hotkey
-
-    def _start_recording(self) -> None:
-        self._recording = True
-        self._label.setText(tr("settings.hk.press_keys"))
-        self._label.setStyleSheet(
-            "color: #40FF40; font-weight: bold; font-size: 12px; padding: 4px 8px;"
-            "background: #111; border: 1px solid #40FF40; border-radius: 3px;"
-        )
-        self._btn.setText(tr("settings.hk.cancel"))
-        self._btn.clicked.disconnect()
-        self._btn.clicked.connect(self._cancel_recording)
-        self.setFocus()
-
-    def _cancel_recording(self) -> None:
-        self._recording = False
-        self._label.setText(self._hotkey or tr("settings.hk.none"))
-        self._label.setStyleSheet(
-            "color: #FFD200; font-weight: bold; font-size: 12px; padding: 4px 8px;"
-            "background: #111; border: 1px solid #555; border-radius: 3px;"
-        )
-        self._btn.setText(tr("settings.hk.change"))
-        self._btn.clicked.disconnect()
-        self._btn.clicked.connect(self._start_recording)
-
-    def _clear(self) -> None:
-        self._hotkey = ""
-        self._label.setText(tr("settings.hk.none"))
-        self._cancel_recording()
-        self.hotkey_changed.emit("")
-
-    def keyPressEvent(self, event: QKeyEvent | None) -> None:  # type: ignore[override]
-        if not self._recording or event is None:
-            super().keyPressEvent(event)  # type: ignore[arg-type]
-            return
-
-        key = event.key()
-        # Ignore bare modifier presses
-        if key in (Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
-            return
-
-        parts: list[str] = []
-        mods = event.modifiers()
-        if mods & Qt.KeyboardModifier.ControlModifier:
-            parts.append("Ctrl")
-        if mods & Qt.KeyboardModifier.ShiftModifier:
-            parts.append("Shift")
-        if mods & Qt.KeyboardModifier.AltModifier:
-            parts.append("Alt")
-
-        # Map key to name
-        key_name = ""
-        if Qt.Key.Key_A <= key <= Qt.Key.Key_Z:
-            key_name = chr(key)
-        elif Qt.Key.Key_F1 <= key <= Qt.Key.Key_F12:
-            key_name = f"F{key - Qt.Key.Key_F1 + 1}"
-        elif key == Qt.Key.Key_Escape:
-            self._cancel_recording()
-            return
-        else:
-            # Try Qt enum name
-            try:
-                key_name = Qt.Key(key).name.replace("Key_", "")
-            except (ValueError, AttributeError):
-                key_name = f"0x{key:X}"
-
-        if not parts:
-            # Require at least one modifier
-            return
-
-        parts.append(key_name)
-        combo = "+".join(parts)
-        self._hotkey = combo
-        self._label.setText(combo)
-        self._recording = False
-        self._label.setStyleSheet(
-            "color: #FFD200; font-weight: bold; font-size: 12px; padding: 4px 8px;"
-            "background: #111; border: 1px solid #555; border-radius: 3px;"
-        )
-        self._btn.setText(tr("settings.hk.change"))
-        self._btn.clicked.disconnect()
-        self._btn.clicked.connect(self._start_recording)
-        self.hotkey_changed.emit(combo)
+from app.hotkey_edit import HotkeyEdit  # noqa: E402  (re-export)
 
 
 def _create_dialog_icon() -> QIcon:
@@ -382,6 +99,7 @@ def _create_dialog_icon() -> QIcon:
 
 
 _SETTINGS_DIALOG_POS_FILE = "settings_dialog_pos.json"
+from app.qt_theme import WOW_THEME_STYLESHEET  # noqa: E402  (re-export for the wizard)
 
 
 class SettingsDialog(QDialog):
@@ -527,189 +245,17 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         return tab
 
-    # ── API Key Group ────────────────────────────────────────────
+    # ── Translation providers ────────────────────────────────────
 
     def _create_api_group(self) -> QGroupBox:
-        api_group = QGroupBox(tr("settings.api_group"))
-        api_layout = QVBoxLayout(api_group)
+        """Credential fields for every registered provider.
 
-        # ── DeepL ──────────────────────────────────────────────────
-        deepl_label = QLabel("DeepL")
-        deepl_label.setStyleSheet("color: #FFD200; font-weight: bold; font-size: 12px;")
-        api_layout.addWidget(deepl_label)
-
-        deepl_row = QHBoxLayout()
-        self._api_key_input = QLineEdit(self._config.deepl_api_key)
-        self._api_key_input.setPlaceholderText("DeepL API key (ends with :fx for free)")
-        deepl_row.addWidget(self._api_key_input, stretch=1)
-        self._validate_btn = QPushButton(tr("settings.api.validate"))
-        self._validate_btn.clicked.connect(self._validate_api_key)
-        deepl_row.addWidget(self._validate_btn)
-        deepl_key_link = QLabel(
-            '<a href="https://www.deepl.com/your-account/keys" style="color: #FFD200; font-size: 11px;">Get key</a>'
-        )
-        deepl_key_link.setOpenExternalLinks(True)
-        deepl_row.addWidget(deepl_key_link)
-        api_layout.addLayout(deepl_row)
-
-        self._api_status_label = QLabel("")
-        self._api_status_label.setStyleSheet("font-size: 11px;")
-        api_layout.addWidget(self._api_status_label)
-
-        # Usage bar (DeepL only)
-        self._usage_widget = QWidget()
-        usage_layout = QVBoxLayout(self._usage_widget)
-        usage_layout.setContentsMargins(0, 2, 0, 0)
-        usage_header = QHBoxLayout()
-        usage_title = QLabel(tr("settings.api.usage"))
-        usage_title.setStyleSheet("color: #999; font-size: 11px;")
-        usage_header.addWidget(usage_title)
-        self._usage_detail_label = QLabel("")
-        self._usage_detail_label.setStyleSheet("color: #999; font-size: 11px;")
-        self._usage_detail_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        usage_header.addWidget(self._usage_detail_label)
-        usage_layout.addLayout(usage_header)
-        self._usage_bar = QProgressBar()
-        self._usage_bar.setRange(0, 100)
-        self._usage_bar.setValue(0)
-        usage_layout.addWidget(self._usage_bar)
-        self._usage_widget.hide()
-        api_layout.addWidget(self._usage_widget)
-
-        api_layout.addSpacing(8)
-
-        # ── Microsoft Translator ───────────────────────────────────
-        ms_label = QLabel("Microsoft Translator")
-        ms_label.setStyleSheet("color: #FFD200; font-weight: bold; font-size: 12px;")
-        api_layout.addWidget(ms_label)
-
-        ms_row = QHBoxLayout()
-        self._ms_key_input = QLineEdit(self._config.microsoft_api_key)
-        self._ms_key_input.setPlaceholderText("Microsoft Translator API key")
-        ms_row.addWidget(self._ms_key_input, stretch=1)
-        self._ms_validate_btn = QPushButton(tr("settings.api.validate"))
-        self._ms_validate_btn.clicked.connect(self._validate_ms_key)
-        ms_row.addWidget(self._ms_validate_btn)
-        ms_key_link = QLabel(
-            '<a href="https://portal.azure.com/" style="color: #FFD200; font-size: 11px;">Azure portal</a>'
-        )
-        ms_key_link.setOpenExternalLinks(True)
-        ms_row.addWidget(ms_key_link)
-        api_layout.addLayout(ms_row)
-
-        self._ms_region_input = QLineEdit(getattr(self._config, "microsoft_region", ""))
-        self._ms_region_input.setPlaceholderText("Azure region (e.g. germanywestcentral, eastus, westeurope)")
-        api_layout.addWidget(self._ms_region_input)
-
-        self._ms_status_label = QLabel("")
-        self._ms_status_label.setStyleSheet("font-size: 11px;")
-        api_layout.addWidget(self._ms_status_label)
-
-        api_layout.addSpacing(8)
-
-        # ── Priority ───────────────────────────────────────────────
-        priority_row = QHBoxLayout()
-        priority_lbl = QLabel("Priority:")
-        priority_lbl.setStyleSheet("color: #ccc;")
-        priority_row.addWidget(priority_lbl)
-        self._priority_combo = QComboBox()
-        self._priority_combo.addItem("DeepL first", "deepl")
-        self._priority_combo.addItem("Microsoft first", "microsoft")
-        idx = self._priority_combo.findData(getattr(self._config, "translator_priority", "deepl"))
-        if idx >= 0:
-            self._priority_combo.setCurrentIndex(idx)
-        priority_row.addWidget(self._priority_combo)
-        priority_note = QLabel("(other acts as fallback)")
-        priority_note.setStyleSheet("color: #888; font-size: 11px;")
-        priority_row.addWidget(priority_note)
-        priority_row.addStretch()
-        api_layout.addLayout(priority_row)
-
-        self._update_api_status_indicator()
-        return api_group
-
-    def _validate_api_key(self) -> None:
-        """Test the DeepL API key and show usage stats."""
-        key = self._api_key_input.text().strip()
-        if not key:
-            self._set_api_status("unconfigured", tr("settings.api.no_key"))
-            self._usage_widget.hide()
-            return
-        self._validate_btn.setEnabled(False)
-        self._validate_btn.setText(tr("settings.api.validating"))
-        QApplication.processEvents()
-        valid, msg = validate_deepl_key(key)
-        self._validate_btn.setEnabled(True)
-        self._validate_btn.setText(tr("settings.api.validate"))
-        if valid:
-            self._set_api_status("valid", tr("settings.api.valid"))
-            # Show usage bar if we got usage data
-            if "/" in msg:
-                parts = msg.split("/")
-                try:
-                    count_str = parts[0].replace(",", "")
-                    rest = parts[1].split("(")
-                    limit_str = rest[0].strip().replace(",", "")
-                    pct = int(rest[1].rstrip("%)"))
-                    self._usage_bar.setValue(pct)
-                    self._usage_detail_label.setText(f"{int(count_str):,} / {int(limit_str):,} ({pct}%)")
-                    bar_color = "#FF4040" if pct >= 90 else "#FF7F00" if pct >= 70 else "#FFD200"
-                    self._usage_bar.setStyleSheet(
-                        f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}"
-                    )
-                    self._usage_widget.show()
-                except Exception:
-                    self._usage_widget.hide()
-            else:
-                self._usage_widget.hide()
-        else:
-            msgs = {"auth_failed": tr("settings.api.invalid"), "no_key": tr("settings.api.no_key")}
-            self._set_api_status("invalid", msgs.get(msg, tr("settings.api.error", e=msg)))
-            self._usage_widget.hide()
-
-    def _validate_ms_key(self) -> None:
-        """Test the Microsoft Translator API key."""
-        key = self._ms_key_input.text().strip()
-        if not key:
-            self._set_ms_status("unconfigured", "Enter a key first")
-            return
-        self._ms_validate_btn.setEnabled(False)
-        self._ms_validate_btn.setText(tr("settings.api.validating"))
-        QApplication.processEvents()
-        region = self._ms_region_input.text().strip()
-        valid, msg = validate_microsoft_key(key, region)
-        self._ms_validate_btn.setEnabled(True)
-        self._ms_validate_btn.setText(tr("settings.api.validate"))
-        if valid:
-            self._set_ms_status("valid", "✓ Valid — 2M chars/month free")
-        else:
-            msgs = {"auth_failed": "✗ Invalid key", "no_key": "Enter a key first"}
-            self._set_ms_status("invalid", msgs.get(msg, f"✗ {msg}"))
-
-    def _set_api_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(
-            state, "#999"
-        )
-        icon = {"unconfigured": "•", "valid": "✓", "invalid": "✗", "error": "⚠"}.get(state, "")
-        self._api_status_label.setText(f"{icon} {message}")
-        self._api_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
-
-    def _set_ms_status(self, state: str, message: str) -> None:
-        color = {"unconfigured": "#999", "valid": "#40FF40", "invalid": "#FF4040", "error": "#FF7F00"}.get(
-            state, "#999"
-        )
-        self._ms_status_label.setText(message)
-        self._ms_status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
-
-    def _update_api_status_indicator(self) -> None:
-        if self._config.deepl_api_key:
-            self._set_api_status("unconfigured", tr("settings.api.saved_hint"))
-        else:
-            self._set_api_status("unconfigured", tr("settings.api.not_configured"))
-        if self._config.microsoft_api_key:
-            self._set_ms_status("unconfigured", "Key saved — click Validate to check")
-        else:
-            self._set_ms_status("unconfigured", "Not configured")
+        The dialog no longer knows which providers exist: ProviderSettingsGroup
+        renders whatever the registry holds, so a new provider needs no change
+        here at all.
+        """
+        self._provider_group = ProviderSettingsGroup(self._config, self)
+        return self._provider_group
 
     # ── Overlay Tab ──────────────────────────────────────────────
 
@@ -787,126 +333,7 @@ class SettingsDialog(QDialog):
     # ── About Tab ────────────────────────────────────────────────
 
     def _create_about_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(12)
-
-        # Title + version
-        title = QLabel(f"BabelChat {VERSION}")
-        title.setStyleSheet("color: #FFD200; font-size: 18px; font-weight: bold;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-
-        subtitle = QLabel(tr("about.subtitle"))
-        subtitle.setStyleSheet("color: #ccc; font-size: 12px;")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(subtitle)
-
-        # Developer
-        dev = QLabel(f"{tr('about.developer')} <b>Andrey Yumashev</b>")
-        dev.setStyleSheet("color: #ccc; font-size: 12px;")
-        dev.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(dev)
-
-        # License
-        lic = QLabel(tr("about.license"))
-        lic.setStyleSheet("color: #999; font-size: 11px;")
-        lic.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lic)
-
-        # GitHub
-        github = QLabel(
-            '<a href="https://github.com/Yumash/BabelChat" style="color: #FFD200;">GitHub: Yumash/BabelChat</a>'
-        )
-        github.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        github.setOpenExternalLinks(True)
-        layout.addWidget(github)
-
-        # ── Glossary credit ──
-        sep1 = QLabel()
-        sep1.setFixedHeight(1)
-        sep1.setStyleSheet("background: #444;")
-        layout.addWidget(sep1)
-
-        glossary_credit = QLabel(tr("about.glossary_credit"))
-        glossary_credit.setStyleSheet("color: #ccc; font-size: 11px;")
-        glossary_credit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        glossary_credit.setOpenExternalLinks(True)
-        glossary_credit.setWordWrap(True)
-        layout.addWidget(glossary_credit)
-
-        # ── Donate: Pirson (WoW Dictionary) ──
-        sep2 = QLabel()
-        sep2.setFixedHeight(1)
-        sep2.setStyleSheet("background: #444;")
-        layout.addWidget(sep2)
-
-        dict_donate_title = QLabel(tr("about.donate_dictionary"))
-        dict_donate_title.setStyleSheet("color: #FFD200; font-size: 12px; font-weight: bold;")
-        dict_donate_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(dict_donate_title)
-
-        dict_donate_desc = QLabel(tr("about.donate_dictionary_desc"))
-        dict_donate_desc.setStyleSheet("color: #999; font-size: 11px;")
-        dict_donate_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dict_donate_desc.setWordWrap(True)
-        layout.addWidget(dict_donate_desc)
-
-        pirson_link = QLabel(
-            '<a href="https://buymeacoffee.com/franciscorb" '
-            'style="color: #FFD200; font-size: 12px;">'
-            "Buy Me a Coffee — Pirson</a>"
-        )
-        pirson_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pirson_link.setOpenExternalLinks(True)
-        layout.addWidget(pirson_link)
-
-        # ── Donate: Companion App ──
-        sep3 = QLabel()
-        sep3.setFixedHeight(1)
-        sep3.setStyleSheet("background: #444;")
-        layout.addWidget(sep3)
-
-        app_donate_title = QLabel(tr("about.donate_app"))
-        app_donate_title.setStyleSheet("color: #FFD200; font-size: 12px; font-weight: bold;")
-        app_donate_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(app_donate_title)
-
-        app_donate_desc = QLabel(tr("about.donate_app_desc"))
-        app_donate_desc.setStyleSheet("color: #999; font-size: 11px;")
-        app_donate_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        app_donate_desc.setWordWrap(True)
-        layout.addWidget(app_donate_desc)
-
-        for label, addr in [
-            ("USDT TRC20", "TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx"),
-            ("BTC", "1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja"),
-            ("TON", "UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK"),
-        ]:
-            row = QHBoxLayout()
-            crypto_label = QLabel(f"<b>{label}:</b>")
-            crypto_label.setStyleSheet("color: #ccc; font-size: 11px;")
-            crypto_label.setFixedWidth(90)
-            row.addWidget(crypto_label)
-
-            addr_field = QLineEdit(addr)
-            addr_field.setReadOnly(True)
-            addr_field.setStyleSheet(
-                "color: #e0e0e0; font-size: 10px; background: #111; "
-                "border: 1px solid #444; border-radius: 3px; padding: 4px;"
-            )
-            row.addWidget(addr_field)
-
-            copy_btn = QPushButton(tr("overlay.reply.copy"))
-            copy_btn.setFixedWidth(80)
-            copy_btn.clicked.connect(lambda checked, a=addr: QApplication.clipboard().setText(a))
-            row.addWidget(copy_btn)
-            layout.addLayout(row)
-
-        layout.addStretch()
-        return tab
-
-    # ── Actions ──────────────────────────────────────────────────
+        return build_about_tab(self)
 
     def _browse_wow_path(self) -> None:
         path = QFileDialog.getExistingDirectory(self, tr("settings.wow.browse_title"))
@@ -954,10 +381,8 @@ class SettingsDialog(QDialog):
             self._addon_status.setStyleSheet("color: #FF4040; font-weight: bold;")
 
     def _save_and_accept(self) -> None:
-        self._config.deepl_api_key = self._api_key_input.text().strip()
-        self._config.microsoft_api_key = self._ms_key_input.text().strip()
-        self._config.microsoft_region = self._ms_region_input.text().strip()
-        self._config.translator_priority = self._priority_combo.currentData()
+        # apply_to writes both the credentials and the preferred provider.
+        self._provider_group.apply_to(self._config)
         self._config.wow_path = self._wow_path_input.text().strip()
         self._config.ui_language = self._ui_lang.currentData()
         self._config.own_language = self._own_lang.currentData()

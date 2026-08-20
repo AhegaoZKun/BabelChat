@@ -21,12 +21,21 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from app.config import AppConfig, detect_wow_path  # noqa: E402
-from app.translator import validate_deepl_key, validate_microsoft_key  # noqa: E402
+from app.translators import all_providers  # noqa: E402
+from app.translators import get as provider_get  # noqa: E402
 
 _LANGS = [
-    ("EN", "English"), ("RU", "Русский"), ("ES", "Español"), ("DE", "Deutsch"),
-    ("FR", "Français"), ("PT", "Português"), ("IT", "Italiano"), ("PL", "Polski"),
-    ("ZH", "中文"), ("KO", "한국어"), ("JA", "日本語"),
+    ("EN", "English"),
+    ("RU", "Русский"),
+    ("ES", "Español"),
+    ("DE", "Deutsch"),
+    ("FR", "Français"),
+    ("PT", "Português"),
+    ("IT", "Italiano"),
+    ("PL", "Polski"),
+    ("ZH", "中文"),
+    ("KO", "한국어"),
+    ("JA", "日本語"),
 ]
 _UI_LANGS = [("EN", "English"), ("RU", "Русский"), ("ES", "Español")]
 
@@ -41,8 +50,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._stack = Gtk.Stack()
         self._stack.set_vexpand(True)
         self._pages: list[Gtk.Widget] = []
-        for builder in (self._page_welcome, self._page_api, self._page_wow,
-                        self._page_langs, self._page_ready):
+        for builder in (self._page_welcome, self._page_api, self._page_wow, self._page_langs, self._page_ready):
             page = builder()
             self._pages.append(page)
             self._stack.add_child(page)
@@ -80,17 +88,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
         last = self._index == len(self._pages) - 1
         self._back.set_sensitive(self._index > 0)
         self._next.set_label("Finish" if last else "Next")
-        self._step_lbl.set_markup(
-            f'<span foreground="#888">Step {self._index + 1} of {len(self._pages)}</span>'
-        )
+        self._step_lbl.set_markup(f'<span foreground="#888">Step {self._index + 1} of {len(self._pages)}</span>')
         if last:
             self._refresh_summary()
 
     def _on_next(self, _btn: Gtk.Button) -> None:
         if self._index == 1 and not self._has_any_key():
-            self._api_status.set_markup(
-                '<span foreground="#cc6666">Enter an API key to continue.</span>'
-            )
+            self._api_status.set_markup('<span foreground="#cc6666">Enter an API key to continue.</span>')
             return
         if self._index == len(self._pages) - 1:
             self._finish()
@@ -131,10 +135,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
     def _page_welcome(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         box.append(self._title("Welcome to BabelChat"))
-        box.append(self._body(
-            "Real-time WoW chat translation overlay.\n\n"
-            "This wizard sets up your translation API, game path, and "
-            "languages. It only takes a minute."))
+        box.append(
+            self._body(
+                "Real-time WoW chat translation overlay.\n\n"
+                "This wizard sets up your translation API, game path, and "
+                "languages. It only takes a minute."
+            )
+        )
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.append(self._body("Interface language:"))
         self._ui_lang = self._dropdown(_UI_LANGS, self._config.ui_language or "EN")
@@ -145,19 +152,24 @@ class _WizardWindow(Gtk.ApplicationWindow):
     def _page_api(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         box.append(self._title("Translation API"))
-        box.append(self._body(
-            "BabelChat needs a translation API key. DeepL's free tier "
-            "(500k chars/month) is recommended — deepl.com/pro-api. "
-            "Microsoft Translator is supported as well."))
+        box.append(
+            self._body(
+                "BabelChat needs a translation API key. DeepL's free tier "
+                "(500k chars/month) is recommended — deepl.com/pro-api. "
+                "Microsoft Translator is supported as well."
+            )
+        )
 
-        def key_row(label: str, value: str, validate_cb) -> tuple[Gtk.Entry, Gtk.Button]:
+        def key_row(label: str, value: str, validate_cb, secret: bool = True) -> tuple[Gtk.Entry, Gtk.Button]:
             r = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             lbl = Gtk.Label(label=label)
             lbl.set_width_chars(14)
             lbl.set_xalign(0.0)
             entry = Gtk.Entry()
             entry.set_text(value or "")
-            entry.set_visibility(False)
+            # Only credentials are masked. A region or an endpoint is not a
+            # secret, and hiding it just makes it harder to check for typos.
+            entry.set_visibility(not secret)
             entry.set_hexpand(True)
             btn = Gtk.Button(label="Validate")
             btn.connect("clicked", validate_cb)
@@ -167,30 +179,31 @@ class _WizardWindow(Gtk.ApplicationWindow):
             box.append(r)
             return entry, btn
 
-        self._deepl_entry, self._deepl_btn = key_row(
-            "DeepL key", self._config.deepl_api_key, self._validate_deepl)
-        self._ms_entry, self._ms_btn = key_row(
-            "Microsoft key", self._config.microsoft_api_key, self._validate_ms)
-
-        region_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        region_lbl = Gtk.Label(label="MS region")
-        region_lbl.set_width_chars(14)
-        region_lbl.set_xalign(0.0)
-        self._ms_region = Gtk.Entry()
-        self._ms_region.set_text(self._config.microsoft_region or "")
-        self._ms_region.set_hexpand(True)
-        region_row.append(region_lbl)
-        region_row.append(self._ms_region)
-        box.append(region_row)
-
+        # One row per credential each registered provider declares. Nothing here
+        # names a provider, so adding one shows up in the wizard by itself.
+        saved = self._config.providers or {}
+        self._provider_entries: dict[str, dict[str, Gtk.Entry]] = {}
+        for spec in all_providers():
+            values = saved.get(spec.id, {})
+            fields: dict[str, Gtk.Entry] = {}
+            for index, pfield in enumerate(spec.fields):
+                label = spec.display_name if index == 0 else pfield.label
+                entry, _btn = key_row(
+                    label,
+                    values.get(pfield.key, ""),
+                    lambda _b, pid=spec.id: self._validate_provider(_b, pid),
+                    secret=pfield.secret,
+                )
+                fields[pfield.key] = entry
+            self._provider_entries[spec.id] = fields
 
         prio_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         prio_lbl = Gtk.Label(label="Prefer")
         prio_lbl.set_width_chars(14)
         prio_lbl.set_xalign(0.0)
         self._priority = self._dropdown(
-            [("deepl", "DeepL"), ("microsoft", "Microsoft")],
-            self._config.translator_priority or "deepl")
+            [(spec.id, spec.display_name) for spec in all_providers()], self._config.translator_priority or ""
+        )
         prio_row.append(prio_lbl)
         prio_row.append(self._priority)
         box.append(prio_row)
@@ -204,9 +217,12 @@ class _WizardWindow(Gtk.ApplicationWindow):
     def _page_wow(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         box.append(self._title("World of Warcraft path"))
-        box.append(self._body(
-            "Needed to install the companion addon and find the chat log. "
-            "Auto-detect scans common Steam/Lutris/Wine prefixes."))
+        box.append(
+            self._body(
+                "Needed to install the companion addon and find the chat log. "
+                "Auto-detect scans common Steam/Lutris/Wine prefixes."
+            )
+        )
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._wow_entry = Gtk.Entry()
         self._wow_entry.set_text(self._config.wow_path or "")
@@ -244,37 +260,34 @@ class _WizardWindow(Gtk.ApplicationWindow):
         box.append(self._body("Click Finish to save and start BabelChat."))
         return box
 
+    def _entered(self, provider_id: str) -> dict[str, str]:
+        return {key: entry.get_text().strip() for key, entry in self._provider_entries[provider_id].items()}
+
     def _refresh_summary(self) -> None:
-        deepl = "set" if self._deepl_entry.get_text().strip() else "—"
-        ms = "set" if self._ms_entry.get_text().strip() else "—"
-        self._summary.set_markup(
-            f"DeepL key: <b>{deepl}</b>\n"
-            f"Microsoft key: <b>{ms}</b>\n"
-            f"WoW path: <b>{GLib.markup_escape_text(self._wow_entry.get_text().strip() or '—')}</b>\n"
-            f"Own language: <b>{self._dd_code(self._own_lang)}</b>\n"
-            f"Target language: <b>{self._dd_code(self._target_lang)}</b>"
-        )
+        rows = [
+            f"{GLib.markup_escape_text(spec.display_name)}: "
+            f"<b>{'set' if spec.is_configured(self._entered(spec.id)) else 'not set'}</b>"
+            for spec in all_providers()
+        ]
+        rows.append(f"WoW path: <b>{GLib.markup_escape_text(self._wow_entry.get_text().strip() or 'not set')}</b>")
+        rows.append(f"Own language: <b>{self._dd_code(self._own_lang)}</b>")
+        rows.append(f"Target language: <b>{self._dd_code(self._target_lang)}</b>")
+        self._summary.set_markup("\n".join(rows))
 
     # ── API validation (off-thread) ───────────────────────────────────────
     def _has_any_key(self) -> bool:
-        return bool(self._deepl_entry.get_text().strip()
-                    or self._ms_entry.get_text().strip())
+        return any(spec.is_configured(self._entered(spec.id)) for spec in all_providers())
 
-    def _validate_deepl(self, btn: Gtk.Button) -> None:
-        key = self._deepl_entry.get_text().strip()
-        if not key:
-            self._api_status.set_markup('<span foreground="#cc6666">Enter a DeepL key first.</span>')
+    def _validate_provider(self, btn: Gtk.Button, provider_id: str) -> None:
+        spec = provider_get(provider_id)
+        if spec is None:
             return
-        self._run_validation(btn, lambda: validate_deepl_key(key), "DeepL")
-
-    def _validate_ms(self, btn: Gtk.Button) -> None:
-        key = self._ms_entry.get_text().strip()
-        if not key:
-            self._api_status.set_markup('<span foreground="#cc6666">Enter a Microsoft key first.</span>')
+        values = self._entered(provider_id)
+        if not spec.is_configured(values):
+            name = GLib.markup_escape_text(spec.display_name)
+            self._api_status.set_markup(f'<span foreground="#cc6666">Enter a {name} key first.</span>')
             return
-        region = self._ms_region.get_text().strip()
-        self._run_validation(btn, lambda: validate_microsoft_key(key, region), "Microsoft")
-
+        self._run_validation(btn, lambda: spec.validate(values), spec.display_name)
 
     def _run_validation(self, btn: Gtk.Button, fn, name: str) -> None:
         btn.set_sensitive(False)
@@ -291,12 +304,12 @@ class _WizardWindow(Gtk.ApplicationWindow):
             btn.set_sensitive(True)
             if valid:
                 extra = f" — {msg}" if msg and msg != "valid" else ""
-                self._api_status.set_markup(
-                    f'<span foreground="#66cc66">✓ {name} key valid{extra}</span>')
+                self._api_status.set_markup(f'<span foreground="#66cc66">✓ {name} key valid{extra}</span>')
             else:
                 nice = {"auth_failed": "invalid key", "no_key": "no key entered"}.get(msg, msg)
                 self._api_status.set_markup(
-                    f'<span foreground="#cc6666">✗ {name}: {GLib.markup_escape_text(nice)}</span>')
+                    f'<span foreground="#cc6666">✗ {name}: {GLib.markup_escape_text(nice)}</span>'
+                )
             return False
 
         threading.Thread(target=worker, daemon=True).start()
@@ -309,7 +322,8 @@ class _WizardWindow(Gtk.ApplicationWindow):
             self._wow_status.set_markup('<span foreground="#66cc66">✓ Found installation.</span>')
         else:
             self._wow_status.set_markup(
-                '<span foreground="#cc6666">Not found — set it manually (can be changed later).</span>')
+                '<span foreground="#cc6666">Not found — set it manually (can be changed later).</span>'
+            )
 
     def _browse(self, _btn: Gtk.Button) -> None:
         dialog = Gtk.FileDialog(title="Select World of Warcraft folder")
@@ -327,9 +341,12 @@ class _WizardWindow(Gtk.ApplicationWindow):
     # ── finish ────────────────────────────────────────────────────────────
     def _finish(self) -> None:
         c = self._config
-        c.deepl_api_key = self._deepl_entry.get_text().strip()
-        c.microsoft_api_key = self._ms_entry.get_text().strip()
-        c.microsoft_region = self._ms_region.get_text().strip()
+        providers: dict[str, dict[str, str]] = {}
+        for spec in all_providers():
+            values = {key: value for key, value in self._entered(spec.id).items() if value}
+            if values:
+                providers[spec.id] = values
+        c.providers = providers
         c.translator_priority = self._dd_code(self._priority)
         c.wow_path = self._wow_entry.get_text().strip()
         c.own_language = self._dd_code(self._own_lang)

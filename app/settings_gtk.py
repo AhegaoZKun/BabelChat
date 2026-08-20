@@ -28,6 +28,7 @@ from app.overlay_theme import (  # noqa: E402
     SLOT_ORDER,
     resolve_theme,
 )
+from app.translators import all_providers  # noqa: E402
 
 # (label, attribute) pairs for the channel checkboxes.
 _CHANNELS: list[tuple[str, str]] = [
@@ -134,11 +135,26 @@ class SettingsWindowGtk:
         # Translation API
         root.append(self._section("Translation API"))
         self._priority = self._combo_row(
-            root, "Priority", self._config.translator_priority, options=["deepl", "microsoft"]
+            root,
+            "Preferred translator",
+            self._config.translator_priority,
+            options=[spec.id for spec in all_providers()],
         )
-        self._deepl = self._entry_row(root, "DeepL API key", self._config.deepl_api_key, secret=True)
-        self._ms_key = self._entry_row(root, "Microsoft API key", self._config.microsoft_api_key, secret=True)
-        self._ms_region = self._entry_row(root, "Microsoft region", self._config.microsoft_region)
+        # One row per credential the provider declares — nothing here names a
+        # provider, so a new one appears in these settings on its own.
+        saved = self._config.providers or {}
+        self._provider_entries: dict[str, dict[str, object]] = {}
+        for spec in all_providers():
+            values = saved.get(spec.id, {})
+            self._provider_entries[spec.id] = {
+                pfield.key: self._entry_row(
+                    root,
+                    f"{spec.display_name} — {pfield.label}",
+                    values.get(pfield.key, ""),
+                    secret=pfield.secret,
+                )
+                for pfield in spec.fields
+            }
 
         # Appearance
         root.append(self._section("Appearance"))
@@ -387,9 +403,13 @@ class SettingsWindowGtk:
         c.target_language = self._dd_value(self._target)
         c.ui_language = self._dd_value(self._ui)
         c.translator_priority = self._dd_value(self._priority)
-        c.deepl_api_key = self._deepl.get_text()
-        c.microsoft_api_key = self._ms_key.get_text()
-        c.microsoft_region = self._ms_region.get_text()
+        providers: dict[str, dict[str, str]] = {}
+        for provider_id, entries in self._provider_entries.items():
+            values = {key: entry.get_text().strip() for key, entry in entries.items()}
+            values = {key: value for key, value in values.items() if value}
+            if values:
+                providers[provider_id] = values
+        c.providers = providers
         c.overlay_opacity = int(self._opacity.get_value())
         c.overlay_font_size = int(self._font.get_value())
         c.overlay_theme = PRESET_ORDER[self._preset.get_selected()]

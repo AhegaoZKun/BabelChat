@@ -446,6 +446,21 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Validate Key",
         "ES": "Validar clave",
     },
+    "settings.api.reveal": {
+        "RU": "Показать ключ",
+        "EN": "Show key",
+        "ES": "Mostrar clave",
+    },
+    "settings.api.preferred": {
+        "RU": "Основной переводчик:",
+        "EN": "Preferred translator:",
+        "ES": "Traductor preferido:",
+    },
+    "settings.api.preferred_note": {
+        "RU": "остальные включаются, если он недоступен или исчерпал лимит",
+        "EN": "the others take over if it fails or runs out of quota",
+        "ES": "los demás se usan si falla o agota su cuota",
+    },
     "settings.api.validating": {
         "RU": "Проверка...",
         "EN": "Validating...",

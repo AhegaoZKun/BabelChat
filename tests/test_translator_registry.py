@@ -1,0 +1,320 @@
+"""The provider registry, the fallback chain, and the config migration.
+
+`TranslatorService` used to be built from four hardcoded keyword arguments and
+knew both provider names by heart. What matters now is that it knows none: it
+reads whatever the registry holds, and a config it cannot fully understand
+degrades instead of failing.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from app.config import AppConfig
+from app.translators import base
+from app.translators.base import (
+    FAILURE,
+    ProviderField,
+    ProviderSpec,
+    TranslationResult,
+    any_configured,
+    configured_ids,
+    resolve_order,
+)
+from app.translators.service import TranslatorService
+
+
+class FakeBackend:
+    """A backend that answers however the test needs it to."""
+
+    def __init__(self, name: str, succeeds: bool = True, error: str = "boom") -> None:
+        self.name = name
+        self.succeeds = succeeds
+        self.error = error
+        self.calls: list[tuple[str, str]] = []
+
+    def translate(self, text: str, target_lang: str, source_lang: str | None = None) -> TranslationResult:
+        self.calls.append((text, target_lang))
+        return TranslationResult(
+            original=text,
+            translated=f"{self.name}:{text}" if self.succeeds else text,
+            source_lang=source_lang or "EN",
+            target_lang=target_lang,
+            success=self.succeeds,
+            error=None if self.succeeds else self.error,
+            backend=self.name,
+        )
+
+    def validate(self) -> tuple[bool, str]:
+        return self.succeeds, "valid" if self.succeeds else self.error
+
+
+@pytest.fixture
+def registry(monkeypatch):
+    """An empty registry for the duration of one test.
+
+    The real one is populated at import time by the provider modules; replacing
+    its innards keeps tests from leaking fake providers into each other.
+    """
+    monkeypatch.setattr(base, "_REGISTRY", {})
+    monkeypatch.setattr(base, "_ORDER", [])
+    return base
+
+
+def register_fake(registry, provider_id: str, backend: FakeBackend | None = None, **kwargs) -> FakeBackend:
+    backend = backend or FakeBackend(provider_id)
+    registry.register(
+        ProviderSpec(
+            id=provider_id,
+            display_name=provider_id.title(),
+            fields=(ProviderField(key="api_key", label="Key"),),
+            build=lambda _settings, b=backend: b,
+            validate=lambda _settings, b=backend: b.validate(),
+            **kwargs,
+        )
+    )
+    return backend
+
+
+# ── registration ─────────────────────────────────────────────────────────────
+
+
+def test_registration_order_is_the_listing_order(registry):
+    register_fake(registry, "second")
+    register_fake(registry, "first")
+    assert registry.known_ids() == ("second", "first")
+
+
+def test_registering_the_same_id_twice_is_refused(registry):
+    register_fake(registry, "dup")
+    with pytest.raises(ValueError, match="already registered"):
+        register_fake(registry, "dup")
+
+
+def test_a_provider_with_a_blank_required_field_is_not_configured(registry):
+    register_fake(registry, "acme")
+    spec = registry.get("acme")
+    assert spec.is_configured({"api_key": "k"}) is True
+    assert spec.is_configured({"api_key": "   "}) is False
+    assert spec.is_configured({}) is False
+
+
+def test_a_keyless_provider_is_always_configured(registry):
+    register_fake(registry, "free", keyless=True)
+    assert registry.get("free").is_configured({}) is True
+
+
+# ── the fallback chain ───────────────────────────────────────────────────────
+
+
+def test_the_preferred_provider_is_tried_first(registry):
+    first = register_fake(registry, "alpha")
+    second = register_fake(registry, "beta")
+    service = TranslatorService({"alpha": {"api_key": "a"}, "beta": {"api_key": "b"}}, priority="beta")
+
+    result = service.translate("hi", "RU")
+
+    assert result.backend == "beta"
+    assert second.calls and not first.calls
+
+
+def test_a_failure_falls_through_to_the_next_provider(registry):
+    failing = register_fake(registry, "alpha", FakeBackend("alpha", succeeds=False))
+    working = register_fake(registry, "beta")
+    service = TranslatorService({"alpha": {"api_key": "a"}, "beta": {"api_key": "b"}}, priority="alpha")
+
+    result = service.translate("hi", "RU")
+
+    assert result.success is True
+    assert result.backend == "beta"
+    assert failing.calls and working.calls
+
+
+def test_when_every_provider_fails_the_last_failure_is_returned_with_the_original(registry):
+    register_fake(registry, "alpha", FakeBackend("alpha", succeeds=False, error="alpha_down"))
+    register_fake(registry, "beta", FakeBackend("beta", succeeds=False, error="beta_down"))
+    service = TranslatorService({"alpha": {"api_key": "a"}, "beta": {"api_key": "b"}}, priority="alpha")
+
+    result = service.translate("hello", "RU")
+
+    assert result.success is False
+    assert result.error == "beta_down"
+    assert result.translated == "hello", "a failed translation still shows the message"
+
+
+def test_blank_input_is_returned_without_calling_a_provider(registry):
+    backend = register_fake(registry, "alpha")
+    service = TranslatorService({"alpha": {"api_key": "a"}})
+
+    result = service.translate("   ", "RU")
+
+    assert result.success is True
+    assert backend.calls == []
+
+
+# ── configs this build cannot fully understand ───────────────────────────────
+
+
+def test_an_unknown_provider_id_is_skipped_and_the_rest_still_work(registry, caplog):
+    register_fake(registry, "alpha")
+    service = TranslatorService({"from_the_future": {"token": "x"}, "alpha": {"api_key": "a"}})
+
+    assert service.has_backend is True
+    assert service.translate("hi", "RU").backend == "alpha"
+    assert "from_the_future" in caplog.text
+
+
+def test_an_unknown_priority_falls_back_to_listing_order(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+    service = TranslatorService({"alpha": {"api_key": "a"}, "beta": {"api_key": "b"}}, priority="nonesuch")
+
+    assert service.active_ids == ("alpha", "beta")
+
+
+def test_an_empty_registry_reports_no_backend_rather_than_raising(registry):
+    service = TranslatorService({}, priority="deepl")
+
+    result = service.translate("hi", "RU")
+
+    assert service.has_backend is False
+    assert result.success is False
+    assert result.error == FAILURE.NO_BACKEND
+    assert result.translated == "hi"
+
+
+def test_a_provider_that_cannot_be_built_does_not_take_the_others_down(registry, caplog):
+    def explode(_settings):
+        raise RuntimeError("bad credentials shape")
+
+    registry.register(
+        ProviderSpec(
+            id="broken",
+            display_name="Broken",
+            fields=(ProviderField(key="api_key", label="Key"),),
+            build=explode,
+            validate=lambda _s: (False, "no"),
+        )
+    )
+    register_fake(registry, "alpha")
+    service = TranslatorService({"broken": {"api_key": "x"}, "alpha": {"api_key": "a"}})
+
+    assert service.active_ids == ("alpha",)
+    assert "Broken" in caplog.text
+
+
+def test_resolve_order_ignores_providers_that_are_not_configured(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+    assert resolve_order("beta", ["alpha"]) == ["alpha"]
+
+
+# ── "is the app set up?" ─────────────────────────────────────────────────────
+
+
+def test_any_configured_is_false_for_blank_and_unknown_entries(registry):
+    register_fake(registry, "alpha")
+    assert any_configured(None) is False
+    assert any_configured({}) is False
+    assert any_configured({"alpha": {"api_key": ""}}) is False
+    assert any_configured({"stranger": {"api_key": "x"}}) is False
+    assert any_configured({"alpha": {"api_key": "x"}}) is True
+
+
+def test_configured_ids_keeps_only_complete_known_providers(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+    ids = configured_ids({"alpha": {"api_key": "x"}, "beta": {}, "stranger": {"api_key": "y"}})
+    assert ids == ["alpha"]
+
+
+# ── config migration ─────────────────────────────────────────────────────────
+
+
+def write_config(path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def test_pre_registry_keys_are_migrated_without_loss(tmp_path):
+    config_file = tmp_path / "config.json"
+    write_config(
+        config_file,
+        {
+            "deepl_api_key": "deepl-secret:fx",
+            "microsoft_api_key": "ms-secret",
+            "microsoft_region": "westeurope",
+            "translator_priority": "microsoft",
+        },
+    )
+
+    loaded = AppConfig.load(str(config_file))
+
+    assert loaded.providers == {
+        "deepl": {"api_key": "deepl-secret:fx"},
+        "microsoft": {"api_key": "ms-secret", "region": "westeurope"},
+    }
+    assert loaded.translator_priority == "microsoft"
+
+
+def test_migration_keeps_a_copy_of_the_original_config(tmp_path):
+    """The ordinary .bak is overwritten by the next save, so upgrading would
+    otherwise leave no way back to the pre-migration file."""
+    config_file = tmp_path / "config.json"
+    write_config(config_file, {"deepl_api_key": "deepl-secret:fx"})
+
+    AppConfig.load(str(config_file))
+
+    backup = tmp_path / "config.json.pre-providers.bak"
+    assert backup.exists()
+    assert "deepl-secret:fx" in backup.read_text(encoding="utf-8")
+
+
+def test_migration_does_not_overwrite_a_value_already_in_the_new_shape(tmp_path):
+    config_file = tmp_path / "config.json"
+    write_config(
+        config_file,
+        {"deepl_api_key": "old-key", "providers": {"deepl": {"api_key": "new-key"}}},
+    )
+
+    loaded = AppConfig.load(str(config_file))
+
+    assert loaded.providers["deepl"]["api_key"] == "new-key"
+
+
+def test_a_config_with_no_legacy_keys_is_untouched(tmp_path):
+    config_file = tmp_path / "config.json"
+    write_config(config_file, {"providers": {"deepl": {"api_key": "k"}}})
+
+    loaded = AppConfig.load(str(config_file))
+
+    assert loaded.providers == {"deepl": {"api_key": "k"}}
+    assert not (tmp_path / "config.json.pre-providers.bak").exists()
+
+
+def test_a_blank_legacy_key_does_not_create_an_empty_provider(tmp_path):
+    config_file = tmp_path / "config.json"
+    write_config(config_file, {"deepl_api_key": "", "microsoft_api_key": "  "})
+
+    loaded = AppConfig.load(str(config_file))
+
+    assert loaded.providers == {}
+
+
+def test_a_malformed_providers_section_is_replaced_rather_than_crashing(tmp_path, caplog):
+    config_file = tmp_path / "config.json"
+    write_config(config_file, {"deepl_api_key": "k", "providers": "not-a-dict"})
+
+    loaded = AppConfig.load(str(config_file))
+
+    assert loaded.providers == {"deepl": {"api_key": "k"}}
+    assert "malformed" in caplog.text.lower()
+
+
+def test_providers_survive_a_save_and_load_round_trip(tmp_path):
+    config_file = tmp_path / "config.json"
+    original = AppConfig(providers={"deepl": {"api_key": "k"}}, translator_priority="deepl")
+    original.save(str(config_file))
+
+    assert AppConfig.load(str(config_file)).providers == {"deepl": {"api_key": "k"}}
