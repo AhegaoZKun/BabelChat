@@ -116,8 +116,8 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 ### Windows — Quick Start
 
 1. Download `BabelChatWindows.zip` from [Releases](https://github.com/Yumash/BabelChat/releases)
-2. Extract and run `BabelChat.exe` **as Administrator**
-3. Follow the setup wizard (get a [free DeepL API key](https://www.deepl.com/pro-api), set WoW path, install addon)
+2. Extract and run `BabelChat.exe`
+3. Follow the setup wizard (pick a translator, set the WoW path, install the addon). GigaChat is free for individuals and needs no card; you can also skip this and use the in-game dictionary alone.
 4. Launch WoW, join a group — translations appear automatically
 
 ### Linux  — Quick Start
@@ -133,7 +133,7 @@ If you used our previous addon (ChatTranslatorHelper, TWW era), BabelChat automa
 git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
-python -m app.main  # run as Administrator
+python -m app.main
 ```
 
 ### From Source (Linux)
@@ -207,7 +207,7 @@ Adding a new term is simple. Edit the relevant `addon/BabelChat/Data/*.lua` file
 
 ## Limitations
 
-- **Requires elevated memory access** — Administrator on Windows; `ptrace_scope=0` on Linux
+- **Reads the game's memory** — no elevation needed on Windows (the scanner asks only for read access to a process you already own); on Linux this needs `ptrace_scope=0`
 - **Linux Compositor** – Requires compositor to support layer-shell (GNOME doesn't)
 - **DeepL Free limit** — 500K chars/month (~10K messages). Paid plans available
 - **Outgoing messages** — copy → paste in WoW chat (by design, ToS compliance)

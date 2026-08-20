@@ -28,38 +28,13 @@ from app.addon_protocol import (
     is_system_noise,
     make_synthetic_log_line,
 )
+from app.native_scanner import load_scanner
 
 logger = logging.getLogger(__name__)
 
 # ── Rust library loading ──────────────────────────────────────────────────────
 
-_LIB_NAMES = [
-    "libbabelchat_scanner.so",
-    # Common alternative locations
-    str(pathlib.Path(__file__).parent / "libbabelchat_scanner.so"),
-    str(pathlib.Path(__file__).parent.parent / "libbabelchat_scanner.so"),
-]
-
-
-def _load_rust_lib() -> ctypes.CDLL | None:
-    for name in _LIB_NAMES:
-        try:
-            lib = ctypes.CDLL(name)
-            lib.find_and_read_buffer.restype = ctypes.c_int32
-            lib.find_and_read_buffer.argtypes = [
-                ctypes.c_int32,  # pid
-                ctypes.c_int32,  # min_seq
-                ctypes.c_char_p,  # out_buf
-                ctypes.c_int32,  # out_len
-            ]
-            logger.info("Loaded Rust scanner: %s", name)
-            return lib
-        except OSError:
-            continue
-    return None
-
-
-_rust_lib: ctypes.CDLL | None = _load_rust_lib()
+_rust_lib: ctypes.CDLL | None = load_scanner()
 _OUT_BUF_SIZE = 131072  # 128KB output buffer
 
 # ── Constants (kept for compatibility) ────────────────────────────────────────

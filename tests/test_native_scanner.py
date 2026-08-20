@@ -1,0 +1,97 @@
+"""How the native scanner is located and loaded.
+
+The loader used to start its search from a bare filename, which sends Windows
+through its standard search order — the current working directory and every
+entry in PATH included. Anything a same-user process can write to becomes a
+place to plant a library. These tests pin the property that fixes it: every
+candidate is an absolute path, and a bare name is never one of them.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import sys
+
+import pytest
+
+from app import native_scanner
+from app.native_scanner import LINUX_LIBRARY, WINDOWS_LIBRARY, candidate_paths, library_name, load_scanner
+
+
+def test_every_candidate_is_an_absolute_path():
+    for path in candidate_paths():
+        assert path.is_absolute(), f"{path} is relative — the loader would search PATH for it"
+
+
+def test_no_candidate_is_a_bare_filename():
+    """The bare name is the vulnerability, not a convenience."""
+    names = {path.name for path in candidate_paths()}
+    assert names == {library_name()}
+    assert all(len(path.parts) > 1 for path in candidate_paths())
+
+
+def test_a_library_planted_in_the_working_directory_is_not_a_candidate(tmp_path, monkeypatch):
+    planted = tmp_path / library_name()
+    planted.write_bytes(b"not a real library")
+    monkeypatch.chdir(tmp_path)
+
+    assert planted.resolve() not in candidate_paths()
+
+
+def test_candidates_are_deduplicated():
+    paths = candidate_paths()
+    assert len(paths) == len(set(paths))
+
+
+def test_a_frozen_build_looks_beside_the_executable_first(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    first = candidate_paths()[0]
+
+    assert first.parent == tmp_path.resolve()
+
+
+def test_the_library_name_matches_the_platform():
+    expected = WINDOWS_LIBRARY if sys.platform == "win32" else LINUX_LIBRARY
+    assert library_name() == expected
+
+
+def test_a_missing_library_returns_none_rather_than_raising(monkeypatch):
+    """The Python scanner takes over — slower, but the app still runs."""
+    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [])
+
+    assert load_scanner() is None
+
+
+def test_an_unloadable_file_is_skipped_without_raising(monkeypatch, tmp_path):
+    broken = tmp_path / library_name()
+    broken.write_bytes(b"definitely not a shared library")
+    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [broken])
+
+    assert load_scanner() is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the search-order flags are Windows-only")
+def test_windows_confines_the_dependency_search():
+    """LOAD_LIBRARY_SEARCH_DEFAULT_DIRS plus the library's own directory — which
+    is System32 and the bundle, and never the working directory or PATH."""
+    assert native_scanner._SAFE_SEARCH == 0x00000100 | 0x00001000
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the bundled library is the Windows build")
+def test_the_shipped_library_loads_from_its_absolute_path():
+    lib = load_scanner()
+    if lib is None:
+        pytest.skip("native scanner is not built in this checkout")
+    assert lib.find_and_read_buffer.restype is not None
+
+
+def test_the_loader_is_shared_by_both_platform_readers():
+    """Both readers carried their own copy, and the Windows one grew the fix
+    while the Linux one did not."""
+    windows = pathlib.Path("app/memory_reader_windows.py").read_text(encoding="utf-8")
+    linux = pathlib.Path("app/memory_reader_linux.py").read_text(encoding="utf-8")
+    for source in (windows, linux):
+        assert "from app.native_scanner import load_scanner" in source
+        assert "_DLL_NAMES" not in source
+        assert "_LIB_NAMES" not in source

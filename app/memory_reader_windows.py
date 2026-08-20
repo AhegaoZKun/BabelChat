@@ -31,37 +31,13 @@ from app.addon_protocol import (
     is_system_noise,
     make_synthetic_log_line,
 )
+from app.native_scanner import load_scanner
 
 logger = logging.getLogger(__name__)
 
 # ── DLL loading ───────────────────────────────────────────────────────────────
 
-_DLL_NAMES = [
-    "babelchat_scanner_win.dll",
-    str(pathlib.Path(__file__).parent / "babelchat_scanner_win.dll"),
-    str(pathlib.Path(__file__).parent.parent / "babelchat_scanner_win.dll"),
-]
-
-
-def _load_rust_lib() -> ctypes.CDLL | None:
-    for name in _DLL_NAMES:
-        try:
-            lib = ctypes.CDLL(name)
-            lib.find_and_read_buffer.restype = ctypes.c_int32
-            lib.find_and_read_buffer.argtypes = [
-                ctypes.c_int32,  # pid
-                ctypes.c_int32,  # min_seq
-                ctypes.c_char_p,  # out_buf
-                ctypes.c_int32,  # out_len
-            ]
-            logger.info("Loaded Rust scanner: %s", name)
-            return lib
-        except OSError:
-            continue
-    return None
-
-
-_rust_lib: ctypes.CDLL | None = _load_rust_lib()
+_rust_lib: ctypes.CDLL | None = load_scanner()
 _OUT_BUF_SIZE = 131072  # 128KB
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -102,7 +78,10 @@ def _find_wow_pid() -> int | None:
     except Exception:
         pass
 
-    # Fallback: pymem
+    # Fallback: pymem's process lookup. Only the PID is wanted here, so the
+    # handle it opens is closed immediately — `Pymem(name)` asks for
+    # PROCESS_ALL_ACCESS, and holding that open is what made the app look like
+    # it needed administrator rights.
     try:
         import pymem
         import pymem.exception
@@ -115,11 +94,15 @@ def _find_wow_pid() -> int | None:
                 return pid
             except pymem.exception.ProcessNotFound:
                 continue
+            except pymem.exception.PymemError:
+                # Opening with full access can fail without elevation. The name
+                # matched, so fall through to the reader, which opens the
+                # process with read-only rights and does not need elevation.
+                continue
     except ImportError:
         pass
 
     return None
-
 
 
 # ── Rust scanner call ─────────────────────────────────────────────────────────
@@ -138,20 +121,37 @@ def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
 # ── Pure-Python fallback scanner ──────────────────────────────────────────────
 
 
+def _open_for_reading(pid: int):
+    """Open the game process with the least rights that can read its memory.
+
+    `pymem.Pymem(name)` opens PROCESS_ALL_ACCESS, which wants SeDebugPrivilege
+    and is why the app asked to run as administrator at all. Reading another
+    process owned by the same user needs only these two rights, which Windows
+    grants from the target's own DACL — no elevation involved.
+    """
+    import pymem
+    import pymem.ressources.kernel32
+
+    process_vm_read = 0x0010
+    process_query_information = 0x0400
+
+    handle = pymem.ressources.kernel32.OpenProcess(process_vm_read | process_query_information, False, pid)
+    if not handle:
+        return None
+
+    pm = pymem.Pymem()
+    pm.process_id = pid
+    pm.process_handle = handle
+    return pm
+
+
 def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
-    """Fallback: use pymem if Rust DLL not available."""
+    """Fallback: use pymem if the native scanner is not available."""
     try:
-        import pymem
-        import pymem.exception
         import pymem.pattern
 
-        for proc_name in WOW_PROCESS_NAMES:
-            try:
-                pm = pymem.Pymem(proc_name)
-                break
-            except pymem.exception.ProcessNotFound:
-                continue
-        else:
+        pm = _open_for_reading(pid)
+        if pm is None:
             return None
 
         addrs = pymem.pattern.pattern_scan_all(
@@ -181,8 +181,6 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
         return best_content
     except Exception:
         return None
-
-
 
 
 # ── Main reader class ─────────────────────────────────────────────────────────
@@ -416,7 +414,6 @@ class WoWAddonBufReader:
 
         if new_count > 0:
             self._last_new_msg_time = time.monotonic()
-
 
 
 class MemoryChatWatcher:
