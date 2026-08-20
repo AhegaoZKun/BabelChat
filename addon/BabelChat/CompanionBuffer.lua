@@ -28,10 +28,9 @@ local dedupIdx = 0
 -- event arguments arrive as secret values. Tainted code may CONCATENATE a
 -- secret, but any comparison, boolean test or length query on one raises.
 --
--- string.len is therefore the cheapest probe available: it fails on exactly
--- the class of operation we are about to perform. It also fails on nil and on
--- non-strings, which is what we want — all three cases mean "do not put this
--- in the buffer".
+-- string.len is the cheapest probe for that: it fails on exactly the class of
+-- operation we are about to perform. It is NOT a type check — Lua 5.1 coerces,
+-- so string.len(42) succeeds — which is why IsUsable asks about the type too.
 --
 -- The probe belongs at the door, not at serialize time. Probing during
 -- RebuildBuffer (as this file used to) is too late: the value has already been
@@ -40,6 +39,17 @@ local string_len = string.len
 local string_gsub = string.gsub
 
 local function IsUsable(value)
+    -- Two separate questions, and only asking one of them is a trap.
+    --
+    -- `type` first: string.len(42) SUCCEEDS in Lua 5.1 — numbers coerce — so a
+    -- length probe alone waves a number through, and the caller then indexes it
+    -- as a string and raises. `type` is itself wrapped, because a secret value
+    -- is not something we are entitled to inspect either.
+    local ok, kind = pcall(type, value)
+    if not ok or kind ~= "string" then return false end
+
+    -- Then the secret probe. A secret string reports as a string but rejects
+    -- being measured, which is exactly the operation the buffer performs next.
     return (pcall(string_len, value))
 end
 
@@ -57,9 +67,21 @@ end
 -- fidelity for characters nobody can see, at the price of an escape alphabet, a
 -- protocol version negotiation, and an ambiguity against buffers written by
 -- older addon versions.
+-- Two constraints on the stand-in, both learned the hard way.
+--
+-- It must contain no underscore: gsub resumes scanning AFTER each match and
+-- never revisits the seam it just wrote, so a replacement ending in "_" lets
+-- the marker re-form from its own output — "__WCT__WCT_END__" became
+-- "_ WCT_" + "_WCT_END__", a literal end marker again.
+--
+-- And it must not begin with "[WCT]", which is on the companion's list of
+-- addon-chatter prefixes to ignore: a mangled message starting with it was
+-- silently dropped on arrival instead of being shown mangled.
+local _MARKER_STAND_IN = "(WCT)"
+
 local function SanitizeText(value)
     local out = string_gsub(value, "[\n\r\t]", " ")
-    out = string_gsub(out, "__WCT_", "_ WCT_")
+    out = string_gsub(out, "__WCT_", _MARKER_STAND_IN)
     return out
 end
 
@@ -185,7 +207,18 @@ function addonTable.StartBufferFlush()
 
     flushTicker = C_Timer.NewTicker(FLUSH_INTERVAL, function()
         if bufDirty then
-            RebuildBuffer()
+            -- table.concat fails on the whole table, not on one entry, and this
+            -- ticker runs four times a second forever. Without the guard a
+            -- single unexpected entry would mean a Lua error every 0.25s until
+            -- the player reloads — and bufDirty would never clear, so no
+            -- message would reach the companion again either.
+            local ok = pcall(RebuildBuffer)
+            if not ok then
+                -- Drop the batch rather than retry it: whatever is in there
+                -- cannot be serialised, and keeping it poisons every flush.
+                wctBuf = {}
+                bufDirty = false
+            end
         end
     end)
 end

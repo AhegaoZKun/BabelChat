@@ -91,9 +91,8 @@ class PipelineConfig:
     """Pipeline configuration."""
 
     chatlog_path: Path = Path("WoWChatLog.txt")
-    deepl_api_key: str = ""
-    microsoft_api_key: str = ""
-    microsoft_region: str = ""
+    # Provider credentials keyed by provider id — see app.translators.
+    providers: dict[str, dict[str, str]] = field(default_factory=dict)
     translator_priority: str = "deepl"
     target_lang: str = "EN"
     own_language: Language = Language.ENGLISH
@@ -129,9 +128,7 @@ class TranslationPipeline:
         self._cache.cleanup()  # remove expired entries on startup
         self._detector = ChatLanguageDetector(own_language=config.own_language)
         self._translator = TranslatorService(
-            api_key=config.deepl_api_key,
-            microsoft_api_key=config.microsoft_api_key,
-            microsoft_region=config.microsoft_region,
+            providers=config.providers,
             priority=config.translator_priority,
         )
         self._watcher = ChatLogWatcher(config.chatlog_path, self._on_new_line)

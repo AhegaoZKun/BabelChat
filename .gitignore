@@ -42,7 +42,14 @@ AutoChatLog/
 build/
 dist/
 AppDir/
-tools/
+# Ignore the directory's CONTENTS, not the directory: git cannot re-include
+# a file whose parent directory is itself excluded, so `tools/` would make
+# the exception below silently do nothing.
+tools/*
+# The build helpers a checkout needs to reproduce a shipped asset stay in.
+# docs/tech/addon.md points at this one, and an ignored generator makes the
+# committed icon impossible for anyone else to regenerate.
+!tools/make_addon_icon.py
 
 # Rust build artifacts
 babelchat_scanner/target/

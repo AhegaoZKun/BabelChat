@@ -21,7 +21,7 @@ from app.overlay import ChatOverlay
 from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_dialog import SettingsDialog
-from app.translator import TranslatorService
+from app.translator import TranslatorService, any_configured
 from app.tray import TrayIcon
 
 # Configure logging: file only at startup (no StreamHandler — console may not exist
@@ -129,9 +129,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
 
     return PipelineConfig(
         chatlog_path=chatlog,
-        deepl_api_key=config.deepl_api_key,
-        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
-        microsoft_region=getattr(config, "microsoft_region", ""),
+        providers=config.providers,
         translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
@@ -285,7 +283,7 @@ def main() -> int:
     tr.set_language(config.ui_language)
 
     # First run — setup wizard if no API key
-    if not config.deepl_api_key and not getattr(config, "microsoft_api_key", ""):
+    if not any_configured(config.providers):
         from app.setup_wizard import SetupWizard
 
         while True:
@@ -306,12 +304,7 @@ def main() -> int:
 
     # Provide translator for the reply panel.
     # Reply translates outgoing messages — default to EN unless own language is EN.
-    reply_translator = TranslatorService(
-        api_key=config.deepl_api_key,
-        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
-        microsoft_region=getattr(config, "microsoft_region", ""),
-        priority=getattr(config, "translator_priority", "deepl"),
-    )
+    reply_translator = TranslatorService.from_config(config)
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
     overlay.set_translator(reply_translator, reply_lang)
 

@@ -49,7 +49,7 @@ def pipeline_config(tmp_path):
     """Create a pipeline config with temp DB."""
     return PipelineConfig(
         chatlog_path=tmp_path / "WoWChatLog.txt",
-        deepl_api_key="fake-key",
+        providers={"deepl": {"api_key": "fake-key"}},
         target_lang="RU",
         own_language=Language.RUSSIAN,
         own_character="MyChar-MyServer",

@@ -46,11 +46,11 @@ _CHATLOG_RELATIVE = "_retail_/Logs/WoWChatLog.txt"
 class AppConfig:
     """Application settings."""
 
-    # API
-    deepl_api_key: str = ""
-    microsoft_api_key: str = ""
-    microsoft_region: str = ""
-    translator_priority: str = "deepl"  # "deepl" or "microsoft"
+    # Translation providers, keyed by provider id: {"deepl": {"api_key": "..."}}.
+    # Generic on purpose — a new provider needs no new config field, and the
+    # settings UI renders whatever fields the provider declares.
+    providers: dict[str, dict[str, str]] = field(default_factory=dict)
+    translator_priority: str = "deepl"
 
     # Paths
     wow_path: str = ""
@@ -143,6 +143,7 @@ class AppConfig:
         for try_path in [target, target.with_suffix(".json.bak")]:
             try:
                 data = json.loads(try_path.read_text(encoding="utf-8"))
+                _migrate_provider_keys(data, try_path)
                 defaults = asdict(cls())
                 # Ignore unknown keys (e.g. fields removed in newer versions)
                 # instead of crashing cls(**...) with a TypeError.
@@ -155,6 +156,55 @@ class AppConfig:
                 continue
         logger.warning("No valid config found, using defaults")
         return cls()
+
+
+# Config written before providers became generic: one flat field per provider
+# per credential. Mapped onto the new shape as {provider: {field: value}}.
+_LEGACY_PROVIDER_KEYS = {
+    "deepl_api_key": ("deepl", "api_key"),
+    "microsoft_api_key": ("microsoft", "api_key"),
+    "microsoft_region": ("microsoft", "region"),
+}
+
+
+def _migrate_provider_keys(data: dict, source: Path) -> None:
+    """Fold pre-registry API-key fields into `providers`, in place.
+
+    Runs before unknown keys are dropped — otherwise upgrading would silently
+    discard the user's API keys and present them with an unconfigured app. A
+    copy of the original file is kept alongside it the first time this happens,
+    because the ordinary `.json.bak` gets overwritten by the very next save.
+    """
+    legacy = {k: v for k, v in data.items() if k in _LEGACY_PROVIDER_KEYS and str(v).strip()}
+    if not legacy:
+        return
+
+    providers = data.setdefault("providers", {})
+    if not isinstance(providers, dict):
+        logger.warning("Ignoring malformed 'providers' section while migrating API keys")
+        providers = {}
+        data["providers"] = providers
+
+    migrated = []
+    for key, value in legacy.items():
+        provider_id, field_name = _LEGACY_PROVIDER_KEYS[key]
+        settings = providers.setdefault(provider_id, {})
+        # A value already present in the new shape wins: it is the one the user
+        # last edited, and re-running the migration must not undo that.
+        if not settings.get(field_name):
+            settings[field_name] = value
+            migrated.append(f"{provider_id}.{field_name}")
+
+    if not migrated:
+        return
+
+    backup = source.with_suffix(".json.pre-providers.bak")
+    if not backup.exists():
+        try:
+            backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            logger.warning("Could not write pre-migration config backup")
+    logger.info("Migrated API keys to the provider registry: %s", ", ".join(migrated))
 
 
 def detect_wow_path() -> str:

@@ -1,12 +1,27 @@
 {
   "filesize": {
-    "_comment": "The filesize gate counts newline bytes, so a binary asset registers as thousands of 'lines' (addon/BabelChat/img/icon.tga: 958). Binary assets carry no source complexity, so the line cap is meaningless for them. Exemptions are directory-scoped here rather than file-scoped because these directories hold binaries exclusively — no source file may live in them.",
+    "_comment": "Two different reasons, kept apart on purpose. addon/BabelChat/img/ holds binary assets: the gate counts newline bytes, so a 128x128 TGA registers as 958 'lines' of nothing. The named files are vendored third-party libraries — LibBabble ships one generated table per locale and is not ours to split; naming them individually rather than exempting Libs/ wholesale keeps the cap on any first-party Lua that lands in that tree.",
     "exempt_dirs": [
-      "addon/BabelChat/img/",
-      "addon/BabelChat/Libs/",
-      "assets/",
-      "babelchat_scanner_win/",
-      "temp/"
+      "addon/BabelChat/img/"
+    ],
+    "exempt_files": [
+      "addon/BabelChat/Libs/LibBabble-ItemSet-3.0/LibBabble-ItemSet-3.0.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_deDE.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_esES.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_esMX.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_frFR.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_itIT.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_koKR.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_ptBR.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_ruRU.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_zhCN.lua",
+      "addon/BabelChat/Libs/LibBabble-SubZone-3.0/LibBabble-SubZone-3.0_zhTW.lua",
+      "addon/BabelChat/Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua",
+      "addon/BabelChat/Data/Social.lua",
+      "addon/BabelChat/Data/Clases.lua",
+      "addon/BabelChat/Data/Combate.lua",
+      "addon/BabelChat/Data/Grupos.lua"
     ]
   }
 }

@@ -220,6 +220,70 @@ def test_a_player_typing_the_start_marker_cannot_forge_a_header():
     assert h.buffer_text().count("__WCT_BUF_") == 1
 
 
+# The naive marker is only the first attempt. A replacement that itself ends in
+# an underscore lets the marker re-form across the seam gsub has already passed:
+# gsub resumes scanning after each match and never revisits what it just wrote.
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "__WCT_END__",
+        "__WCT__WCT_END__",
+        "___WCT_END__",
+        "____WCT_END__",
+        "__WCT___WCT_END__",
+    ],
+)
+def test_no_arrangement_of_underscores_reconstructs_the_end_marker(typed):
+    h = load_companion_buffer()
+    h.addon_table.BufferAddEntry(typed, "RAW", "CHANNEL:Trade", "Griefer")
+    h.addon_table.BufferAddEntry("must still arrive", "RAW", "SAY", "Bob")
+    flush(h)
+
+    text = h.buffer_text()
+    assert text.count("__WCT_END__") == 1, f"{typed!r} put a second end marker in the buffer"
+    assert text.endswith("__WCT_END__")
+    assert len(h.buffer_entries()) == 2
+
+
+@pytest.mark.parametrize("typed", ["__WCT_BUF_1__", "__WCT__WCT_BUF_1__", "___WCT_BUF_1__"])
+def test_no_arrangement_of_underscores_reconstructs_the_start_marker(typed):
+    h = load_companion_buffer()
+    h.addon_table.BufferAddEntry(typed, "RAW", "CHANNEL:Trade", "Griefer")
+    flush(h)
+
+    assert h.buffer_text().count("__WCT_BUF_") == 1, f"{typed!r} forged a second header"
+
+
+# ── values that are not strings ──────────────────────────────────────────────
+
+
+def test_a_number_is_not_mistaken_for_usable_text():
+    """`string.len(42)` succeeds in Lua 5.1 — numbers coerce. A probe built only
+    on that check therefore waves numbers through, and the caller then indexes
+    one as a string."""
+    h = load_companion_buffer()
+    h.addon_table.BufferAddEntry(12345, "RAW", "SAY", "Bob")
+    flush(h)
+
+    assert h.buffer_entries() == []
+
+
+def test_a_number_author_degrades_instead_of_being_stringified():
+    h = load_companion_buffer()
+    h.addon_table.BufferAddEntry("hello", "RAW", "SAY", 42)
+    flush(h)
+
+    assert h.buffer_entries() == ["1|RAW|SAY|Unknown|hello"]
+
+
+def test_a_boolean_never_reaches_the_buffer():
+    h = load_companion_buffer()
+    h.addon_table.BufferAddEntry(True, "RAW", "SAY", "Bob")
+    flush(h)
+
+    assert h.buffer_entries() == []
+
+
 def test_a_pipe_in_the_channel_name_does_not_shift_the_fields():
     h = load_companion_buffer()
     h.addon_table.BufferAddEntry("hi", "RAW", "CHANNEL:we|ird", "Bob")

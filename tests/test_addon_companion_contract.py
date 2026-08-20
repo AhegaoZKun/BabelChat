@@ -149,17 +149,32 @@ def test_an_item_link_arrives_unmangled(reader):
 # ── buffers written by older addon versions ──────────────────────────────────
 
 
-def test_a_legacy_buffer_with_a_tab_separated_gloss_still_parses(reader):
-    """3.3.0 and earlier appended the gloss after a tab. Those records must not
-    crash the reader, and the message text must still come through."""
+def test_a_legacy_buffer_with_a_tab_separated_gloss_delivers_only_the_message(reader):
+    """3.3.0 and earlier appended the gloss after a tab.
+
+    The addon is copied into the game folder by hand, so a user who updates the
+    app without updating the addon keeps sending those records. Delivering the
+    whole field would send the gloss to the translation API and print it in the
+    overlay — so the gloss is dropped, not concatenated.
+    """
     legacy = "\n0|META|PLAYER|Old-Realm\n1|DICT|SAY|Bob|ty for the run\tty = спасибо"
 
     reader._deliver_new_messages(legacy)
 
     assert len(reader.delivered) == 1
     line, was_glossed = reader.delivered[0]
-    assert "ty for the run" in line
+    assert line.endswith("[Say] Bob: ty for the run")
+    assert "спасибо" not in line, "the gloss must not be glued onto the message"
     assert was_glossed is True
+
+
+def test_a_current_message_containing_no_tab_is_untouched(reader):
+    """The legacy path must not nibble at ordinary text."""
+    current = "\n0|META|PLAYER|Realm\n1|DICT|SAY|Bob|ty for the run"
+
+    reader._deliver_new_messages(current)
+
+    assert reader.delivered[0][0].endswith("[Say] Bob: ty for the run")
 
 
 def test_a_headless_fragment_is_ignored_rather_than_crashing(reader):

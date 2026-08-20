@@ -370,16 +370,24 @@ class WoWAddonBufReader:
                 msg_text = payload
 
                 # RAW and DICT carry identical fields; `kind` only records
-                # whether the addon also glossed the line in chat. The addon
-                # used to append its gloss after a tab, but the gloss contained
-                # a newline and the buffer is newline-delimited, so the record
-                # split and the field never arrived. It is no longer sent —
-                # this pipeline discards it regardless (see _on_new_line).
+                # whether the addon also glossed the line in chat. The gloss
+                # itself is no longer transmitted — this pipeline discards it
+                # regardless (see _on_new_line), and the newline DictEngine
+                # embedded in it used to split the record in half.
                 sub_parts = payload.split("|", 2)
                 if len(sub_parts) >= 3:
                     event = sub_parts[0]
                     author = sub_parts[1]
                     msg_text = sub_parts[2]
+                    # Addon 3.3.0 and earlier appended the gloss after a tab.
+                    # The addon is installed by hand, so an app updated ahead of
+                    # it still receives those records; keeping the tail would
+                    # send the gloss to the translation API and print it in the
+                    # overlay. Current records never contain a tab — the addon
+                    # strips them — so this only ever fires on a legacy buffer.
+                    tab = msg_text.find("	")
+                    if tab != -1:
+                        msg_text = msg_text[:tab]
 
                 try:
                     with open(RAW_LOG_FILE, "a", encoding="utf-8") as f:
