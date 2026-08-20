@@ -404,11 +404,13 @@ class SettingsWindowGtk:
         c.ui_language = self._dd_value(self._ui)
         c.translator_priority = self._dd_value(self._priority)
         providers: dict[str, dict[str, str]] = {}
-        for provider_id, entries in self._provider_entries.items():
+        for spec in all_providers():
+            entries = self._provider_entries.get(spec.id, {})
             values = {key: entry.get_text().strip() for key, entry in entries.items()}
             values = {key: value for key, value in values.items() if value}
-            if values:
-                providers[provider_id] = values
+            # Keyless providers are configured by existing — see the Qt copy.
+            if values or spec.keyless:
+                providers[spec.id] = values
         c.providers = providers
         c.overlay_opacity = int(self._opacity.get_value())
         c.overlay_font_size = int(self._font.get_value())

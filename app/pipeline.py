@@ -209,6 +209,16 @@ class TranslationPipeline:
         self._watcher.start()
         logger.info("Pipeline started (file watcher only)")
 
+    def clear_cache(self) -> int:
+        """Forget every cached translation, in SQLite and in memory.
+
+        Exposed here because the pipeline owns the live cache. A caller that
+        opens its own TranslationCache clears whichever database the DEFAULT
+        path points at — not necessarily this one — and leaves this instance's
+        in-memory LRU serving the very messages the user asked to be forgotten.
+        """
+        return self._cache.clear()
+
     def stop(self) -> None:
         """Stop the pipeline."""
         if self._memory_watcher:
@@ -331,12 +341,12 @@ class TranslationPipeline:
             if not source_lang:
                 # Lingua detected a language not in DeepL map — let DeepL
                 # auto-detect instead of skipping.
-                logger.info(
+                logger.debug(
                     "Translating (auto-detect, lingua=%s)→%s: %r",
                     detected, target_lang, cleaned_text[:_LOG_PREVIEW],
                 )
             else:
-                logger.info(
+                logger.debug(
                     "Translating %s→%s: %r",
                     source_lang, target_lang, cleaned_text[:_LOG_PREVIEW],
                 )
@@ -373,13 +383,13 @@ class TranslationPipeline:
         # Expand gaming slang to plain English so DeepL can understand
         expanded = expand_slang(text_to_translate)
         if expanded != text_to_translate:
-            logger.info("Slang expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], expanded[:_LOG_PREVIEW])
+            logger.debug("Slang expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], expanded[:_LOG_PREVIEW])
             text_to_translate = expanded
 
         # Expand WoW-specific terms (context-gated: 2+ gaming terms required)
         wow_expanded = expand_wow_terms(text_to_translate)
         if wow_expanded != text_to_translate:
-            logger.info("WoW terms expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], wow_expanded[:_LOG_PREVIEW])
+            logger.debug("WoW terms expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], wow_expanded[:_LOG_PREVIEW])
             text_to_translate = wow_expanded
 
         # --- STREAMING: emit original immediately, then update with translation ---
@@ -391,14 +401,15 @@ class TranslationPipeline:
 
         # Translate via API (this blocks — called from watchdog thread)
         src_display = source_lang or "auto"
-        logger.info("Calling DeepL: %s→%s %r", src_display, target_lang, text_to_translate[:_LOG_PREVIEW])
+        # Provider name, not "DeepL": the chain has four backends now.
+        logger.debug("Translating %s→%s: %r", src_display, target_lang, text_to_translate[:_LOG_PREVIEW])
         result = self._translator.translate(
             text_to_translate, target_lang=target_lang,
             source_lang=source_lang or None,
             context=_DEEPL_CONTEXT,
         )
         translated_preview = result.translated[:_LOG_PREVIEW] if result.translated else ""
-        logger.info("DeepL result: success=%s, translated=%r", result.success, translated_preview)
+        logger.debug("Result from %s: success=%s, translated=%r", result.backend, result.success, translated_preview)
 
         # If DeepL auto-detected own language, skip (e.g. "zerg" detected as RU)
         own_deepl = _LINGUA_TO_DEEPL.get(cfg.own_language, "")

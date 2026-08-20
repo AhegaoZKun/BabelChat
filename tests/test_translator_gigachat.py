@@ -7,6 +7,8 @@ reproduce by hand: an expired token, a spent quota, an untrusted TLS chain.
 
 from __future__ import annotations
 
+import logging
+import pathlib
 import time
 
 import pytest
@@ -15,6 +17,7 @@ import requests
 from app.translators.base import FAILURE, RetryPolicy
 from app.translators.gigachat_provider import (
     BAD_RESPONSE,
+    CERT_UNREADABLE,
     CHAT_URL,
     OAUTH_URL,
     TLS_UNTRUSTED,
@@ -407,3 +410,102 @@ def test_the_truncated_text_is_what_gets_sent(mymemory):
     backend.translate(long_text, "RU", "EN")
 
     assert len(session.calls[0]["params"]["q"].encode("utf-8")) <= MAX_QUERY_BYTES
+
+
+# ── defects the second review found ──────────────────────────────────────────
+
+
+def test_an_unreadable_certificate_path_does_not_escape_the_provider():
+    """requests raises a bare OSError for a CA bundle it cannot read — not a
+    RequestException. Unguarded it left the provider and killed the translation
+    thread, which is what a certificate on an unplugged drive produces."""
+    unreadable = str(pathlib.Path("Z:/definitely/not/here.pem"))
+    backend = GigaChatBackend("key", ca_bundle=unreadable, retry=RetryPolicy(attempts=1, delay=0))
+
+    result = backend.translate("hello", "RU")
+
+    assert result.success is False
+    assert result.error == CERT_UNREADABLE
+    assert result.translated == "hello"
+
+
+def test_a_repeated_server_error_reports_itself_not_max_retries(gigachat):
+    """`max_retries_exceeded` discards the http_503 that caused it, and that is
+    the only thing anyone reading the log can act on."""
+    backend, session = gigachat
+    session.script(OAUTH_URL, token_response())
+    session.script(CHAT_URL, FakeResponse(503), FakeResponse(503))
+
+    result = backend.translate("hello", "RU")
+
+    assert result.error == "http_503"
+
+
+def test_mymemory_does_not_log_the_message_or_the_email(caplog):
+    """This is a GET: the message and the email are query parameters, so the
+    exception text — which embeds the URL — cannot be logged as-is."""
+    backend = MyMemoryBackend(email="player@example.com", retry=RetryPolicy(attempts=1, delay=0))
+    session = FakeSession()
+    backend._session = session
+    session.script(
+        backend_endpoint(),
+        requests.exceptions.ConnectionError(
+            "Max retries exceeded with url: /get?q=secret+whisper&de=player%40example.com"
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result = backend.translate("secret whisper", "RU", "EN")
+
+    assert "secret+whisper" not in caplog.text
+    assert "player" not in caplog.text
+    assert "secret" not in (result.error or "")
+
+
+@pytest.mark.parametrize(
+    ("status", "translated"),
+    [
+        (429, "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY"),
+        ("429", "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY"),
+        (403, "PLEASE SELECT TWO DISTINCT LANGUAGES"),
+    ],
+)
+def test_an_api_complaint_is_not_passed_off_as_a_translation(mymemory, status, translated):
+    """The API answers HTTP 200 and puts its complaint in the translation field.
+    Accepting it renders the warning in the overlay AND caches it for a week."""
+    backend, session = mymemory
+    session.script(
+        backend_endpoint(),
+        FakeResponse(200, {"responseStatus": status, "responseData": {"translatedText": translated}}),
+    )
+
+    result = backend.translate("hello", "RU", "EN")
+
+    assert result.success is False
+    assert result.error == FAILURE.QUOTA
+    assert result.translated == "hello", "the original, not the API's complaint"
+
+
+def test_a_warning_with_an_ok_status_is_still_not_a_translation(mymemory):
+    backend, session = mymemory
+    session.script(
+        backend_endpoint(),
+        FakeResponse(200, {"responseStatus": 200, "responseData": {"translatedText": "MYMEMORY WARNING: quota"}}),
+    )
+
+    assert backend.translate("hello", "RU", "EN").success is False
+
+
+def test_a_json_array_body_does_not_crash(mymemory):
+    """A captive portal or proxy can answer 200 with something that is not an object."""
+    backend, session = mymemory
+    session.script(backend_endpoint(), FakeResponse(200, ["not", "an", "object"]))
+
+    assert backend.translate("hello", "RU", "EN").error == "bad_response"
+
+
+def test_a_refusal_that_is_not_a_quota_reports_the_status(mymemory):
+    backend, session = mymemory
+    session.script(backend_endpoint(), FakeResponse(200, {"responseStatus": 500, "responseData": {}}))
+
+    assert backend.translate("hello", "RU", "EN").error == "api_500"

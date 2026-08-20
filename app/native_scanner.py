@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 WINDOWS_LIBRARY = "babelchat_scanner_win.dll"
 LINUX_LIBRARY = "libbabelchat_scanner.so"
 
-# LoadLibraryEx flags. Together these mean "System32 plus the directory the
-# library itself came from" — never the working directory, never PATH.
+# LoadLibraryEx flags. CPython already applies exactly these when a path
+# containing a separator is passed, so they are belt-and-braces rather than
+# the mechanism: the security comes from passing an absolute path at all.
+# They cover System32, the application directory, any AddDllDirectory entry
+# and the library's own directory — not the working directory, and not PATH.
 _LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = 0x00000100
 _LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000
 _SAFE_SEARCH = _LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | _LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
@@ -85,16 +88,20 @@ def load_scanner(name: str | None = None) -> ctypes.CDLL | None:
             continue
         try:
             lib = _load_from(path)
-        except OSError as e:
-            logger.warning("Native scanner at %s could not be loaded: %s", path, e)
+            # Declaring the signature is where a same-named library WITHOUT our
+            # export fails, with AttributeError rather than OSError. Unhandled,
+            # it escapes this loop and the module import that called it, so the
+            # reader cannot even fall back to the Python scanner.
+            lib.find_and_read_buffer.restype = ctypes.c_int32
+            lib.find_and_read_buffer.argtypes = [
+                ctypes.c_int32,  # pid
+                ctypes.c_int32,  # min_seq
+                ctypes.c_char_p,  # out_buf
+                ctypes.c_int32,  # out_len
+            ]
+        except (OSError, AttributeError) as e:
+            logger.warning("Native scanner at %s is unusable: %s", path, e)
             continue
-        lib.find_and_read_buffer.restype = ctypes.c_int32
-        lib.find_and_read_buffer.argtypes = [
-            ctypes.c_int32,  # pid
-            ctypes.c_int32,  # min_seq
-            ctypes.c_char_p,  # out_buf
-            ctypes.c_int32,  # out_len
-        ]
         logger.info("Loaded native scanner: %s", path)
         return lib
 

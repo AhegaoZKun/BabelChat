@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -106,9 +107,17 @@ from app.qt_theme import WOW_THEME_STYLESHEET  # noqa: E402  (re-export for the 
 class SettingsDialog(QDialog):
     """Settings window with WoW-themed dark UI."""
 
-    def __init__(self, config: AppConfig, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        parent: QWidget | None = None,
+        clear_cache: Callable[[], int] | None = None,
+    ) -> None:
         super().__init__(parent)
         self._config = config
+        # Supplied by whoever owns the running pipeline, so 'clear the
+        # cache' clears the one actually in use.
+        self._clear_cache_callback = clear_cache
         self.setWindowTitle(tr("settings.title"))
         self.setWindowIcon(_create_dialog_icon())
         self.setMinimumSize(500, 520)
@@ -327,12 +336,12 @@ class SettingsDialog(QDialog):
 
     def _clear_translation_cache(self) -> None:
         """Delete every cached translation, including the source text it kept."""
-        from app.cache import TranslationCache
-
+        if self._clear_cache_callback is None:
+            self._clear_cache_status.setText(tr("settings.privacy.clear_cache_unavailable"))
+            self._clear_cache_status.setStyleSheet("color: #FF7F00; font-size: 11px;")
+            return
         try:
-            cache = TranslationCache()
-            removed = cache.clear()
-            cache.close()
+            removed = self._clear_cache_callback()
         except Exception as e:
             self._clear_cache_status.setText(tr("settings.api.error", e=str(e)))
             self._clear_cache_status.setStyleSheet("color: #FF4040; font-size: 11px;")

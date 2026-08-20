@@ -90,9 +90,10 @@ def _find_wow_pid() -> int | None:
             except pymem.exception.ProcessNotFound:
                 continue
             except pymem.exception.PymemError:
-                # Opening with full access can fail without elevation. The name
-                # matched, so fall through to the reader, which opens the
-                # process with read-only rights and does not need elevation.
+                # Opening with full access can fail without elevation. There is
+                # no PID to hand back from this path, so the caller retries on
+                # the next poll; the tasklist branch above is what normally
+                # supplies the PID and needs no rights at all.
                 continue
     except ImportError:
         pass
@@ -143,12 +144,24 @@ def _open_for_reading(pid: int):
 def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
     """Fallback: use pymem if the native scanner is not available."""
     try:
-        import pymem.pattern
-
         pm = _open_for_reading(pid)
         if pm is None:
             return None
+        try:
+            return _scan_for_buffer(pm, min_seq)
+        finally:
+            # The handle has to be released even when the scan raises, which it
+            # does routinely: WoW exiting mid-scan is the common case, and this
+            # runs again every couple of seconds.
+            pm.close_process()
+    except Exception:
+        return None
 
+
+def _scan_for_buffer(pm, min_seq: int) -> str | None:
+    import pymem.pattern
+
+    try:
         addrs = pymem.pattern.pattern_scan_all(
             pm.process_handle,
             rb"__WCT_BUF_",
@@ -172,7 +185,6 @@ def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
             if seq > best_seq:
                 best_seq = seq
                 best_content = content.decode("utf-8", errors="replace")
-        pm.close_process()
         return best_content
     except Exception:
         return None

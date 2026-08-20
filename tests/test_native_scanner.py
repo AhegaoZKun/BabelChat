@@ -72,17 +72,51 @@ def test_an_unloadable_file_is_skipped_without_raising(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the search-order flags are Windows-only")
-def test_windows_confines_the_dependency_search():
-    """LOAD_LIBRARY_SEARCH_DEFAULT_DIRS plus the library's own directory — which
-    is System32 and the bundle, and never the working directory or PATH."""
-    assert native_scanner._SAFE_SEARCH == 0x00000100 | 0x00001000
+def test_windows_passes_the_confined_search_flags_to_the_loader(monkeypatch, tmp_path):
+    """Asserting the constant's value proves nothing — it would hold even if the
+    flags were never handed to CDLL. This checks the call that is made."""
+    seen = {}
+
+    class FakeCDLL:
+        def __init__(self, path, winmode=None):
+            seen["path"] = path
+            seen["winmode"] = winmode
+            self.find_and_read_buffer = type("Fn", (), {"restype": None, "argtypes": None})()
+
+    library = tmp_path / library_name()
+    library.write_bytes(b"stub")
+    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [library])
+    monkeypatch.setattr(native_scanner.ctypes, "CDLL", FakeCDLL)
+
+    assert load_scanner() is not None
+    assert seen["path"] == str(library)
+    assert seen["winmode"] == 0x00000100 | 0x00001000
+
+
+def test_a_library_missing_our_export_is_skipped_not_fatal(monkeypatch, tmp_path):
+    """Declaring the signature fails with AttributeError, not OSError. Unhandled
+    it escaped load_scanner and the module import that called it, so the reader
+    could not even fall back to the Python scanner."""
+
+    class NoExport:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __getattr__(self, name):
+            raise AttributeError(name)
+
+    library = tmp_path / library_name()
+    library.write_bytes(b"stub")
+    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [library])
+    monkeypatch.setattr(native_scanner.ctypes, "CDLL", NoExport)
+
+    assert load_scanner() is None
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the bundled library is the Windows build")
-def test_the_shipped_library_loads_from_its_absolute_path():
+def test_the_shipped_library_declares_the_scanner_entry_point():
     lib = load_scanner()
-    if lib is None:
-        pytest.skip("native scanner is not built in this checkout")
+    assert lib is not None, "the Windows build ships this library; a miss is a packaging bug"
     assert lib.find_and_read_buffer.restype is not None
 
 

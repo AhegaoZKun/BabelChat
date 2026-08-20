@@ -251,7 +251,10 @@ class ProviderSettingsGroup(QGroupBox):
         providers: dict[str, dict[str, str]] = {}
         for provider_id, row in self._rows.items():
             values = {k: v for k, v in row.values.items() if v}
-            if values:
+            # A keyless provider is configured by existing, not by having values
+            # filled in. Dropping it for being empty is what made MyMemory — the
+            # one provider that needs no account — impossible to end up with.
+            if values or row.spec.keyless:
                 providers[provider_id] = values
         config.providers = providers
         config.translator_priority = self._priority.currentData() or ""

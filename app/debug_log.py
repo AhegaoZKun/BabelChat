@@ -45,16 +45,21 @@ def configure(enabled: bool, path: str | pathlib.Path | None = None) -> None:
     it — but nothing further is appended.
     """
     global _enabled, _path
-    _enabled = bool(enabled)
-    _path = pathlib.Path(path) if path else default_path()
-    if not _enabled:
+    # Turning OFF first, and turning ON only after the file is ready: `record`
+    # runs on the reader thread while this runs on the UI thread, and a line
+    # appended between "enabled" and "header written" would be truncated away.
+    _enabled = False
+    target = pathlib.Path(path) if path else default_path()
+    _path = target
+    if not enabled:
         return
     try:
-        _path.write_text(_HEADER, encoding="utf-8")
-        logger.info("Capture trace enabled: %s", _path)
+        target.write_text(_HEADER, encoding="utf-8")
     except OSError as e:
-        logger.warning("Could not start the capture trace at %s: %s", _path, e)
-        _enabled = False
+        logger.warning("Could not start the capture trace at %s: %s", target, e)
+        return
+    _enabled = True
+    logger.info("Capture trace enabled: %s", target)
 
 
 def is_enabled() -> bool:

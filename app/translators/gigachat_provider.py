@@ -52,6 +52,7 @@ _DOCUMENTED_LIFETIME_SECONDS = 1800
 # Failure reasons specific to this provider, alongside the shared ones.
 TLS_UNTRUSTED = "tls_untrusted"
 BAD_RESPONSE = "bad_response"
+CERT_UNREADABLE = "cert_unreadable"
 
 _SYSTEM_PROMPT = (
     "You translate World of Warcraft chat messages into {target}. "
@@ -170,6 +171,13 @@ class GigaChatBackend:
         except requests.RequestException as e:
             logger.warning("GigaChat token request failed: %s", _safe_error(e))
             return False, f"network: {_safe_error(e)}"
+        except OSError as e:
+            # requests raises a bare OSError for an unreadable CA bundle — not a
+            # RequestException. Unguarded, it leaves the provider and kills the
+            # translation thread, which is what happens when the certificate
+            # lives on a drive that is no longer plugged in.
+            logger.error("GigaChat could not use the configured certificate: %s", _safe_error(e))
+            return False, CERT_UNREADABLE
 
         if response.status_code == 401:
             return False, FAILURE.AUTH
@@ -230,7 +238,11 @@ class GigaChatBackend:
             if attempt < self._retry.attempts - 1:
                 self._retry.backoff(attempt)
 
-        return failed(text, target_lang, source_lang, FAILURE.RETRIES, "gigachat")
+        # Report what actually went wrong. "max_retries_exceeded" discards the
+        # http_503 or timeout that caused it, and that is the only thing anyone
+        # reading the log or the settings screen can act on.
+        last_error = outcome.error or FAILURE.RETRIES
+        return failed(text, target_lang, source_lang, last_error, "gigachat")
 
     def _request_translation(self, text: str, target_lang: str) -> TranslationResult:
         body = {
@@ -258,6 +270,9 @@ class GigaChatBackend:
             return failed(text, target_lang, None, TLS_UNTRUSTED, "gigachat")
         except requests.RequestException as e:
             return failed(text, target_lang, None, f"network: {_safe_error(e)}", "gigachat")
+        except OSError as e:
+            logger.error("GigaChat could not use the configured certificate: %s", _safe_error(e))
+            return failed(text, target_lang, None, CERT_UNREADABLE, "gigachat")
 
         if response.status_code == 401:
             return failed(text, target_lang, None, FAILURE.AUTH, "gigachat")

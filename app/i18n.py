@@ -466,6 +466,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "The cache keeps the original message text for seven days.",
         "ES": "La caché guarda el texto original de los mensajes durante siete días.",
     },
+    "settings.privacy.clear_cache_unavailable": {
+        "RU": "Кэш можно очистить только при запущенном переводе",
+        "EN": "The cache can only be cleared while translation is running",
+        "ES": "La caché solo puede borrarse mientras la traducción está activa",
+    },
     "settings.privacy.cleared": {
         "RU": "Удалено записей: {n}",
         "EN": "Removed {n} entries",

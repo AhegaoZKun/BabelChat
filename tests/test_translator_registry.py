@@ -9,6 +9,7 @@ degrades instead of failing.
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
@@ -318,3 +319,78 @@ def test_providers_survive_a_save_and_load_round_trip(tmp_path):
     original.save(str(config_file))
 
     assert AppConfig.load(str(config_file)).providers == {"deepl": {"api_key": "k"}}
+
+
+# ── defects the second review found ──────────────────────────────────────────
+
+
+def test_a_keyless_provider_survives_being_saved(registry):
+    """Its only field is optional, so "has a non-blank value" dropped it from the
+    config entirely — and the fallback that needs no account never existed."""
+    register_fake(registry, "freebie", keyless=True)
+
+    assert configured_ids({"freebie": {}}) == ["freebie"]
+    assert any_configured({"freebie": {}}) is True
+    assert TranslatorService({"freebie": {}}).active_ids == ("freebie",)
+
+
+def test_a_null_provider_entry_does_not_crash_construction(registry, caplog):
+    """A hand-edited or newer-build config can carry `"deepl": null`."""
+    register_fake(registry, "alpha")
+
+    service = TranslatorService({"alpha": None, "beta": {"api_key": "x"}})
+
+    assert service.active_ids == ()
+    assert configured_ids({"alpha": None}) == []
+    assert any_configured({"alpha": None}) is False
+
+
+def test_a_provider_entry_of_the_wrong_type_is_ignored(registry):
+    register_fake(registry, "alpha")
+    for junk in ("a string", 42, ["a", "list"]):
+        assert TranslatorService({"alpha": junk}).active_ids == ()
+
+
+def test_the_failing_backend_id_is_logged_without_its_error_text(registry, caplog):
+    """A GET-based provider puts the request URL in its error, and that URL
+    carries the message text and any identifying parameter."""
+    leaky_error = "url=?q=secret+whisper&de=me@example.com"
+    register_fake(registry, "leaky", FakeBackend("leaky", succeeds=False, error=leaky_error))
+    register_fake(registry, "good")
+    service = TranslatorService({"leaky": {"api_key": "a"}, "good": {"api_key": "b"}}, priority="leaky")
+
+    with caplog.at_level(logging.INFO):
+        service.translate("hi", "RU")
+
+    assert "secret+whisper" not in caplog.text
+    assert "me@example.com" not in caplog.text
+    assert "leaky" in caplog.text
+
+
+def test_set_listing_order_ignores_names_it_does_not_know(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+
+    base.set_listing_order(("beta", "nonesuch", "alpha"))
+
+    assert base.known_ids() == ("beta", "alpha")
+
+
+def test_set_listing_order_keeps_unlisted_providers_at_the_end(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+    register_fake(registry, "gamma")
+
+    base.set_listing_order(("gamma",))
+
+    assert base.known_ids() == ("gamma", "alpha", "beta")
+
+
+def test_set_listing_order_is_idempotent(registry):
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+
+    base.set_listing_order(("beta", "alpha"))
+    base.set_listing_order(("beta", "alpha"))
+
+    assert base.known_ids() == ("beta", "alpha")

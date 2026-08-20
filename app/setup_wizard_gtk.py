@@ -93,9 +93,6 @@ class _WizardWindow(Gtk.ApplicationWindow):
             self._refresh_summary()
 
     def _on_next(self, _btn: Gtk.Button) -> None:
-        if self._index == 1 and not self._has_any_key():
-            self._api_status.set_markup('<span foreground="#cc6666">Enter an API key to continue.</span>')
-            return
         if self._index == len(self._pages) - 1:
             self._finish()
             return
@@ -344,7 +341,8 @@ class _WizardWindow(Gtk.ApplicationWindow):
         providers: dict[str, dict[str, str]] = {}
         for spec in all_providers():
             values = {key: value for key, value in self._entered(spec.id).items() if value}
-            if values:
+            # Keyless providers are configured by existing — see the Qt copy.
+            if values or spec.keyless:
                 providers[spec.id] = values
         c.providers = providers
         c.translator_priority = self._dd_code(self._priority)

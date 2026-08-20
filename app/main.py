@@ -96,6 +96,15 @@ class PipelineThread(QThread):
         if self._pipeline:
             self._pipeline.update_config(config)
 
+    def clear_cache(self) -> int:
+        """Clear the running pipeline's translation cache.
+
+        Goes through the pipeline that is actually running rather than opening a
+        second connection to a default path: the two are not always the same
+        file, and only this one owns the in-memory half of the cache.
+        """
+        return self._pipeline.clear_cache() if self._pipeline else 0
+
     @property
     def pipeline(self) -> TranslationPipeline | None:
         return self._pipeline
@@ -327,7 +336,7 @@ def main() -> int:
     def open_settings() -> None:
         nonlocal config
         old_console = config.show_debug_console
-        dialog = SettingsDialog(config)
+        dialog = SettingsDialog(config, clear_cache=pipeline_thread.clear_cache)
         if dialog.exec() == SettingsDialog.DialogCode.Accepted:
             config = dialog.get_config()
             overlay.update_channel_filters(_enabled_filter_names(config))

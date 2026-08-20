@@ -37,6 +37,13 @@ class TranslatorService:
             if spec is None:
                 logger.warning("Skipping unknown translation provider %r", provider_id)
                 continue
+            # A hand-edited or newer-build config can carry `"deepl": null`.
+            # The class promises never to raise on a bad provider, and that
+            # promise has to hold for the shape of the entry too, not just its
+            # contents.
+            if not isinstance(settings, dict):
+                logger.warning("Ignoring malformed settings for provider %r", provider_id)
+                continue
             if not spec.is_configured(settings):
                 continue
             try:
@@ -80,7 +87,11 @@ class TranslatorService:
             result = self._backends[provider_id].translate(text, target_lang, source_lang)
             if result.success:
                 return result
-            logger.info("Backend %s failed (%s), trying next", provider_id, result.error)
+            # The provider id, not the error text: a provider can put the
+            # request URL in there, and for a GET-based one that URL carries
+            # the message and any identifying parameter.
+            logger.info("Backend %s failed, trying next", provider_id)
+            logger.debug("Backend %s error: %s", provider_id, result.error)
         # Every backend failed; the last failure is the most informative one to
         # surface, and it still carries the original text.
         return result  # type: ignore[return-value]

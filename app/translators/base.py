@@ -85,6 +85,15 @@ class ProviderSpec:
 
 _REGISTRY: dict[str, ProviderSpec] = {}
 _ORDER: list[str] = []
+_WARNED: set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args) -> None:
+    """Log a warning the first time only — some callers run per message."""
+    if key in _WARNED:
+        return
+    _WARNED.add(key)
+    logger.warning(message, *args)
 
 
 def register(spec: ProviderSpec) -> ProviderSpec:
@@ -131,14 +140,24 @@ def resolve_order(priority: str, configured: Iterable[str]) -> list[str]:
     """
     wanted = set(configured)
     available = [pid for pid in _ORDER if pid in wanted]
+    # This runs once per translated message, so each complaint is made once and
+    # then remembered. A warning per chat line drowns the log it belongs in.
     unknown = wanted - set(_ORDER)
-    if unknown:
-        logger.warning("Config names providers this build does not have: %s", ", ".join(sorted(unknown)))
+    for provider_id in sorted(unknown):
+        _warn_once(
+            f"unknown-provider:{provider_id}",
+            "Config names a provider this build does not have: %s",
+            provider_id,
+        )
     if priority in available:
         available.remove(priority)
         return [priority, *available]
     if priority and priority not in _REGISTRY:
-        logger.warning("Unknown translator priority %r — falling back to listing order", priority)
+        _warn_once(
+            f"unknown-priority:{priority}",
+            "Unknown translator priority %r — falling back to listing order",
+            priority,
+        )
     return available
 
 
@@ -147,7 +166,9 @@ def configured_ids(providers: dict[str, dict[str, str]] | None) -> list[str]:
     result = []
     for provider_id, settings in (providers or {}).items():
         spec = _REGISTRY.get(provider_id)
-        if spec is not None and spec.is_configured(settings or {}):
+        if spec is None or not isinstance(settings, dict):
+            continue
+        if spec.is_configured(settings):
             result.append(provider_id)
     return result
 

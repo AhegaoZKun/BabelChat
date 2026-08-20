@@ -88,28 +88,74 @@ def test_a_config_default_never_turns_it_on():
 # ── the pipeline's own logging ───────────────────────────────────────────────
 
 
-def test_no_pipeline_log_quotes_chat_above_debug():
-    """The `Parsed:` line ran at INFO — the default level — and ran BEFORE the
-    channel filter, so unticking Whispers did not stop whispers reaching the
-    log file."""
-    import pathlib
+def run_pipeline_on(line: str, tmp_path, *, channels=None, translator=None):
+    """Push one raw chat line through a real pipeline and return it."""
+    from app.parser import Channel
+    from app.pipeline import PipelineConfig, TranslationPipeline
 
-    source = pathlib.Path("app/pipeline.py").read_text(encoding="utf-8")
-    quoting = [
-        line.strip()
-        for line in source.splitlines()
-        if "logger.info(" in line and ("msg.text" in line or "cleaned_text" in line or "line[" in line)
-    ]
-    assert quoting == [], f"these INFO lines quote chat: {quoting}"
+    config = PipelineConfig(
+        chatlog_path=tmp_path / "WoWChatLog.txt",
+        db_path=str(tmp_path / "cache.db"),
+        enabled_channels=channels if channels is not None else {Channel.SAY, Channel.GUILD},
+        use_memory_reader=False,
+    )
+    pipeline = TranslationPipeline(config, lambda _m: None)
+    if translator is not None:
+        pipeline._translator = translator
+    pipeline._on_new_line(line)
+    return pipeline
 
 
-def test_the_parsed_line_sits_below_the_channel_filter():
-    import pathlib
+SECRET = "meet me behind the bank at nine"
 
-    source = pathlib.Path("app/pipeline.py").read_text(encoding="utf-8")
-    filter_at = source.index("if msg.channel not in cfg.enabled_channels:")
-    parsed_at = source.index('"Parsed: [%s] %s: %s (dict=%s)"')
-    assert parsed_at > filter_at, "a filtered-out channel must not be logged"
+
+def test_an_enabled_channel_message_is_not_quoted_at_info(tmp_path, caplog):
+    """The previous attempt at this was a grep over pipeline.py for `logger.info`
+    on the same physical line as a known variable name. It passed while four
+    multi-line calls and two differently-named variables still quoted the text.
+    This drives the real pipeline and reads the real log records instead."""
+    with caplog.at_level(logging.INFO):
+        run_pipeline_on(f"1/1 00:00:00.000  [Guild] Friend-Realm: {SECRET}", tmp_path)
+
+    assert SECRET not in caplog.text
+
+
+def test_an_enabled_channel_message_is_not_quoted_at_info_even_when_translated(tmp_path, caplog):
+    """The translation path logs more than the intake path does."""
+
+    class Translator:
+        def translate(self, text, target_lang, source_lang=None, context=None):
+            from app.translators.base import TranslationResult
+
+            return TranslationResult(
+                original=text,
+                translated="встретимся у банка в девять",
+                source_lang="EN",
+                target_lang=target_lang,
+                success=True,
+                backend="fake",
+            )
+
+        @property
+        def has_backend(self):
+            return True
+
+    with caplog.at_level(logging.INFO):
+        run_pipeline_on(
+            f"1/1 00:00:00.000  [Guild] Friend-Realm: {SECRET}", tmp_path, translator=Translator()
+        )
+
+    assert SECRET not in caplog.text
+    assert "встретимся" not in caplog.text, "the translation is the message too"
+
+
+def test_the_message_is_still_available_at_debug(tmp_path, caplog):
+    """Silence at INFO must not mean the diagnostic is gone — otherwise the
+    next person to debug capture turns something worse back on."""
+    with caplog.at_level(logging.DEBUG):
+        run_pipeline_on(f"1/1 00:00:00.000  [Guild] Friend-Realm: {SECRET}", tmp_path)
+
+    assert SECRET in caplog.text
 
 
 def test_a_whisper_from_a_disabled_channel_never_reaches_the_log(tmp_path, caplog):
