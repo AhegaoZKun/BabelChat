@@ -98,3 +98,8 @@ babelchat_scanner_*/target/
 .*token*
 .*secret*
 .*api-key*
+
+# Built by the release workflow: the staged addon and the store release notes
+# extracted from CHANGELOG.md for the version being published.
+/.release
+/RELEASE_NOTES.md

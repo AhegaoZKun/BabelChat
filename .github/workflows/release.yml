@@ -253,7 +253,10 @@ jobs:
       # checked out. Ancestry is the fact.
       - name: Refuse to publish from outside main
         run: |
-          git fetch --no-tags --depth=0 origin main
+          # checkout with fetch-depth: 0 already fetched every branch, so
+          # origin/main is present. An extra `git fetch --depth=0` is not just
+          # redundant, it aborts: git rejects a depth of zero, and the default
+          # shell is `bash -e`, so the step dies before the guard below runs.
           if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "$GITHUB_SHA is on main."
           else
@@ -261,13 +264,37 @@ jobs:
             exit 1
           fi
 
+      # Staged by hand rather than by the packager's own copy step. That step
+      # works from an ignore list, and this repository holds the companion app,
+      # its build outputs, the developer's config.json and their logs alongside
+      # the addon — a blacklist one entry out of date uploads whatever it did
+      # not know about to both stores, publicly and permanently. Copying the
+      # addon in explicitly means only the addon can ship.
+      - name: Stage the addon
+        run: |
+          mkdir -p .release/BabelChat
+          cp -r addon/BabelChat/. .release/BabelChat/
+          cp LICENSE .release/BabelChat/
+          test -f .release/BabelChat/BabelChat.toc
+
+      # The store notes are this release's section of the changelog, not all of
+      # it. Same extraction the GitHub release above uses.
+      - name: Write the release notes the stores will show
+        run: |
+          awk '/^## \[/{if(found) exit; found=1; next} found{print}' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
+
       - name: Publish to CurseForge and Wago
         uses: BigWigsMods/packager@v2
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
         with:
+          # -c packages what was staged above instead of copying the checkout.
+          # -o is not optional alongside it: without it the packager deletes the
+          # package directory before it starts, staged contents and all, and
+          # produces an empty zip that uploads without complaint.
           args: >-
             ${{ (secrets.CF_API_TOKEN == '' && secrets.WAGO_API_TOKEN == '') && '-d' || '' }}
-            -t addon/BabelChat
+            -c -o
             -r ${{ github.workspace }}/.release

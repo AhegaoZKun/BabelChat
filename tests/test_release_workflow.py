@@ -67,14 +67,79 @@ def test_the_toc_is_where_the_project_ids_are_written_down():
 # ── the flags, which are only exercised on a tag ─────────────────────────────
 
 
-def test_the_packager_is_pointed_at_the_directory_holding_the_toc(workflow):
-    """`-t` is the top-level directory of the checkout, and the packager expects
-    the TOC at its root. This repository keeps the addon in a subdirectory, so
-    the default — the repository root — finds nothing."""
+def test_the_packager_runs_from_the_repository_root(workflow):
+    """`-t addon/BabelChat` looks reasonable and fails every time: the packager
+    checks for a git checkout at topdir before anything else, and the addon
+    subdirectory has no .git. Topdir has to be the root, which is also where
+    .pkgmeta lives — and .pkgmeta is what tells it where the TOC is.
+
+    Verified by running the real release.sh with both settings.
+    """
     args = publish_step(workflow)["with"]["args"]
 
-    assert "-t addon/BabelChat" in args, args
-    assert (TOC.parent / TOC.name).exists()
+    assert "-t " not in args, f"topdir must stay at the repository root: {args}"
+    assert (ROOT / ".git").exists()
+    assert (ROOT / ".pkgmeta").is_file()
+
+
+def test_the_addon_is_staged_rather_than_copied_by_the_packager(workflow):
+    """The packager's own copy step works from an ignore list, and this is not
+    an addon-only repository: the list was twelve entries out of date and would
+    have uploaded the developer's config.json — API key included — logs, a
+    video and the translation cache to both stores, publicly and permanently.
+
+    -c packages what the workflow staged. -o is not optional alongside it:
+    without it the packager deletes the package directory first, staged contents
+    and all, and produces an empty zip that uploads without complaint.
+    """
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    staging = next((s for s in steps if "Stage" in str(s.get("name", ""))), None)
+    args = publish_step(workflow)["with"]["args"]
+
+    assert staging is not None, "nothing stages the addon"
+    assert "addon/BabelChat/." in staging["run"], staging["run"]
+    assert "-c" in args.split(), args
+    assert "-o" in args.split(), "-c without -o empties the package directory"
+
+
+def test_the_pkgmeta_points_the_packager_at_the_toc():
+    """The packager finds the TOC at the repository root or at the path named in
+    move-folders — and that key is prefixed with the package name. Written as
+    `addon/BabelChat` it strips the wrong component and reports "Could not find
+    an addon TOC file"."""
+    import yaml as yaml_module
+
+    meta = yaml_module.safe_load((ROOT / ".pkgmeta").read_text(encoding="utf-8"))
+
+    assert meta["package-as"] == "BabelChat"
+    assert meta["move-folders"] == {"BabelChat/addon/BabelChat": "BabelChat"}
+    assert "ignore" not in meta, "an ignore list that -c never reads reads as authoritative"
+
+
+def test_the_store_notes_are_one_release_not_the_whole_changelog(workflow):
+    """`manual-changelog: CHANGELOG.md` posts every version ever released as the
+    release notes for this one."""
+    import yaml as yaml_module
+
+    meta = yaml_module.safe_load((ROOT / ".pkgmeta").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    notes = next((s for s in steps if "notes" in str(s.get("name", "")).lower()), None)
+
+    assert meta["manual-changelog"]["filename"] == "RELEASE_NOTES.md"
+    assert notes is not None, "nothing writes the release notes"
+    assert "CHANGELOG.md" in notes["run"] and "awk" in notes["run"]
+
+
+def test_the_generated_release_artefacts_are_not_committed():
+    """Both are built during the release and one of them is a copy of the addon;
+    neither belongs in the repository."""
+    import subprocess
+
+    for name in (".release", "RELEASE_NOTES.md"):
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", name], cwd=ROOT, capture_output=True, check=False
+        )
+        assert result.returncode == 0, f"{name} is not ignored"
 
 
 def test_the_upload_is_skipped_when_no_token_is_configured(workflow):
@@ -184,6 +249,9 @@ def test_publishing_refuses_a_tag_that_is_not_on_main(workflow):
     assert "merge-base --is-ancestor" in script, script
     assert "exit 1" in script, "the check does not fail the job"
     assert "if true" not in script, "the check has been short-circuited"
+    # `git fetch --depth=0` is rejected by git, and the default shell is
+    # `bash -e`, so a step containing it dies before the guard is reached.
+    assert "--depth=0" not in script, "this fetch aborts the step it guards"
 
     order = [s.get("name") or s.get("uses") for s in steps]
     assert order.index(guard["name"]) < len(order) - 1, "the guard must run before the upload"
