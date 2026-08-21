@@ -10,7 +10,7 @@ addon/BabelChat/
 ├── CompanionBuffer.lua # Ring buffer for companion app (ReadProcessMemory)
 ├── Config.lua          # Settings UI panel (Interface > AddOns > BabelChat)
 ├── Locales.lua         # UI strings (EN, RU, ES)
-├── Data/               # 12 dictionary files (347 terms × 14 languages)
+├── Data/               # 13 dictionary files (383 terms × 14 languages)
 ├── Libs/               # Embedded libraries (LibStub, LibBabble, LibDBIcon, etc.)
 └── img/icon.tga        # Addon icon (128x128 TGA, tools/make_addon_icon.py)
 ```
@@ -32,7 +32,7 @@ The `ChatFilter` function:
 
 - 50-message ring buffer with dedup (author+text, 2s TTL)
 - Format: `SEQ|KIND|EVENT|author|text` (tab separator for DICT translated text)
-- Flushed to `BabelChatDB.wctbuf` every 1.5s via `C_Timer.NewTicker`
+- Flushed to `BabelChatDB.wctbuf` every 0.25s via `C_Timer.NewTicker`
 - Pre-allocated SavedVariable keys for pointer stability
 - `pcall` wrapping for secret-tainted instance chat
 
@@ -44,7 +44,7 @@ Based on Pirson's WoW Translator (MIT License), rewritten for v2:
 - **Hyperlink-aware**: skips `|H...|h` and `|cff...|r` blocks
 - **Overlap guard**: matched ranges tracked, no double translations
 - **Multi-word priority**: longest phrases matched first
-- **12 categories**: Social, Classes, Combat, Raid, Groups, Stats, Professions, Trade, Status, Guild, Roles, Slang
+- **13 categories**: Social, Classes, Combat, Raid, Groups, Stats, Professions, Trade, Status, Guild, Roles, Slang
 
 ## Config UI (Config.lua)
 

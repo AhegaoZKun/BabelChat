@@ -8,7 +8,7 @@ BabelChat is a two-component system: a WoW addon (Lua) captures chat messages, a
 WoW Process                          Companion App (Python, admin)
 ┌─────────────────────┐              ┌──────────────────────────────┐
 │  BabelChat addon    │              │  Memory Reader               │
-│  ├── ChatFilter     │  ReadProc    │  ├── Tiered scan cascade     │
+│  ├── ChatFilter     │  ReadProc    │  ├── Rust scanner + pymem    │
 │  ├── Ring buffer    │──Memory───→  │  ├── Seq freshness tracking  │
 │  ├── DictEngine     │  (250ms)     │  └── Zombie buffer detection │
 │  └── SavedVariable  │              │          │                   │
@@ -45,7 +45,10 @@ WoW Process                          Companion App (Python, admin)
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `memory_reader` | ~900 | ReadProcessMemory, tiered scan, seq tracking, zombie detection |
+| `memory_reader` | 25 | Platform dispatcher |
+| `memory_reader_windows` | ~430 | ReadProcessMemory via the Rust scanner, pymem fallback |
+| `memory_reader_linux` | ~360 | The same for Linux |
+| `addon_protocol` | ~200 | The record format and channel classification, shared by both |
 | `settings_dialog` | ~900 | Settings UI (tabs: General, Languages, Channels, About + donations) |
 | `overlay` | ~870 | Smart overlay (WoW-themed, channel colors, streaming updates) |
 | `setup_wizard` | ~670 | First-run wizard (5 steps) |
@@ -56,7 +59,6 @@ WoW Process                          Companion App (Python, admin)
 | `main` | ~310 | Entry point, single-instance guard, logging |
 | `glossary_data` | ~200 | Pirson's WoW glossary (80 abbreviations, 102 expansions) |
 | `about_dialog` | ~170 | About tab with version, credits, donations |
-| `reply_widget` | ~160 | Outgoing translator (clipboard-based) |
 | `cache` | ~150 | Two-level: LRU (1000 entries) + SQLite (7-day TTL), thread-safe |
 | `detector` | ~140 | Language detection + Cyrillic fallback for short text |
 | `translator` | ~140 | DeepL API wrapper with retry, timeout, exception fallback |
@@ -66,7 +68,6 @@ WoW Process                          Companion App (Python, admin)
 | `tray` | ~100 | System tray icon |
 | `glossary` | ~90 | WoW abbreviation lookup + context-gated expansion |
 | `slang` | ~85 | Gaming slang normalizer for DeepL |
-| `lang_selector` | ~85 | Language dropdown widget |
 | `text_utils` | ~70 | URL stripping, token preservation, color code removal |
 
 ## Threading Model
@@ -76,7 +77,7 @@ WoW Process                          Companion App (Python, admin)
 | Main (PyQt6 event loop) | Overlay, Settings, Tray | `_config` via `update_config()` |
 | Memory reader | `WoWAddonBufReader._run_loop` | Calls `pipeline._on_new_line` |
 | File watcher (fallback) | `ChatLogWatcher._poll_loop` | Calls `pipeline._on_new_line` |
-| ThreadPoolExecutor (8) | Parallel heap scan | Return values only (no shared state) |
+| Rust scanner | Region scan lives in the native library | Return values only (no shared state) |
 
 **Thread safety:**
 - `_recent_messages` protected by `threading.Lock`
