@@ -135,12 +135,20 @@ def test_the_arrow_glyph_is_gone():
 
 
 def test_a_long_list_is_capped_with_a_count():
+    """Which three matters: the cap keeps the first three the message says, so
+    the gloss still reads alongside the sentence above it. Counting three pairs
+    and a "+2" would pass on any three."""
     h = build({"a": "1", "b": "2", "c": "3", "d": "4", "e": "5"})
 
-    text, _ = gloss(h, "a b c d e")
+    text, _ = gloss(h, "e d c b a")
 
     assert text.count(" = ") == 3
     assert "+2" in text
+    assert "e = 5" in text
+    assert "d = 4" in text
+    assert "c = 3" in text
+    assert "b = 2" not in text
+    assert "a = 1" not in text
 
 
 # ── word boundaries ──────────────────────────────────────────────────────────

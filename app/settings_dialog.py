@@ -398,7 +398,7 @@ class SettingsDialog(QDialog):
             self._addon_status.setStyleSheet("color: #40FF40; font-weight: bold;")
             self._install_addon_btn.setText(tr("settings.wow.reinstall_addon"))
         except OSError as e:
-            self._addon_status.setText(f"\u2717 {e}")
+            self._addon_status.setText(tr("addon.install_failed", detail=e))
             self._addon_status.setStyleSheet("color: #FF4040; font-weight: bold;")
 
     def _save_and_accept(self) -> None:

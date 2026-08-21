@@ -332,7 +332,7 @@ class SetupWizard(QDialog):
             self._addon_status_label.setStyleSheet("color: #40FF40; font-weight: bold;")
             self._install_addon_btn.setText(tr("wizard.ready.reinstall_addon"))
         except OSError as e:
-            self._addon_status_label.setText(f"\u2717 {e}")
+            self._addon_status_label.setText(tr("addon.install_failed", detail=e))
             self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
 
     def _update_summary(self) -> None:

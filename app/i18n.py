@@ -509,6 +509,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Azure region",
         "ES": "Región de Azure",
     },
+    "addon.install_failed": {
+        "RU": "✗ Не удалось скопировать аддон: {detail}. Проверьте, что WoW закрыт и папка доступна для записи.",
+        "EN": "✗ Could not copy the addon: {detail}. Check that WoW is closed and the folder is writable.",
+        "ES": "✗ No se pudo copiar el complemento: {detail}. Comprueba que WoW esté cerrado y la carpeta sea escribible.",
+    },
     "provider.get_key": {
         "RU": "Получить ключ",
         "EN": "Get key",

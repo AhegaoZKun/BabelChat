@@ -167,8 +167,36 @@ def test_mymemory_does_not_log_the_message_or_the_email(caplog):
         result = backend.translate("secret whisper", "RU", "EN")
 
     assert "secret+whisper" not in caplog.text
-    assert "player" not in caplog.text
+    assert "player@example.com" not in caplog.text
+    assert "player%40example.com" not in caplog.text
     assert "secret" not in (result.error or "")
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        FakeResponse(500, {}),
+        FakeResponse(200, raises_json=True),
+        FakeResponse(200, {"responseStatus": 403, "responseData": {"translatedText": "MYMEMORY WARNING"}}),
+    ],
+    ids=["http_error", "not_json", "api_refusal"],
+)
+def test_mymemory_keeps_quiet_on_every_failure_path_not_just_the_network_one(failure, caplog):
+    """The network path was the only one covered. The HTTP-error, bad-JSON and
+    refusal paths log too, and they run on the same request — so they carry the
+    same message and the same email."""
+    backend = MyMemoryBackend(email="player@example.com", retry=RetryPolicy(attempts=1, delay=0))
+    session = FakeSession()
+    backend._session = session
+    session.script(backend_endpoint(), failure)
+
+    with caplog.at_level(logging.DEBUG):
+        result = backend.translate("secret whisper", "RU", "EN")
+
+    assert result.success is False
+    assert "secret whisper" not in caplog.text
+    assert "player@example.com" not in caplog.text
+    assert "secret whisper" not in (result.error or "")
 
 
 @pytest.mark.parametrize(
