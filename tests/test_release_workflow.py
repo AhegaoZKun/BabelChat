@@ -304,3 +304,69 @@ def test_both_store_ids_are_uncommented():
             if directive in line and line.startswith("## ")
         ]
         assert len(live) == 1, f"{directive} is not a live directive: {live}"
+
+
+# ── prereleases stay off the stores ──────────────────────────────────────────
+
+
+def test_a_prerelease_tag_is_not_published_to_the_stores(workflow):
+    """The stores keep every file ever uploaded, so an rc reaching them cannot
+    be undone. The job-level condition listed -beta and -alpha while the release
+    job two jobs above treats -rc as a prerelease too, so v3.4.0-rc.1 would have
+    gone straight to CurseForge and Wago."""
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    check = next((s for s in steps if s.get("id") == "kind"), None)
+
+    assert check is not None, "nothing decides whether this tag is a prerelease"
+    for suffix in ("beta", "rc", "alpha"):
+        assert suffix in check["run"], f"{suffix} tags are not recognised as prereleases"
+
+
+def test_the_prerelease_check_reads_the_tag_and_not_the_branch(workflow):
+    """On workflow_dispatch `github.ref_name` is the branch. Dispatching
+    v3.4.0-beta.1 from main evaluated contains('main', '-beta') as false and
+    published the beta. Every other step in this file already reads
+    `inputs.tag || ref_name`."""
+    check = next(s for s in workflow["jobs"]["publish-addon"]["steps"] if s.get("id") == "kind")
+
+    assert "inputs.tag" in check["run"], check["run"]
+    assert "if" not in workflow["jobs"]["publish-addon"], (
+        "a job-level condition cannot see the dispatched tag; the check belongs in a step"
+    )
+
+
+def test_a_prerelease_skips_rather_than_fails(workflow):
+    """A red build on a deliberate beta is a false alarm, and the next real one
+    gets ignored."""
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    check = next(s for s in steps if s.get("id") == "kind")
+
+    assert "exit 1" not in check["run"], "a prerelease is not an error"
+    guarded = [s.get("name") or s.get("uses") for s in steps if "kind.outputs.publish" in str(s.get("if", ""))]
+    assert len(guarded) >= 4, f"only these steps are guarded: {guarded}"
+
+
+def test_the_upload_itself_is_guarded(workflow):
+    """The guard is worth nothing if the step that uploads is not behind it."""
+    upload = publish_step(workflow)
+
+    assert "kind.outputs.publish" in str(upload.get("if", "")), upload.get("if")
+
+
+def test_every_file_that_states_the_version_states_the_same_one():
+    """Four files carry it and they disagreed: pyproject said 3.3.0 while the
+    TOC, the About window and the changelog said 3.4.0. The addon's own fallback
+    string — what a player sees if the metadata lookup fails — said 2.1.0."""
+    from app.about_dialog import VERSION
+
+    toc = TOC.read_text(encoding="utf-8")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    config_lua = (ROOT / "addon" / "BabelChat" / "Config.lua").read_text(encoding="utf-8")
+
+    assert re.search(rf"^## Version: {re.escape(VERSION)}$", toc, re.M), "the TOC disagrees"
+    assert f'version = "{VERSION}"' in pyproject, "pyproject disagrees"
+    assert f"## [{VERSION}]" in changelog, "the changelog has no entry for this version"
+
+    fallbacks = re.findall(r'"(\d+\.\d+\.\d+)"', config_lua)
+    assert all(v == VERSION for v in fallbacks), f"Config.lua falls back to {fallbacks}"

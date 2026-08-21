@@ -418,6 +418,40 @@ class ReplyDialog(QWidget):
         else:
             self._reply_output.setText(tr("overlay.reply.error"))
 
+    def translate_clipboard(self) -> None:
+        """Translate whatever is on the clipboard and put the result back.
+
+        The hotkey for this has been configurable, saved and shown with a hint
+        describing exactly this since the setting was added — and nothing ever
+        registered it. A key combination a user assigned and pressed, that did
+        nothing, with no error.
+        """
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            return
+        text = clipboard.text().strip()
+        if not text or self._translator is None:
+            self._status.setText(tr("overlay.clipboard.empty"))
+            QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._status.setText(""))
+            return
+
+        self._status.setText(tr("overlay.reply.translating"))
+        lang = self._reply_lang_combo.currentData() or self._target_lang
+        worker = ReplyTranslateWorker(self._translator, text, lang)
+        worker.signals.finished.connect(self._on_clipboard_translated)
+        self._thread_pool.start(worker)
+
+    @pyqtSlot(str, bool)
+    def _on_clipboard_translated(self, translated: str, success: bool) -> None:
+        if not success:
+            self._status.setText(tr("overlay.reply.error"))
+            return
+        clipboard = QApplication.clipboard()
+        if clipboard:
+            clipboard.setText(translated)
+        self._status.setText(tr("overlay.clipboard.done"))
+        QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._status.setText(""))
+
     def _copy_result(self) -> None:
         text = self._reply_output.text()
         if text:
@@ -871,6 +905,19 @@ class ChatOverlay(QWidget):
     def _on_filter_changed(self, filter_name: str) -> None:
         self._active_filter = filter_name
         self._rerender_chat()
+
+    def translate_clipboard(self) -> None:
+        """Translate whatever is on the clipboard, from the global hotkey.
+
+        Delegates to the reply dialog, which owns the translator and the target
+        language the user picked. The dialog is created lazily, so this creates
+        it if the user has never opened it — pressing the key is the request.
+        """
+        if self._reply_dialog is None:
+            self._reply_dialog = ReplyDialog()
+            if self._translator is not None:
+                self._reply_dialog.set_translator(self._translator, self._target_lang)
+        self._reply_dialog.translate_clipboard()
 
     def _toggle_translation(self) -> None:
         self._translation_enabled = not self._translation_enabled

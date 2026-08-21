@@ -323,11 +323,18 @@ def main() -> int:
 
     # Global hotkeys
     hotkey_mgr = GlobalHotkeyManager()
-    hk_toggle_translate = hotkey_mgr.register(config.hotkey_toggle_translate)
+    # Every hotkey the settings window lets you configure is registered here.
+    # The clipboard one was offered, saved, and read by nobody: a combination
+    # the user assigned and pressed that did nothing at all.
+    actions = {
+        hotkey_mgr.register(config.hotkey_toggle_translate): overlay._toggle_translation,
+        hotkey_mgr.register(config.hotkey_clipboard_translate): overlay.translate_clipboard,
+    }
 
     def on_hotkey(hk_id: int) -> None:
-        if hk_id == hk_toggle_translate:
-            overlay._toggle_translation()
+        action = actions.get(hk_id)
+        if action is not None:
+            action()
 
     hotkey_mgr.hotkey_pressed.connect(on_hotkey)
     hotkey_mgr.start()

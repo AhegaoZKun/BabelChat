@@ -246,3 +246,67 @@ def test_the_gloss_survives_a_missing_locale_table(addon):
         assert "+4" in text, "the fallback counter should still appear"
     finally:
         addon.addon_table.L = saved
+
+
+# ── the first thing a new player reads ───────────────────────────────────────
+
+
+@pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])
+def test_the_welcome_popup_names_the_provider_a_player_can_actually_use(locale):
+    """It advertised DeepL — whose free tier asks for a card — and Microsoft,
+    which needs an Azure account, and named neither of the two that work without
+    either. In Russian it steered players straight at the obstacle this release
+    exists to get around, in the first thing they ever see."""
+    harness = AddonHarness()
+    harness.lua.globals().GetLocale = lambda: locale
+    harness.load("Locales.lua")
+    text = str(harness.addon_table.L["WELCOME_6"])
+
+    assert "GigaChat" in text, text
+    assert "MyMemory" in text, text
+    assert text.index("MyMemory") < text.index("DeepL"), "the one needing no account should come first"
+
+
+@pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])
+def test_the_welcome_popup_states_no_term_count(locale):
+    """It said "380+" against 383, and the number moves whenever a term is
+    added. A count in a popup earns nothing and goes stale by itself."""
+    import re
+
+    harness = AddonHarness()
+    harness.lua.globals().GetLocale = lambda: locale
+    harness.load("Locales.lua")
+
+    def without_markup(text: str) -> str:
+        # |cffd597ff is a colour code, not a number the reader sees.
+        return re.sub(r"[|]c[0-9a-fA-F]{8}|[|]r", "", text)
+
+    counted = [
+        key
+        for key in ("WELCOME_1", "WELCOME_2", "WELCOME_3", "WELCOME_4", "WELCOME_6")
+        if re.search(r"\d{3}\+?", without_markup(str(harness.addon_table.L[key])))
+    ]
+
+    assert counted == [], f"{locale}: these state a term count: {counted}"
+
+
+@pytest.mark.parametrize("argument", ["", "companion", "poll on", "log on", "config"])
+def test_the_slash_commands_answer_in_the_players_language(addon, argument):
+    """Half the /babel output was English literals while the other half went
+    through the table, so a Russian player got a half-Russian help screen. The
+    harness runs on ruRU."""
+    import re
+
+    addon.lua.execute("_printed = {}")
+    run_slash(addon, argument)
+
+    def readable(line: str) -> str:
+        return re.sub(r"[|]c[0-9a-fA-F]{8}|[|]r|/babel[\w |]*", "", line)
+
+    english = [
+        line
+        for line in printed(addon)
+        if re.search(r"\b(?:enabled|disabled|Messages|Companion buffer|fallback|Toggle|available)\b", readable(line))
+    ]
+
+    assert english == [], f"/babel {argument} answers in English: {english}"

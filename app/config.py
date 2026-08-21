@@ -90,7 +90,6 @@ class AppConfig:
 
     # Hotkeys
     hotkey_toggle_translate: str = "Ctrl+Shift+T"
-    hotkey_toggle_interactive: str = "Ctrl+Shift+I"
     hotkey_clipboard_translate: str = "Ctrl+Shift+C"
 
     # Channels

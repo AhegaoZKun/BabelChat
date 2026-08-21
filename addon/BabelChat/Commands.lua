@@ -7,6 +7,11 @@
 local ADDON_NAME, addonTable = ...
 local L = addonTable.L
 
+-- The two states every status line reports, coloured once here rather than
+-- spelled out in English at each call site.
+local ON = "|cFF40FF40" .. L["CMD_ON"] .. "|r"
+local OFF = "|cFFFF4040" .. L["CMD_OFF"] .. "|r"
+
 local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff9482c9BabelChat|r: " .. msg)
 end
@@ -23,7 +28,7 @@ SlashCmdList["BABELCHAT"] = function(msg)
         if Settings and Settings.OpenToCategory and addonTable.categoryID then
             Settings.OpenToCategory(addonTable.categoryID)
         else
-            Print("Settings panel not available. Use the game's AddOn settings.")
+            Print(L["CMD_NO_PANEL"])
         end
 
     elseif command == "on" then
@@ -39,29 +44,29 @@ SlashCmdList["BABELCHAT"] = function(msg)
 
     elseif command == "companion" or command == "buf" then
         local count, seq, limit, flushing = addonTable.GetBufferStatus()
-        Print("Companion buffer:")
-        Print("  Messages: " .. count .. "/" .. limit)
-        Print("  Seq: " .. seq)
-        Print("  Flush: " .. (flushing and "|cFF40FF40ON|r" or "|cFFFF4040OFF|r"))
-        Print("  Poll fallback: " .. (addonTable.IsPollActive() and "|cFF40FF40ON|r" or "|cFFFF4040OFF|r"))
+        Print(L["CMD_BUFFER"])
+        Print("  " .. L["CMD_MESSAGES"] .. ": " .. count .. "/" .. limit)
+        Print("  " .. L["CMD_SEQ"] .. ": " .. seq)
+        Print("  " .. L["CMD_FLUSH"] .. ": " .. (flushing and ON or OFF))
+        Print("  " .. L["CMD_POLL"] .. ": " .. (addonTable.IsPollActive() and ON or OFF))
 
     elseif command == "poll on" then
         addonTable.StartPollTimer()
-        Print("Poll fallback |cFF40FF40enabled|r.")
+        Print("|cFF40FF40" .. L["CMD_POLL_ON"] .. "|r")
 
     elseif command == "poll off" then
         addonTable.StopPollTimer()
-        Print("Poll fallback |cFFFF4040disabled|r.")
+        Print("|cFFFF4040" .. L["CMD_POLL_OFF"] .. "|r")
 
     elseif command == "log on" then
         if not LoggingChat() then LoggingChat(true) end
         addonTable.StartLogFlush(db.companion.flushInterval)
-        Print("Chat logging |cFF40FF40enabled|r.")
+        Print("|cFF40FF40" .. L["CMD_LOG_ON"] .. "|r")
 
     elseif command == "log off" then
         addonTable.StopLogFlush()
         if LoggingChat() then LoggingChat(false) end
-        Print("Chat logging |cFFFF4040disabled|r.")
+        Print("|cFFFF4040" .. L["CMD_LOG_OFF"] .. "|r")
 
     else
         Print("|cffd597ff" .. L["HELP_HEADER"] .. "|r")
@@ -69,8 +74,8 @@ SlashCmdList["BABELCHAT"] = function(msg)
         Print("|cffffff00/babel on|off|r - " .. L["HELP_ONOFF_MSG"])
         Print("|cffffff00/babel test|r - " .. L["HELP_TEST_MSG"])
         Print("|cffffff00/babel companion|r - " .. L["HELP_COMPANION_MSG"])
-        Print("|cffffff00/babel poll on|off|r - Toggle GetMessageInfo fallback")
-        Print("|cffffff00/babel log on|off|r - Toggle chat file logging")
+        Print("|cffffff00/babel poll on|off|r - " .. L["HELP_POLL_MSG"])
+        Print("|cffffff00/babel log on|off|r - " .. L["HELP_LOG_MSG"])
     end
 end
 

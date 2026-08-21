@@ -916,15 +916,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Show/hide translations in the overlay",
         "ES": "Mostrar/ocultar traducciones en el overlay",
     },
-    "settings.hk.toggle_interactive": {
-        "RU": "Интерактивный режим:",
-        "EN": "Toggle interactive:",
-        "ES": "Modo interactivo:",
+    "overlay.clipboard.empty": {
+        "RU": "В буфере обмена нет текста",
+        "EN": "Nothing to translate on the clipboard",
+        "ES": "No hay texto en el portapapeles",
     },
-    "settings.hk.toggle_interactive_hint": {
-        "RU": "Переключить оверлей между прозрачным и интерактивным режимом",
-        "EN": "Switch overlay between click-through and interactive mode",
-        "ES": "Cambiar overlay entre modo transparente e interactivo",
+    "overlay.clipboard.done": {
+        "RU": "Перевод скопирован в буфер",
+        "EN": "Translation copied to the clipboard",
+        "ES": "Traducción copiada al portapapeles",
     },
     "settings.hk.clipboard": {
         "RU": "Перевод из буфера:",
