@@ -276,7 +276,8 @@ class WoWAddonBufReader:
                     event = sub_parts[0]
                     author = sub_parts[1]
                     msg_text = sub_parts[2]
-                    # Addon 3.3.0 and earlier appended the gloss after a tab.
+                    # Addon 3.3.0 and earlier appended the gloss after a tab; 3.4.0
+                    # does not.
                     # The addon is installed by hand, so an app updated ahead of
                     # it still receives those records; keeping the tail would
                     # send the gloss to the translation API and print it in the

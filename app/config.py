@@ -61,7 +61,11 @@ class AppConfig:
     # Languages
     ui_language: str = "RU"
     own_language: str = "RU"
-    target_language: str = "ES"
+    # What incoming chat is translated INTO, so it follows the language the user
+    # reads. It defaulted to "ES" — inherited from the Spanish addon this forked
+    # from — which meant the first-run summary told a Russian player their chat
+    # would be translated into Spanish.
+    target_language: str = "RU"
 
     # Overlay
     overlay_opacity: int = 180

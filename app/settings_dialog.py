@@ -36,30 +36,35 @@ from app.i18n import UI_LANGUAGES, tr
 from app.provider_settings_qt import ProviderSettingsGroup
 
 # DeepL supported target languages
+# Every language named in itself, which is what a language picker does: it
+# needs no translation per interface language, and a speaker recognises their
+# own language faster than a translation of its name. These were English names
+# on an otherwise Russian screen — "Ваш язык: Russian".
 LANGUAGES = {
     "EN": "English",
-    "RU": "Russian",
-    "DE": "German",
-    "FR": "French",
-    "ES": "Spanish",
-    "IT": "Italian",
-    "PT": "Portuguese",
-    "PL": "Polish",
-    "NL": "Dutch",
-    "SV": "Swedish",
-    "DA": "Danish",
-    "FI": "Finnish",
-    "CS": "Czech",
-    "RO": "Romanian",
-    "HU": "Hungarian",
-    "BG": "Bulgarian",
-    "EL": "Greek",
-    "TR": "Turkish",
-    "UK": "Ukrainian",
-    "JA": "Japanese",
-    "KO": "Korean",
-    "ZH": "Chinese",
+    "RU": "Русский",
+    "DE": "Deutsch",
+    "FR": "Français",
+    "ES": "Español",
+    "IT": "Italiano",
+    "PT": "Português",
+    "PL": "Polski",
+    "NL": "Nederlands",
+    "SV": "Svenska",
+    "DA": "Dansk",
+    "FI": "Suomi",
+    "CS": "Čeština",
+    "RO": "Română",
+    "HU": "Magyar",
+    "BG": "Български",
+    "EL": "Ελληνικά",
+    "TR": "Türkçe",
+    "UK": "Українська",
+    "JA": "日本語",
+    "KO": "한국어",
+    "ZH": "中文",
 }
+
 
 # WoW-inspired dark theme stylesheet
 from app.hotkey_edit import HotkeyEdit  # noqa: E402  (re-export)

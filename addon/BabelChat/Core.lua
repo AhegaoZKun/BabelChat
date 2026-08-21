@@ -18,7 +18,10 @@ local DEFAULTS = {
     -- Dictionary settings (from Pirson's WoWTranslator)
     dict = {
         enabled = true,
-        targetLocale = "esES",
+        -- Filled in from the client locale on first run; see
+        -- AutoDetectLocale. Left unset here on purpose: a shipped
+        -- default is a language chosen for somebody else.
+        targetLocale = false,
         -- When to print the in-chat gloss: "auto" keeps out of the way
         -- when the companion app is set up, because the overlay already
         -- shows a full translation of the same line.
@@ -117,14 +120,29 @@ local function ApplyDefaults(db, defaults)
     end
 end
 
--- Auto-detect target locale from WoW client locale
+-- Which language the gloss is written in. Taken from the client on first run.
+--
+-- This used to compare against "enUS" while the shipped default was "esES" — a
+-- leftover from the Spanish addon this dictionary came from — so the check
+-- never fired and a Russian player's gloss came out in Spanish. Nobody would
+-- report that as a bug in locale detection; they would report that the
+-- dictionary is wrong.
 local function AutoDetectLocale()
     local db = BabelChatDB
     local clientLocale = GetLocale()
-    -- If target locale is still default and client is not EN, set to client locale
-    if db.dict.targetLocale == "enUS" and clientLocale ~= "enUS" and clientLocale ~= "enGB" then
-        db.dict.targetLocale = clientLocale
+    -- enGB clients read the enUS tables; nothing ships a separate enGB column.
+    if clientLocale == "enGB" then clientLocale = "enUS" end
+
+    -- Anyone who saved a config before this shipped carries "esES", because
+    -- that was the default. On a Spanish client that is a real choice and is
+    -- left alone; anywhere else it is the old default, and it is the reason
+    -- their gloss has been coming out in a language they do not read.
+    if db.dict.targetLocale == "esES" and clientLocale ~= "esES" and clientLocale ~= "esMX" then
+        db.dict.targetLocale = nil
     end
+
+    if db.dict.targetLocale then return end
+    db.dict.targetLocale = clientLocale or "enUS"
 end
 
 -- ==========================================
@@ -406,14 +424,12 @@ function addonTable.InitialiseSavedVariables()
         end
     end
 
+    AutoDetectLocale()
     return db
 end
 
 initFrame:SetScript("OnEvent", function(self, event)
     local db = addonTable.InitialiseSavedVariables()
-
-    -- Auto-detect locale
-    AutoDetectLocale()
 
     -- Pre-allocate companion keys (pointer stability)
     addonTable.PreallocateCompanionKeys()

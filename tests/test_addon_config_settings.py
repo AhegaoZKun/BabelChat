@@ -402,3 +402,90 @@ def test_every_section_uses_the_shared_gap():
     assert literal_gaps == [], f"a section still hardcodes its gap: {literal_gaps}"
 
 
+
+
+# ── which language the gloss speaks ──────────────────────────────────────────
+
+
+def locale_harness(client_locale: str, saved: str | None = None):
+    """Core.lua initialised as it would be on a client with this locale."""
+    harness = AddonHarness()
+    lua = harness.lua
+    lua.execute(
+        "CreateFrame = function()  return setmetatable({}, {__index = function() return function() end end})end"
+    )
+    lua.execute("SlashCmdList = {}; strtrim = function(s) return (s:gsub('^%s*(.-)%s*$', '%1')) end")
+    lua.globals().GetLocale = lambda: client_locale
+    harness.addon_table.L = lua.eval("setmetatable({}, {__index = function(_, k) return k end})")
+    harness.load("Core.lua")
+    if saved is not None:
+        lua.globals().BabelChatDB = lua.eval(f'{{ dict = {{ targetLocale = "{saved}" }} }}')
+    harness.addon_table.InitialiseSavedVariables()
+    return harness
+
+
+@pytest.mark.parametrize(
+    ("client", "expected"),
+    [("ruRU", "ruRU"), ("deDE", "deDE"), ("frFR", "frFR"), ("enUS", "enUS"), ("enGB", "enUS")],
+)
+def test_a_fresh_install_glosses_in_the_language_of_the_client(client, expected):
+    """The shipped default was "esES", inherited from the Spanish addon this
+    dictionary came from, and the detection compared against "enUS" — so it
+    never fired and a Russian player's gloss came out in Spanish. Nobody reports
+    that as a locale bug; they report that the dictionary is wrong."""
+    h = locale_harness(client)
+
+    assert h.lua.globals().BabelChatDB.dict.targetLocale == expected
+
+
+def test_an_existing_config_carrying_the_old_spanish_default_is_corrected():
+    """It is indistinguishable from a deliberate choice except by the client:
+    somebody playing in Spanish meant it, and nobody else did."""
+    h = locale_harness("ruRU", saved="esES")
+
+    assert h.lua.globals().BabelChatDB.dict.targetLocale == "ruRU"
+
+
+@pytest.mark.parametrize("client", ["esES", "esMX"])
+def test_a_spanish_client_keeps_spanish(client):
+    h = locale_harness(client, saved="esES")
+
+    assert h.lua.globals().BabelChatDB.dict.targetLocale == "esES"
+
+
+def test_a_language_the_player_chose_is_never_overwritten():
+    """Only the old default is corrected. Anything else is a decision."""
+    h = locale_harness("ruRU", saved="deDE")
+
+    assert h.lua.globals().BabelChatDB.dict.targetLocale == "deDE"
+
+
+def test_the_rename_runs_before_the_defaults_are_filled_in():
+    """The one ordering the initialiser was extracted from the event handler to
+    make testable — and then wasn't tested, so swapping the two lines left the
+    whole suite green.
+
+    It is load-bearing: defaults first would see the new key missing, default it
+    to `true`, and hand every upgrading player back the categories they had
+    switched off.
+    """
+    harness = AddonHarness()
+    lua = harness.lua
+    lua.execute(
+        "CreateFrame = function()  return setmetatable({}, {__index = function() return function() end end})end"
+    )
+    lua.execute("SlashCmdList = {}; strtrim = function(s) return (s:gsub('^%s*(.-)%s*$', '%1')) end")
+    lua.globals().GetLocale = lambda: "ruRU"
+    harness.addon_table.L = lua.eval("setmetatable({}, {__index = function(_, k) return k end})")
+    harness.load("Core.lua")
+    lua.globals().BabelChatDB = lua.eval(
+        '{ dict = { settings = { showMazz = false, showComercio = false, showSocial = true } } }'
+    )
+
+    harness.addon_table.InitialiseSavedVariables()
+    settings = lua.globals().BabelChatDB.dict.settings
+
+    assert settings.showDungeons is False, "a category the player switched off came back on"
+    assert settings.showTrade is False
+    assert settings.showSocial is True
+    assert settings.showMazz is None, "the old key should be gone, not kept alongside"

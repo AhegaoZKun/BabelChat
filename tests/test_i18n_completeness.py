@@ -110,6 +110,10 @@ _NOT_LANGUAGE = re.compile(
     r"[A-Za-z-]+\.(?:py|json|log|pem|ico|png|exe)|"  # filenames
     r"[A-Za-z]:[/\\].*|"  # example paths shown as placeholders
     r"(?:Ctrl|Alt|Shift|Win)[+]\S+|"  # hotkey combinations
+    r"(?:BTC|TON|USDT(?: TRC20)?)[:]?|"  # currency tickers on the About tab
+    r"GitHub[:] \S+|"  # a repository path
+    r"(?:Andrey Yumashev|Pirson|WoW Translator|Buy Me a Coffee[^|]*)|"  # names and projects
+
     r"[A-Za-z0-9_+/=:-]{20,}|"  # opaque tokens: wallet addresses, key examples
     r"(?:DeepL|GigaChat|MyMemory|Microsoft Translator|BabelChat|WoW|Azure|Sber)"
     r"(?: [0-9]+(?:[.][0-9]+)*)?"  # ...optionally with a version number
@@ -176,8 +180,22 @@ def _visible_texts(widget) -> list[str]:
     return found
 
 
+def _phrases(text: str) -> list[str]:
+    """A rich-text label is several labels: `<b>Перевод:</b> MyMemory` holds a
+    translated one and a brand name, and reading it whole hides either."""
+    return [part.strip() for part in _strip_markup(text).split("  ") if part.strip()]
+
+
+def _strip_markup(text: str) -> str:
+    """Qt labels carry rich text, and exempting anything starting with a tag let
+    `<b>Translation:</b> …` through — the one hardcoded English label on the
+    wizard's final screen."""
+    return re.sub(r"<[^>]+>", " ", text)
+
+
 def _is_untranslated(text: str, vocabulary: set[str]) -> bool:
-    if _NOT_LANGUAGE.match(text) or text.startswith("<"):
+    text = _strip_markup(text).strip()
+    if not text or _NOT_LANGUAGE.match(text):
         return False
     if text in vocabulary or any(text.startswith(known[:20]) for known in vocabulary if len(known) >= 20):
         return False
@@ -219,7 +237,14 @@ def test_the_built_russian_interface_says_nothing_in_english(dialog_name, monkey
         widget = SetupWizard(config)
 
     vocabulary = _russian_vocabulary()
-    english = sorted({text for text in _visible_texts(widget) if _is_untranslated(text, vocabulary)})
+    english = sorted(
+        {
+            phrase
+            for text in _visible_texts(widget)
+            for phrase in _phrases(text)
+            if _is_untranslated(phrase, vocabulary)
+        }
+    )
     widget.deleteLater()
 
     assert english == [], f"the Russian {dialog_name} shows: {english}"

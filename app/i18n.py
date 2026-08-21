@@ -350,6 +350,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "API Key:",
         "ES": "Clave API:",
     },
+    "wizard.ready.translation": {
+        "RU": "Перевод:",
+        "EN": "Translation:",
+        "ES": "Traducción:",
+    },
     "wizard.ready.wow_path": {
         "RU": "Путь к WoW:",
         "EN": "WoW Path:",
@@ -405,9 +410,9 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # General tab
     "settings.api_group": {
-        "RU": "DeepL API",
-        "EN": "DeepL API",
-        "ES": "DeepL API",
+        "RU": "Сервисы перевода",
+        "EN": "Translation services",
+        "ES": "Servicios de traducción",
     },
     "settings.api.placeholder": {
         "RU": "Введите ваш DeepL API ключ...",
@@ -1065,9 +1070,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ES": "Licencia: MIT",
     },
     "about.glossary_credit": {
-        "RU": 'Глоссарий терминов: <a href="https://www.curseforge.com/wow/addons/wow-translator" style="color: #FFD200;">WoW Translator</a> by Pirson',
+        "RU": 'Глоссарий терминов: <a href="https://www.curseforge.com/wow/addons/wow-translator" style="color: #FFD200;">WoW Translator</a>, автор Pirson',
         "EN": 'Term glossary: <a href="https://www.curseforge.com/wow/addons/wow-translator" style="color: #FFD200;">WoW Translator</a> by Pirson',
-        "ES": 'Glosario de términos: <a href="https://www.curseforge.com/wow/addons/wow-translator" style="color: #FFD200;">WoW Translator</a> by Pirson',
+        "ES": 'Glosario de términos: <a href="https://www.curseforge.com/wow/addons/wow-translator" style="color: #FFD200;">WoW Translator</a> de Pirson',
     },
     "about.close": {
         "RU": "Закрыть",

@@ -369,7 +369,7 @@ class SetupWizard(QDialog):
                 preferred = f"<br><b>{tr('settings.api.preferred')}</b> {spec.display_name}"
 
         self._summary_label.setText(
-            f"<b>Translation:</b> {backend_str}{preferred}<br>"
+            f"<b>{tr('wizard.ready.translation')}</b> {backend_str}{preferred}<br>"
             f"<b>{tr('wizard.ready.wow_path')}</b> {wow}<br>"
             f"<b>{tr('wizard.ready.own_lang')}</b> {own}<br>"
             f"<b>{tr('wizard.ready.target_lang')}</b> {target}"

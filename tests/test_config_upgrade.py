@@ -244,3 +244,12 @@ def test_every_channel_has_a_colour_and_a_prefix_in_the_overlay():
 
     assert missing_colour == [], f"no overlay colour for: {missing_colour}"
     assert missing_prefix == [], f"no overlay prefix for: {missing_prefix}"
+
+
+def test_the_default_target_language_is_one_the_default_interface_reads():
+    """It was "ES" while the interface and the user's own language both
+    defaulted to "RU", so a player who accepted every default had their chat
+    translated into a language the app never suggested they speak."""
+    config = AppConfig()
+
+    assert config.target_language == config.own_language == config.ui_language

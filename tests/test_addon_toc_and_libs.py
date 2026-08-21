@@ -252,3 +252,68 @@ def test_the_readme_term_count_is_the_number_of_terms_there_are():
         claimed = {int(n) for n in re.findall(counted, text)}
         assert claimed, f"{name} no longer states a term count — update this test with it"
         assert claimed == {actual}, f"{name} claims {sorted(claimed)}, the data files hold {actual}"
+
+
+# ── directives the addon does not work without ───────────────────────────────
+
+
+def toc_directive(name: str) -> str | None:
+    for line in TOC.read_text(encoding="utf-8-sig").splitlines():
+        if line.startswith(f"## {name}:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def test_the_saved_variable_the_companion_reads_is_declared():
+    """The single line the whole companion protocol rests on. Without it WoW
+    never persists BabelChatDB, so BabelChatDB.wctbuf never exists, the memory
+    reader finds nothing, and the app looks broken with no error anywhere.
+
+    Nothing covered it: renaming it left the entire suite green.
+    """
+    assert toc_directive("SavedVariables") == "BabelChatDB"
+
+
+def test_every_lua_file_the_addon_ships_is_loaded_by_the_toc():
+    """A file present on disk and absent from the TOC is dead code that looks
+    live. Dropping DictEngine.lua from the load order left the suite green."""
+    listed = {
+        line.strip().replace("\\", "/")
+        for line in TOC.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip().endswith(".lua")
+    }
+    root = TOC.parent
+    on_disk = {
+        str(path.relative_to(root)).replace("\\", "/")
+        for path in root.rglob("*.lua")
+        if "Libs" not in path.parts
+    }
+
+    unloaded = sorted(on_disk - listed)
+
+    assert unloaded == [], f"shipped but never loaded: {unloaded}"
+
+
+def test_the_engine_loads_after_the_data_it_indexes():
+    """RebuildMasterDict reads addonTable.*Dict at load time, so a data file
+    listed after DictEngine.lua contributes nothing and its category is silently
+    empty."""
+    order = [
+        line.strip().replace("\\", "/")
+        for line in TOC.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip().endswith(".lua")
+    ]
+    engine = order.index("DictEngine.lua")
+    late_data = [name for name in order[engine:] if name.startswith("Data/")]
+
+    assert late_data == [], f"loaded after the engine that indexes them: {late_data}"
+
+
+def test_the_addon_and_the_app_report_the_same_version():
+    """The addon is installed by hand, so `## Version` is the only way a user or
+    a bug report can say which one is running — and the readers carry a compat
+    branch keyed on a version number, which is only meaningful if the two agree.
+    """
+    from app.about_dialog import VERSION
+
+    assert toc_directive("Version") == VERSION
