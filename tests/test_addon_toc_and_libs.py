@@ -327,6 +327,16 @@ def test_every_addon_file_parses_as_lua(name):
     source = (TOC.parent / name).read_text(encoding="utf-8")
     runtime = lua51.LuaRuntime()
 
-    compiled = runtime.eval("loadstring")(source, name)
+    # loadstring returns (nil, message) on a parse error, and lupa hands that
+    # back as a tuple — which is not None, so checking the result as a whole
+    # passes on a file that does not compile. Ask Lua whether it compiled.
+    ok, error = runtime.execute(
+        """
+        return function(source, name)
+            local chunk, err = loadstring(source, name)
+            return chunk ~= nil, err
+        end
+        """
+    )(source, name)
 
-    assert compiled is not None, f"{name} does not parse"
+    assert ok, f"{name} does not parse: {error}"
