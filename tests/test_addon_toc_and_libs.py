@@ -252,6 +252,11 @@ DOCS = (
     "docs/user/configuration_ru.md",
     "docs/user/faq.md",
     "docs/user/faq_ru.md",
+    "docs/publishing.md",
+    # The two that a stranger reads first: the store page and the file inside
+    # the zip. Both had been left out and both were the most out of date.
+    "store-description.md",
+    "addon/BabelChat/README.md",
 )
 
 
@@ -270,10 +275,14 @@ def test_no_document_states_a_term_count_that_is_not_the_term_count(name):
     Every document is checked, not just the two READMEs: the count appeared in
     three files and only one of them was ever corrected by hand.
     """
-    text = (ROOT / name).read_text(encoding="utf-8")
     counted = r"(\d{3})[  ](?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)"
-
-    claimed = {int(n) for n in re.findall(counted, text)}
+    claimed = set()
+    for line in (ROOT / name).read_text(encoding="utf-8").splitlines():
+        # The credits state how many terms Pirson's addon contributed. That is a
+        # fact about a different addon and does not move when ours does.
+        if "Pirson" in line or "WoW Translator" in line:
+            continue
+        claimed.update(int(n) for n in re.findall(counted, line))
 
     assert claimed <= {shipped_term_count()}, (
         f"{name} claims {sorted(claimed)}, the data files hold {shipped_term_count()}"
@@ -287,6 +296,42 @@ def test_at_least_one_document_still_states_the_term_count():
     stating = [name for name in DOCS if re.search(counted, (ROOT / name).read_text(encoding="utf-8"))]
 
     assert stating, "no document states the term count any more — this test now guards nothing"
+
+
+def shipped_category_count() -> int:
+    """One data file per glossary category."""
+    return len(list((ROOT / "addon" / "BabelChat" / "Data").glob("*.lua")))
+
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_document_states_a_category_count_that_is_not_the_category_count(name):
+    """It said 12 in one file and 13 in another while the data held 13 and the
+    options panel showed 15 toggles — the two extra being zones and item sets,
+    which are not data files."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    counted = r"(\d{1,2})[  ](?:categories|категори[а-я]+)"
+
+    claimed = {int(n) for n in re.findall(counted, text)}
+
+    assert claimed <= {shipped_category_count()}, (
+        f"{name} claims {sorted(claimed)} categories, there are {shipped_category_count()} data files"
+    )
+
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_document_still_sells_the_gloss_format_that_was_removed(name):
+    """The gloss used to be a second line beginning with an arrow. That format
+    was the project owner's headline complaint and the reason the engine was
+    rewritten; a store page still advertising it sells the version people
+    complained about."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    removed = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(r"annotation (?:below|under)|аннотаци[а-я]+ под|подсказк[а-я]+ под сообщением", line)
+    ]
+
+    assert removed == [], f"{name} still describes the removed gloss format: {removed}"
 
 
 @pytest.mark.parametrize("name", DOCS)
