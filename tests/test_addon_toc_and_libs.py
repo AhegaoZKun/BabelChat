@@ -207,6 +207,7 @@ def test_the_readme_term_count_is_the_number_of_terms_there_are():
 
     for name in ("README.md", "README_ru.md"):
         text = (root / name).read_text(encoding="utf-8")
-        claimed = {int(n) for n in re.findall(r"(\d{3}) (?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)", text)}
+        counted = r"(\d{3}) (?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)"
+        claimed = {int(n) for n in re.findall(counted, text)}
         assert claimed, f"{name} no longer states a term count — update this test with it"
         assert claimed == {actual}, f"{name} claims {sorted(claimed)}, the data files hold {actual}"
