@@ -89,10 +89,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.gigachat.note": "Free for individuals: 1M tokens a year, no card — a Sber ID is enough, and it works from Russia without a VPN.",
     "provider.gigachat.client_id": "Client ID",
-    "provider.gigachat.client_id_hint": "from Studio Sber — a long string with dashes",
+    "provider.gigachat.client_id_hint": "01234567-89ab-cdef-0123-456789abcdef",
     "provider.gigachat.client_secret": "Client Secret",
-    "provider.gigachat.client_secret_hint": "same page, shown once when you create the project",
-    "provider.gigachat.ca": "Russian root certificate (.pem)",
+    "provider.gigachat.client_secret_hint": "shown once when the project is created",
+    "provider.gigachat.ca": "Your own root certificate",
     "provider.mymemory.note": "Free, no account needed. Quality is below the others, so it is used as a fallback.",
     "provider.mymemory.email": "Email (optional)",
     "provider.deepl.note": "Free tier: 500K characters a month. Sign-up asks for a card to verify identity and never charges it.",
@@ -110,10 +110,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.guide": "Step-by-step guide",
     "provider.get_key": "Get key",
-    "provider.gigachat.ca_hint": "path to russian_trusted_root_ca.pem — only needed if TLS fails",
-    "provider.mymemory.email_hint": "raises the daily allowance from 5,000 to 50,000 words",
+    "provider.gigachat.ca_hint": "usually not needed",
+    "provider.mymemory.email_hint": "raises the daily allowance to 50,000 words",
     "provider.microsoft.portal": "Azure portal",
-    "provider.microsoft.region_hint": "e.g. germanywestcentral, eastus, westeurope",
+    "provider.microsoft.region_hint": "e.g. westeurope",
 
     # ── wizard ──────────────────────────────────────────────────────
     "wizard.api.explain": "These keys are only for full-sentence translation — the in-game dictionary already works for free without any of them. Fill in whichever provider you have; if you have none, continue and set one up later from Settings.",
@@ -258,4 +258,10 @@ STRINGS: dict[str, str] = {
 
     # ── overlay ─────────────────────────────────────────────────────
     "overlay.session_start": "new session",
+    # ── error ────────────────────────────────────────────────────
+    "error.cert_not_root": "That is an intermediate certificate, not a root. The anchor is russian_trusted_root_ca, the self-signed one. Leave the field empty — the root ships with the app.",
+    "error.cert_missing": "No certificate at that path. Leave the field empty — the root it needs ships with the app.",
+    "error.cert_not_pem": "That is not a PEM file. It has to be text beginning with BEGIN CERTIFICATE. Easier to leave the field empty — the root is bundled.",
+    "error.cert_unreadable": "The certificate file cannot be read — check its permissions. Leave the field empty if unsure; the root is bundled.",
+    "error.tls_untrusted": "The connection is not trusted. Usually this means the certificate field points at the wrong file — leave it empty, the root it needs is bundled.",    "settings.api.optional": " — optional",
 }

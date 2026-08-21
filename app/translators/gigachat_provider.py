@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import pathlib
+import sys
 import time
 import uuid
 
@@ -54,6 +56,9 @@ _DOCUMENTED_LIFETIME_SECONDS = 1800
 TLS_UNTRUSTED = "tls_untrusted"
 BAD_RESPONSE = "bad_response"
 CERT_UNREADABLE = "cert_unreadable"
+CERT_MISSING = "cert_missing"
+CERT_NOT_PEM = "cert_not_pem"
+CERT_NOT_ROOT = "cert_not_root"
 
 _SYSTEM_PROMPT = (
     "You translate World of Warcraft chat messages into {target}. "
@@ -150,6 +155,91 @@ def split_authorization_key(encoded: str) -> tuple[str, str]:
     return client_id.strip(), client_secret.strip()
 
 
+#: The trust anchor GigaChat is served behind, shipped with the app.
+#:
+#: requests does not read the Windows certificate store — it uses the roots
+#: certifi ships, and the Russian Trusted Root CA is not among them and will not
+#: be. So on a machine where every browser reaches this host without complaint,
+#: Python cannot, and the provider that exists because it works from Russia
+#: without a VPN could not connect at all.
+#:
+#: Asking each user to fetch it did not work either: the first search result is
+#: the Sub CA, an intermediate rather than an anchor, which fails identically to
+#: supplying nothing. See assets/certs/README.md.
+_BUNDLED_ROOT = "russian_trusted_root_ca.pem"
+
+
+def bundled_root_certificate() -> str:
+    """Absolute path to the shipped root, or "" if it is not on disk.
+
+    Returning "" rather than raising is deliberate: a missing certificate should
+    degrade to the stock trust store and a clear connection error, not stop the
+    app from starting.
+    """
+    here = pathlib.Path(__file__).resolve().parent
+    roots = [
+        # PyInstaller unpacks bundled data next to the frozen executable.
+        pathlib.Path(getattr(sys, "_MEIPASS", "")) / "assets" / "certs" / _BUNDLED_ROOT,
+        here.parent.parent / "assets" / "certs" / _BUNDLED_ROOT,
+    ]
+    for path in roots:
+        if path.is_file():
+            return str(path)
+    return ""
+
+
+def describe_certificate(path: str) -> str:
+    """Why this file cannot serve as a trust anchor, or "" if it can.
+
+    Checked before the request rather than after, because the answer afterwards
+    is the same opaque handshake failure whether the file is an intermediate,
+    the wrong format, or absent — and "tls_untrusted" told the one user who hit
+    this nothing at all. They had downloaded russian_trusted_sub_ca.cer, which
+    is exactly the reasonable mistake.
+    """
+    if not path:
+        return ""
+    certificate = pathlib.Path(path)
+    if not certificate.is_file():
+        return CERT_MISSING
+    try:
+        text = certificate.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return CERT_UNREADABLE
+    if "BEGIN CERTIFICATE" not in text:
+        return CERT_NOT_PEM
+    if not _contains_a_root(text):
+        return CERT_NOT_ROOT
+    return ""
+
+
+def _contains_a_root(pem: str) -> bool:
+    """True if any certificate in the file is self-signed.
+
+    A trust anchor is self-signed by definition. An intermediate is not, and is
+    the file people actually download.
+    """
+    try:
+        from cryptography import x509
+    except ImportError:  # pragma: no cover - cryptography ships with requests' deps
+        # Cannot tell, so do not claim to: let the handshake answer.
+        return True
+
+    blocks = pem.split("-----END CERTIFICATE-----")
+    for block in blocks:
+        marker = block.find("-----BEGIN CERTIFICATE-----")
+        if marker == -1:
+            continue
+        single = block[marker:] + "-----END CERTIFICATE-----" + chr(10)
+        try:
+            certificate = x509.load_pem_x509_certificate(single.encode())
+        except Exception:
+            continue
+        if certificate.subject == certificate.issuer:
+            return True
+    return False
+
+
 class GigaChatBackend:
     """Chat-completions translation with a cached OAuth token."""
 
@@ -167,11 +257,10 @@ class GigaChatBackend:
         self._retry = retry or RetryPolicy(attempts=2)
 
         self._session = requests.Session()
-        if ca_bundle:
-            # Scoped to this session on purpose: DeepL and Microsoft keep the
-            # stock trust store, and the process-wide REQUESTS_CA_BUNDLE is
-            # never touched.
-            self._session.verify = ca_bundle
+        # Scoped to this session on purpose: DeepL, Microsoft and MyMemory keep
+        # the stock trust store, and the process-wide REQUESTS_CA_BUNDLE is
+        # never touched.
+        self._session.verify = ca_bundle or bundled_root_certificate() or True
 
         # In memory only. The access token is short-lived and must never reach
         # config.json, where the long-lived authorization key already lives.
@@ -357,6 +446,12 @@ def _build(settings: dict[str, str]) -> GigaChatBackend:
 def _validate(settings: dict[str, str]) -> tuple[bool, str]:
     if not authorization_key(settings):
         return False, FAILURE.NO_KEY
+    # Before the request: a handshake failure looks the same whether the file is
+    # an intermediate, the wrong format or missing, and reporting all three as
+    # "tls_untrusted" leaves the user guessing at the one thing they can fix.
+    problem = describe_certificate(settings.get("ca_bundle", "").strip())
+    if problem:
+        return False, problem
     try:
         return _build(settings).validate()
     except Exception as e:

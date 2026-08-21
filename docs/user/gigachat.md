@@ -79,12 +79,24 @@ instead of `GIGACHAT_API_PERS`. Check the scope on the project page.
 
 ### A certificate or TLS error
 
-GigaChat is served behind the **Russian Trusted Root CA**. Windows usually has
-it already; if not, download `russian_trusted_root_ca.pem` from
-[gosuslugi.ru](https://www.gosuslugi.ru/crt) and put the path to it in the
-**Root certificate** field under the key fields.
+**Most likely there is nothing to do** — the root certificate this needs ships
+inside the app, and the "Your own root certificate" field can stay empty.
 
-That field is only for this case. If TLS works, leave it empty.
+If you do see a certificate error, here is what is going on.
+
+GigaChat is served behind the **Russian Trusted Root CA**, and Python does not
+use the Windows certificate store — it uses the roots `certifi` bundles, which
+do not include that one and will not. So a browser on the same machine reaches
+GigaChat happily while the app cannot. We ship the certificate so you never have
+to go looking for it.
+
+**The common mistake when looking manually:** the first search result is
+`russian_trusted_sub_ca`, which is an *intermediate* certificate, not a root. It
+does not work — a trust anchor has to be self-signed. If you point at it, the
+app now says so in as many words.
+
+If you genuinely need your own (a corporate proxy, say), take the **root** PEM
+from <https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt>
 
 ### Out of allowance
 

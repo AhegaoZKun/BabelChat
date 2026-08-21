@@ -78,7 +78,7 @@ def _create_dialog_icon() -> QIcon:
 _SETTINGS_DIALOG_POS_FILE = "settings_dialog_pos.json"
 from app.languages import LANGUAGES  # noqa: E402  (re-export for the wizard)
 from app.qt_theme import WOW_THEME_STYLESHEET  # noqa: E402  (re-export for the wizard)
-from app.qt_widgets import scrollable  # noqa: E402
+from app.qt_widgets import scrollable, size_to_content  # noqa: E402
 
 
 class SettingsDialog(QDialog):
@@ -130,6 +130,7 @@ class SettingsDialog(QDialog):
         cancel_btn.setText(tr("wizard.cancel"))
 
         layout.addWidget(buttons)
+        size_to_content(self)
 
     # ── General Tab ──────────────────────────────────────────────
 

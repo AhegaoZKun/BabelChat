@@ -31,3 +31,56 @@ def scrollable(content: QWidget) -> QScrollArea:
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     return area
+
+
+def content_width(container: QWidget) -> int:
+    """How wide the parts that cannot wrap need this container to be.
+
+    A word-wrapped QLabel reports the width it would take on ONE line, so a
+    paragraph of explanation claims twelve hundred pixels and would drag the
+    window past the edge of the screen. Wrapping is exactly what those labels
+    are for, so they are not what the width should be decided by. Rows of
+    inputs and buttons are.
+    """
+    from PyQt6.QtWidgets import QLabel
+
+    widest = 0
+    for child in container.findChildren(QWidget):
+        # Containers inherit the inflated hint from the wrapped labels inside
+        # them, so asking a group box is asking the paragraph again.
+        if child.findChildren(QWidget):
+            continue
+        if isinstance(child, QLabel) and child.wordWrap():
+            continue
+        widest = max(widest, child.sizeHint().width())
+    return widest
+
+
+def size_to_content(window: QWidget, *, margin: int = 96) -> None:
+    """Open the window wide enough for what is inside it.
+
+    A scroll area reports a small size hint whatever it holds, and horizontal
+    scrolling is off on purpose — so a window sized from its own hint opened
+    narrower than its rows and clipped their right-hand side, with nothing to
+    scroll.
+
+    Never larger than the screen it will appear on: a window that opens past
+    the edge is the same problem with the other sign.
+    """
+    from PyQt6.QtWidgets import QApplication, QScrollArea
+
+    widest = window.sizeHint().width()
+    for area in window.findChildren(QScrollArea):
+        content = area.widget()
+        if content is not None:
+            widest = max(widest, content_width(content) + margin)
+
+    screen = QApplication.primaryScreen()
+    available = screen.availableGeometry() if screen is not None else None
+    if available is not None:
+        widest = min(widest, int(available.width() * 0.9))
+        height = min(max(window.height(), window.sizeHint().height()), int(available.height() * 0.9))
+    else:
+        height = max(window.height(), window.sizeHint().height())
+
+    window.resize(max(widest, window.width()), height)

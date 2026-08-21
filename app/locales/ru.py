@@ -90,10 +90,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.gigachat.note": "Бесплатно для физлиц: 1 млн токенов в год, без карты — достаточно Сбер ID, работает из России без VPN.",
     "provider.gigachat.client_id": "Client ID",
-    "provider.gigachat.client_id_hint": "из Studio Sber — длинная строка с дефисами",
+    "provider.gigachat.client_id_hint": "01234567-89ab-cdef-0123-456789abcdef",
     "provider.gigachat.client_secret": "Client Secret",
-    "provider.gigachat.client_secret_hint": "там же, показывается один раз при создании",
-    "provider.gigachat.ca": "Корневой сертификат НУЦ Минцифры (.pem)",
+    "provider.gigachat.client_secret_hint": "показывается один раз при создании",
+    "provider.gigachat.ca": "Свой корневой сертификат",
     "provider.mymemory.note": "Бесплатно, аккаунт не нужен. Качество ниже остальных, поэтому используется как запасной.",
     "provider.mymemory.email": "E-mail (необязательно)",
     "provider.deepl.note": "Бесплатный тариф: 500 тыс. символов в месяц. При регистрации просят карту для подтверждения личности, деньги не списывают.",
@@ -111,10 +111,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.guide": "Пошаговая инструкция",
     "provider.get_key": "Получить ключ",
-    "provider.gigachat.ca_hint": "путь к russian_trusted_root_ca.pem — нужен, только если TLS не проходит",
-    "provider.mymemory.email_hint": "поднимает дневной лимит с 5 000 до 50 000 слов",
+    "provider.gigachat.ca_hint": "обычно не нужен",
+    "provider.mymemory.email_hint": "поднимает лимит до 50 000 слов в день",
     "provider.microsoft.portal": "Портал Azure",
-    "provider.microsoft.region_hint": "например germanywestcentral, eastus, westeurope",
+    "provider.microsoft.region_hint": "например westeurope",
 
     # ── wizard ──────────────────────────────────────────────────────
     "wizard.api.explain": "Ключи нужны только для перевода целыми предложениями — встроенный словарь работает бесплатно и без них. Заполните того провайдера, который у вас есть; если ни одного нет, продолжайте и настройте позже в настройках.",
@@ -259,4 +259,10 @@ STRINGS: dict[str, str] = {
 
     # ── overlay ─────────────────────────────────────────────────────
     "overlay.session_start": "новая сессия",
+    # ── error ────────────────────────────────────────────────────
+    "error.cert_not_root": "Это промежуточный сертификат, а не корневой. Нужен russian_trusted_root_ca — тот, что подписан сам собой. Оставьте поле пустым: корневой уже встроен в приложение.",
+    "error.cert_missing": "Файл сертификата не найден по указанному пути. Оставьте поле пустым — нужный корневой сертификат уже встроен в приложение.",
+    "error.cert_not_pem": "Это не PEM-файл. Нужен текстовый .pem, начинающийся с BEGIN CERTIFICATE. Проще оставить поле пустым — корневой сертификат встроен.",
+    "error.cert_unreadable": "Файл сертификата не читается — проверьте права доступа. Оставьте поле пустым, если не уверены: корневой сертификат встроен.",
+    "error.tls_untrusted": "Соединение не доверено. Обычно это значит, что в поле сертификата указан не тот файл — оставьте его пустым, нужный корневой уже встроен.",    "settings.api.optional": " — необязательно",
 }

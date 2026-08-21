@@ -8,6 +8,9 @@ a = Analysis(
     datas=[
         ("assets/icon.ico", "assets"),
         ("assets/icon.png", "assets"),
+        # GigaChat is served behind a root certifi does not carry, so
+        # without this the default provider cannot connect at all.
+        ("assets/certs", "assets/certs"),
         ("addon/BabelChat", "addon/BabelChat"),
     ],
     hiddenimports=[

@@ -267,12 +267,21 @@ def test_a_supplied_root_certificate_applies_to_this_session_only():
     Asserting `requests.Session().verify is True` was a property of the requests
     library, not of BabelChat. A second BabelChat backend is the comparison that
     means something."""
+    import requests
+
+    from app.translators.gigachat_provider import bundled_root_certificate
+
     with_bundle = GigaChatBackend("key", ca_bundle="/etc/ssl/russian_root.pem")
     without_bundle = GigaChatBackend("key")
 
     assert with_bundle._session.verify == "/etc/ssl/russian_root.pem"
-    assert without_bundle._session.verify is True, "the bundle leaked into another provider's session"
+    # An unconfigured backend now falls back to the root shipped with the app —
+    # requests does not read the Windows certificate store, so without it this
+    # provider cannot connect at all.
+    assert without_bundle._session.verify == bundled_root_certificate()
     assert with_bundle._session is not without_bundle._session
+    # And none of it reaches anyone else's session.
+    assert requests.Session().verify is True, "trust was widened process-wide"
 
 
 def test_an_unreadable_certificate_path_does_not_escape_the_provider():

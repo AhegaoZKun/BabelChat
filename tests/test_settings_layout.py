@@ -69,9 +69,7 @@ def test_every_tab_scrolls(dialog):
     assert tabs is not None
 
     not_scrolling = [
-        tabs.tabText(index)
-        for index in range(tabs.count())
-        if not isinstance(tabs.widget(index), QScrollArea)
+        tabs.tabText(index) for index in range(tabs.count()) if not isinstance(tabs.widget(index), QScrollArea)
     ]
 
     assert not_scrolling == [], f"these tabs cannot scroll: {not_scrolling}"
@@ -176,9 +174,7 @@ def test_every_wizard_page_scrolls(wizard):
     from PyQt6.QtWidgets import QScrollArea
 
     not_scrolling = [
-        index
-        for index in range(wizard._stack.count())
-        if not isinstance(wizard._stack.widget(index), QScrollArea)
+        index for index in range(wizard._stack.count()) if not isinstance(wizard._stack.widget(index), QScrollArea)
     ]
 
     assert not_scrolling == [], f"pages that cannot scroll: {not_scrolling}"
@@ -201,3 +197,67 @@ def test_neither_window_demands_more_room_than_a_laptop_has(language, monkeypatc
         window.deleteLater()
         assert minimum.height() <= height, f"{build.__name__} in {language} needs {minimum.height()}px"
         assert minimum.width() <= width, f"{build.__name__} in {language} needs {minimum.width()}px"
+
+
+# ── the window opens wide enough to read ─────────────────────────────────────
+
+
+@pytest.mark.parametrize("build_name", ["SettingsDialog", "SetupWizard"])
+def test_the_window_opens_at_the_width_of_its_content(build_name, monkeypatch):
+    """A scroll area reports a small size hint whatever it holds, and horizontal
+    scrolling is off on purpose — so a window sized from its own hint opened
+    narrower than its rows and clipped their right-hand side with nothing to
+    scroll. The first screenshot of the provider page showed exactly that."""
+    from PyQt6.QtWidgets import QScrollArea
+
+    import app.settings_dialog as settings_module
+    import app.setup_wizard as wizard_module
+
+    monkeypatch.setattr(tr, "_lang", "RU")
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+
+    build = getattr(settings_module, build_name, None) or getattr(wizard_module, build_name)
+    window = build(AppConfig(wow_path=""))
+    try:
+        contents = [area.widget() for area in window.findChildren(QScrollArea) if area.widget() is not None]
+        assert contents, "nothing scrollable to measure"
+        # What the rows need, not what a word-wrapped paragraph claims it needs
+        # on one line — that is twelve hundred pixels, and wrapping is exactly
+        # what those labels are for.
+        from app.qt_widgets import content_width
+
+        widest = max(content_width(content) for content in contents)
+
+        assert window.width() >= widest, f"opens at {window.width()}px against {widest}px of rows"
+    finally:
+        window.deleteLater()
+
+
+def test_every_credential_field_says_what_goes_in_it(dialog):
+    """A placeholder disappears the moment you type, and these fields echo as
+    dots — so a filled-in form gave no way to tell which value went where."""
+    from PyQt6.QtWidgets import QLabel
+
+    captions = {label.text().split(" —")[0] for label in dialog.findChildren(QLabel) if label.text()}
+
+    for field in dialog._provider_group._rows["gigachat"].spec.fields:
+        assert field.label_text() in captions, f"{field.key} has no visible caption"
+
+
+def test_no_button_is_narrower_than_the_glyph_on_it(dialog):
+    """The reveal button was fixed at 30px against a 42px glyph and rendered as
+    an empty box."""
+    from PyQt6.QtWidgets import QPushButton
+
+    dialog.resize(*SMALL_SCREEN)
+    dialog.show()
+    QApplication.processEvents()
+
+    squashed = [
+        (button.text(), button.sizeHint().width(), button.width())
+        for button in dialog.findChildren(QPushButton)
+        if button.isVisible() and button.text() and button.sizeHint().width() > button.width() + 2
+    ]
+
+    assert squashed == [], f"buttons narrower than their own labels: {squashed}"

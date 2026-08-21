@@ -89,10 +89,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.gigachat.note": "Gratis para particulares: 1M de tokens al año, sin tarjeta — basta un Sber ID.",
     "provider.gigachat.client_id": "Client ID",
-    "provider.gigachat.client_id_hint": "de Studio Sber — una cadena larga con guiones",
+    "provider.gigachat.client_id_hint": "01234567-89ab-cdef-0123-456789abcdef",
     "provider.gigachat.client_secret": "Client Secret",
-    "provider.gigachat.client_secret_hint": "misma página, se muestra una sola vez al crear el proyecto",
-    "provider.gigachat.ca": "Certificado raíz ruso (.pem)",
+    "provider.gigachat.client_secret_hint": "se muestra una vez",
+    "provider.gigachat.ca": "Certificado raíz propio",
     "provider.mymemory.note": "Gratis, sin cuenta. La calidad es menor, así que se usa como reserva.",
     "provider.mymemory.email": "Correo electrónico (opcional)",
     "provider.deepl.note": "Plan gratuito: 500K caracteres al mes. El registro pide una tarjeta solo para verificar la identidad.",
@@ -110,10 +110,10 @@ STRINGS: dict[str, str] = {
     # ── provider ────────────────────────────────────────────────────
     "provider.guide": "Guía paso a paso",
     "provider.get_key": "Obtener clave",
-    "provider.gigachat.ca_hint": "ruta a russian_trusted_root_ca.pem — solo si falla el TLS",
-    "provider.mymemory.email_hint": "sube el límite diario de 5.000 a 50.000 palabras",
+    "provider.gigachat.ca_hint": "normalmente no hace falta",
+    "provider.mymemory.email_hint": "sube el límite a 50.000 palabras",
     "provider.microsoft.portal": "Portal de Azure",
-    "provider.microsoft.region_hint": "p. ej. germanywestcentral, eastus, westeurope",
+    "provider.microsoft.region_hint": "p. ej. westeurope",
 
     # ── wizard ──────────────────────────────────────────────────────
     "wizard.api.explain": "Estas claves solo sirven para traducir frases completas — el diccionario integrado ya funciona gratis sin ninguna. Rellena el proveedor que tengas; si no tienes ninguno, continúa y configúralo luego.",
@@ -258,4 +258,10 @@ STRINGS: dict[str, str] = {
 
     # ── overlay ─────────────────────────────────────────────────────
     "overlay.session_start": "nueva sesión",
+    # ── error ────────────────────────────────────────────────────
+    "error.cert_not_root": "Es un certificado intermedio, no una raíz. Hace falta russian_trusted_root_ca, el autofirmado. Deja el campo vacío: la raíz viene con la app.",
+    "error.cert_missing": "No hay certificado en esa ruta. Deja el campo vacío: la raíz necesaria viene con la app.",
+    "error.cert_not_pem": "No es un archivo PEM. Debe empezar por BEGIN CERTIFICATE. Más fácil: deja el campo vacío, la raíz viene incluida.",
+    "error.cert_unreadable": "No se puede leer el certificado — revisa los permisos. Déjalo vacío si dudas: la raíz viene incluida.",
+    "error.tls_untrusted": "Conexión no confiable. Suele significar que el campo del certificado apunta al archivo equivocado — déjalo vacío, la raíz viene incluida.",    "settings.api.optional": " — opcional",
 }

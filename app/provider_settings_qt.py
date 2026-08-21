@@ -43,6 +43,7 @@ _STATUS_COLORS = {
 _STATUS_ICONS = {"unconfigured": "•", "valid": "✓", "invalid": "✗", "error": "⚠"}
 
 _HEADER_STYLE = "color: #FFD200; font-weight: bold; font-size: 12px;"
+_FIELD_LABEL_STYLE = "color: #ccc; font-size: 11px; padding: 2px 0 0 2px;"
 _NOTE_STYLE = "color: #888; font-size: 11px;"
 _STATUS_STYLE = "font-weight: bold; font-size: 11px;"
 
@@ -126,8 +127,17 @@ class _ProviderRow:
             layout.addWidget(guide)
 
         for index, field in enumerate(spec.fields):
+            # A visible caption, not only a placeholder. A placeholder vanishes
+            # the moment you type, and these fields are echoed as dots — so a
+            # filled-in form gave no way to tell which value went where, which
+            # is exactly how someone ends up swapping two of them.
+            caption = QLabel(field.label_text() + ("" if field.required else tr("settings.api.optional")))
+            caption.setStyleSheet(_FIELD_LABEL_STYLE)
+            layout.addWidget(caption)
+
             edit = QLineEdit(settings.get(field.key, ""))
             edit.setPlaceholderText(field.placeholder_text() or field.label_text())
+            edit.setToolTip(field.placeholder_text() or field.label_text())
             if field.secret:
                 # A key rendered in the clear ends up in screenshots and support
                 # threads. Visible on demand, hidden by default.
@@ -140,7 +150,9 @@ class _ProviderRow:
             if field.secret:
                 reveal = QPushButton("👁")
                 reveal.setCheckable(True)
-                reveal.setFixedWidth(30)
+                # 30 was narrower than the glyph, so the button rendered
+                # as an empty box on Windows.
+                reveal.setFixedWidth(44)
                 reveal.setToolTip(tr("settings.api.reveal"))
                 reveal.toggled.connect(
                     lambda shown, e=edit: e.setEchoMode(
@@ -251,6 +263,14 @@ class ProviderSettingsGroup(QGroupBox):
             known = {
                 "auth_failed": tr("settings.api.invalid"),
                 "no_key": tr("settings.api.no_key"),
+                # A bare code tells the reader nothing they can act on, and
+                # "tls_untrusted" is the one people actually hit: the obvious
+                # certificate to download is the intermediate, not the root.
+                "cert_not_root": tr("error.cert_not_root"),
+                "cert_missing": tr("error.cert_missing"),
+                "cert_not_pem": tr("error.cert_not_pem"),
+                "cert_unreadable": tr("error.cert_unreadable"),
+                "tls_untrusted": tr("error.tls_untrusted"),
             }
             row.set_status("invalid", known.get(detail, tr("settings.api.error", e=detail)))
             row.usage.hide()

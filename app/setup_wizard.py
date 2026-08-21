@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from app.config import AppConfig, detect_wow_path
 from app.i18n import tr
 from app.provider_settings_qt import ProviderSettingsGroup
-from app.qt_widgets import scrollable
+from app.qt_widgets import scrollable, size_to_content
 from app.settings_dialog import (
     LANGUAGES,
     WOW_THEME_STYLESHEET,
@@ -96,6 +96,7 @@ class SetupWizard(QDialog):
 
         main_layout.addLayout(nav)
         self._update_navigation()
+        size_to_content(self)
 
     # ── Helpers ───────────────────────────────────────────────────
 
