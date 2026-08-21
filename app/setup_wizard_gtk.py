@@ -88,8 +88,15 @@ class _WizardWindow(Gtk.ApplicationWindow):
     def _sync_nav(self) -> None:
         last = self._index == len(self._pages) - 1
         self._back.set_sensitive(self._index > 0)
-        self._next.set_label("Finish" if last else "Next")
-        self._step_lbl.set_markup(f'<span foreground="#888">Step {self._index + 1} of {len(self._pages)}</span>')
+        self._next.set_label(tr("wizard.start") if last else tr("wizard.next"))
+        # Same step names the Qt wizard uses, from the one string that holds
+        # them; the key wants a name as well as the numbers.
+        names = tr("wizard.steps").split("|")
+        name = names[self._index] if self._index < len(names) else ""
+        step = tr("wizard.step_of", current=self._index + 1, total=len(self._pages), name=name)
+        self._step_lbl.set_markup(
+            f'<span foreground="#888">{GLib.markup_escape_text(step)}</span>'
+        )
         if last:
             self._refresh_summary()
 
@@ -132,16 +139,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
 
     def _page_welcome(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.append(self._title("Welcome to BabelChat"))
+        box.append(self._title(tr("wizard.welcome.title")))
         box.append(
-            self._body(
-                "Real-time WoW chat translation overlay.\n\n"
-                "This wizard sets up your translation API, game path, and "
-                "languages. It only takes a minute."
-            )
+            self._body(tr("wizard.welcome.desc"))
+
         )
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        row.append(self._body("Interface language:"))
+        row.append(self._body(tr("wizard.welcome.ui_lang")))
         self._ui_lang = self._dropdown(_UI_LANGS, self._config.ui_language or "EN")
         row.append(self._ui_lang)
         box.append(row)
@@ -149,13 +153,9 @@ class _WizardWindow(Gtk.ApplicationWindow):
 
     def _page_api(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        box.append(self._title("Translation API"))
+        box.append(self._title(tr("wizard.api.title")))
         box.append(
-            self._body(
-                "BabelChat needs a translation API key. DeepL's free tier "
-                "(500k chars/month) is recommended — deepl.com/pro-api. "
-                "Microsoft Translator is supported as well."
-            )
+            self._body(tr("wizard.api.explain"))
         )
 
         def key_row(label: str, value: str, validate_cb, secret: bool = True) -> tuple[Gtk.Entry, Gtk.Button]:
@@ -214,12 +214,9 @@ class _WizardWindow(Gtk.ApplicationWindow):
 
     def _page_wow(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        box.append(self._title("World of Warcraft path"))
+        box.append(self._title(tr("wizard.wow.title")))
         box.append(
-            self._body(
-                "Needed to install the companion addon and find the chat log. "
-                "Auto-detect scans common Steam/Lutris/Wine prefixes."
-            )
+            self._body(tr("wizard.wow.explain"))
         )
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._wow_entry = Gtk.Entry()
@@ -241,21 +238,21 @@ class _WizardWindow(Gtk.ApplicationWindow):
 
     def _page_langs(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        box.append(self._title("Languages"))
-        box.append(self._body("Your language — incoming chat in it is left untranslated."))
+        box.append(self._title(tr("wizard.lang.title")))
+        box.append(self._body(tr("wizard.lang.own")))
         self._own_lang = self._dropdown(_LANGS, self._config.own_language or "EN")
         box.append(self._own_lang)
-        box.append(self._body("Translate incoming chat into:"))
+        box.append(self._body(tr("wizard.lang.target")))
         self._target_lang = self._dropdown(_LANGS, self._config.target_language or "EN")
         box.append(self._target_lang)
         return box
 
     def _page_ready(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.append(self._title("Ready"))
+        box.append(self._title(tr("wizard.ready.title")))
         self._summary = self._body("")
         box.append(self._summary)
-        box.append(self._body("Click Finish to save and start BabelChat."))
+        box.append(self._body(tr("wizard.ready.closing")))
         return box
 
     def _entered(self, provider_id: str) -> dict[str, str]:
@@ -282,14 +279,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
             return
         values = self._entered(provider_id)
         if not spec.is_configured(values):
-            name = GLib.markup_escape_text(spec.display_name)
-            self._api_status.set_markup(f'<span foreground="#cc6666">Enter a {name} key first.</span>')
+            self._api_status.set_markup(f'<span foreground="#cc6666">{tr("settings.api.no_key")}</span>')
             return
         self._run_validation(btn, lambda: spec.validate(values), spec.display_name)
 
     def _run_validation(self, btn: Gtk.Button, fn, name: str) -> None:
         btn.set_sensitive(False)
-        self._api_status.set_markup(f'<span foreground="#cccc66">Validating {name} key…</span>')
+        self._api_status.set_markup(f'<span foreground="#cccc66">{tr("wizard.api.validating")}</span>')
 
         def worker() -> None:
             try:
@@ -302,9 +298,12 @@ class _WizardWindow(Gtk.ApplicationWindow):
             btn.set_sensitive(True)
             if valid:
                 extra = f" — {msg}" if msg and msg != "valid" else ""
-                self._api_status.set_markup(f'<span foreground="#66cc66">✓ {name} key valid{extra}</span>')
+                self._api_status.set_markup(
+                    f'<span foreground="#66cc66">✓ {GLib.markup_escape_text(name)}: '
+                    f'{tr("settings.api.valid")}{GLib.markup_escape_text(extra)}</span>'
+                )
             else:
-                nice = {"auth_failed": "invalid key", "no_key": "no key entered"}.get(msg, msg)
+                nice = {"auth_failed": tr("settings.api.invalid"), "no_key": tr("settings.api.no_key")}.get(msg, msg)
                 self._api_status.set_markup(
                     f'<span foreground="#cc6666">✗ {name}: {GLib.markup_escape_text(nice)}</span>'
                 )
@@ -317,14 +316,14 @@ class _WizardWindow(Gtk.ApplicationWindow):
         path = detect_wow_path()
         if path:
             self._wow_entry.set_text(path)
-            self._wow_status.set_markup('<span foreground="#66cc66">✓ Found installation.</span>')
+            self._wow_status.set_markup(f'<span foreground="#66cc66">{tr("wizard.wow.found")}</span>')
         else:
             self._wow_status.set_markup(
-                '<span foreground="#cc6666">Not found — set it manually (can be changed later).</span>'
+                f'<span foreground="#cc6666">{tr("wizard.wow.not_found")}</span>'
             )
 
     def _browse(self, _btn: Gtk.Button) -> None:
-        dialog = Gtk.FileDialog(title="Select World of Warcraft folder")
+        dialog = Gtk.FileDialog(title=tr("wizard.wow.browse_title"))
 
         def picked(dlg: Gtk.FileDialog, res) -> None:
             try:

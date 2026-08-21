@@ -113,15 +113,16 @@ _NOT_LANGUAGE = re.compile(
     r"^(?:"
     r"\s*|[\W\d_]+|"  # punctuation, digits, symbols, icons
     r"(?:\{[^}]*\}|[^A-Za-z]|[A-Za-z]?%)+|"  # f-string composition, not copy
-
     r"https?://\S+|"  # links
     r"[A-Za-z-]+\.(?:py|json|log|pem|ico|png|exe)|"  # filenames
     r"[A-Za-z]:[/\\].*|"  # example paths shown as placeholders
     r"(?:Ctrl|Alt|Shift|Win)[+]\S+|"  # hotkey combinations
+    r"[#][0-9a-fA-F]{3,8}|"  # colour codes
+    r"(?:xx?-)?(?:small|medium|large)|"  # Pango size keywords
+    r"\S*[/]World of Warcraft\S*|"  # the path shown as an example
     r"(?:BTC|TON|USDT(?: TRC20)?)[:]?|"  # currency tickers on the About tab
     r"GitHub[:] \S+|"  # a repository path
     r"(?:Andrey Yumashev|Pirson|WoW Translator|Buy Me a Coffee[^|]*)|"  # names and projects
-
     r"[A-Za-z0-9_+/=:-]{20,}|"  # opaque tokens: wallet addresses, key examples
     r"(?:DeepL|GigaChat|MyMemory|Microsoft Translator|BabelChat|WoW|Azure|Sber)"
     r"(?: [0-9]+(?:[.][0-9]+)*)?"  # ...optionally with a version number
@@ -133,10 +134,16 @@ _NOT_LANGUAGE = re.compile(
 # without it the key itself reads as hardcoded copy.
 _WIDGET_TEXT = re.compile(
     r"(?:QCheckBox|QLabel|QPushButton|QGroupBox"
-    r"|Gtk\.CheckButton|Gtk\.Label|Gtk\.Button|Gtk\.Expander"
+    r"|Gtk\.CheckButton|Gtk\.Label|Gtk\.Button|Gtk\.Expander|Gtk\.FileDialog"
     r"|setText|setToolTip|setPlaceholderText|addItem"
-    r"|set_title|_section|_combo_row|_color_row|_scale_row|key_row)"
-    r"\((?:[^()\"]{0,40})(?<!tr\()\"([^\"]{4,})\""
+    # The GTK wizard builds every string through these, and leaving them out is
+    # why it stayed entirely in English while the test was green.
+    r"|set_label|set_markup|set_placeholder_text"
+    r"|set_title|_section|_combo_row|_color_row|_scale_row|key_row|_title|_body)"
+    # Either quote. The GTK modules use single quotes for anything containing
+    # Pango markup, which is most of their status messages — reading only
+    # double-quoted literals left every one of them invisible.
+    r"\((?:[^()]{0,40}?)(?<!tr\()(['\"])((?:(?!\1).){4,}?)\1"
 )
 
 
@@ -150,6 +157,9 @@ def _only_the_words(text: str) -> str:
     """
     without_fields = re.sub(r"\{[^{}]*\}", " ", text)
     without_markup = re.sub(r"<[^>]*>", " ", without_fields)
+    # A literal split across source lines can end mid-tag; what is left is
+    # an attribute list, not a sentence.
+    without_markup = re.sub(r"<[^>]*$", " ", without_markup)
     return without_markup.strip()
 
 
@@ -163,9 +173,7 @@ def test_no_user_facing_string_is_written_straight_into_a_widget(module):
     below walks the built interface, which is what actually reaches the user.
     """
     hardcoded = [
-        text
-        for text in _WIDGET_TEXT.findall(source(module))
-        if not _NOT_LANGUAGE.match(_only_the_words(text))
+        text for _quote, text in _WIDGET_TEXT.findall(source(module)) if not _NOT_LANGUAGE.match(_only_the_words(text))
     ]
     assert hardcoded == [], f"{module} writes these past i18n: {hardcoded}"
 
@@ -265,12 +273,7 @@ def test_the_built_russian_interface_says_nothing_in_english(dialog_name, monkey
 
     vocabulary = _russian_vocabulary()
     english = sorted(
-        {
-            phrase
-            for text in _visible_texts(widget)
-            for phrase in _phrases(text)
-            if _is_untranslated(phrase, vocabulary)
-        }
+        {phrase for text in _visible_texts(widget) for phrase in _phrases(text) if _is_untranslated(phrase, vocabulary)}
     )
     widget.deleteLater()
 
@@ -311,3 +314,59 @@ def test_provider_notes_and_labels_go_through_the_table():
 def _is_translated_value(text: str) -> bool:
     """True if the text is a rendered value of some key in the table."""
     return any(text in values.values() for values in _STRINGS.values())
+
+
+# ── the language has to be applied, not just chosen ──────────────────────────
+
+
+@pytest.mark.parametrize("entry_point", ["app/main.py", "app/main_gtk.py"])
+def test_every_entry_point_applies_the_configured_ui_language(entry_point):
+    """The Qt entry point had always done this and the GTK one never did, so
+    every Linux user got the default interface language whatever they picked —
+    and the default is Russian. Nothing failed; the setting simply had no
+    effect, which is the hardest kind of bug to report.
+
+    `gi` is not installed on Windows or on CI, so `main_gtk` cannot be imported
+    here. The call is asserted in the source instead — a weaker check than
+    running it, and the reason it is written down.
+    """
+    text = (APP.parent / entry_point).read_text(encoding="utf-8")
+
+    calls = [line.strip() for line in text.splitlines() if "tr.set_language(" in line]
+
+    assert calls, f"{entry_point} never applies the configured language"
+    assert any("ui_language" in call for call in calls), calls
+
+
+@pytest.mark.parametrize("module", ["app/settings_dialog.py", "app/settings_gtk.py"])
+def test_changing_the_language_in_settings_takes_effect(module):
+    """Saving a language that does not take hold reads as the setting being
+    broken, which is what the GTK dialog did."""
+    text = (APP.parent / module).read_text(encoding="utf-8")
+
+    assert "tr.set_language(" in text, f"{module} saves the language without applying it"
+
+
+def test_only_the_languages_that_exist_are_offered_as_the_interface_language():
+    """Offering eleven when three are translated is a control that silently does
+    nothing: anything outside them falls back to Russian inside `tr`."""
+    from app.i18n import UI_LANGUAGES
+
+    text = (APP / "settings_gtk.py").read_text(encoding="utf-8")
+
+    assert "_UI_LANGS = list(UI_LANGUAGES)" in text, "the GTK dialog keeps its own list"
+    assert set(UI_LANGUAGES) == {"RU", "EN", "ES"}
+
+
+def test_both_frontends_offer_the_same_translation_languages():
+    """The GTK dialog carried eleven bare codes against the Qt dialog's
+    twenty-two names, so a Linux user could not pick most of the languages the
+    app supports."""
+    from app.languages import LANGUAGES as SHARED
+
+    for module in ("settings_dialog.py", "settings_gtk.py"):
+        text = source(module)
+        assert "from app.languages import LANGUAGES" in text, f"{module} does not use the shared list"
+
+    assert len(SHARED) >= 20
+    assert SHARED["RU"] == "Русский", "languages are named in themselves"

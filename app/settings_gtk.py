@@ -17,10 +17,11 @@ from collections.abc import Callable  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, PangoCairo  # noqa: E402
 
 from app.config import CHANNEL_TOGGLES, AppConfig  # noqa: E402
-from app.i18n import tr  # noqa: E402
+from app.i18n import UI_LANGUAGES, tr  # noqa: E402
+from app.languages import LANGUAGES  # noqa: E402
 from app.overlay_theme import (  # noqa: E402
     PRESET_LABELS,
     PRESET_ORDER,
@@ -31,7 +32,14 @@ from app.overlay_theme import (  # noqa: E402
 )
 from app.translators import all_providers  # noqa: E402
 
-_LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
+# Languages messages can be translated into, named in themselves. The Qt
+# dialog has always shown all of them; this list held eleven bare codes.
+_LANGS = list(LANGUAGES)
+
+# Languages the interface itself exists in. Offering more than these was a
+# checkbox that silently did nothing: anything outside RU/EN/ES falls back to
+# Russian in `tr`, so eight of the eleven entries here changed nothing at all.
+_UI_LANGS = list(UI_LANGUAGES)
 
 _DEFAULT_FONT = "System default"
 # Curated overlay-friendly fonts; only the ones actually installed are shown.
@@ -116,7 +124,7 @@ class SettingsWindowGtk:
         root.append(self._section(tr("settings.lang_group")))
         self._own = self._combo_row(root, tr("settings.lang.own"), self._config.own_language)
         self._target = self._combo_row(root, tr("settings.lang.target"), self._config.target_language)
-        self._ui = self._combo_row(root, tr("settings.lang.ui"), self._config.ui_language)
+        self._ui = self._combo_row(root, tr("settings.lang.ui"), self._config.ui_language, options=_UI_LANGS)
 
         # Translation API
         root.append(self._section(tr("settings.api_group")))
@@ -392,6 +400,10 @@ class SettingsWindowGtk:
         c.own_language = self._dd_value(self._own)
         c.target_language = self._dd_value(self._target)
         c.ui_language = self._dd_value(self._ui)
+        # Applied immediately, the way the Qt dialog does it: a language you
+        # picked and saved that does not take hold reads as the setting being
+        # broken.
+        tr.set_language(c.ui_language)
         c.translator_priority = self._dd_value(self._priority)
         providers: dict[str, dict[str, str]] = {}
         for spec in all_providers():
@@ -421,9 +433,10 @@ class SettingsWindowGtk:
 
         try:
             c.save()
-            self._status.set_markup('<span foreground="#33aa33">Saved.</span>')
+            self._status.set_markup(f'<span foreground="#33aa33">{tr("settings.saved")}</span>')
         except Exception as exc:  # noqa: BLE001
-            self._status.set_markup(f'<span foreground="#cc3333">Save failed: {exc}</span>')
+            message = GLib.markup_escape_text(tr("settings.save_failed", detail=exc))
+            self._status.set_markup(f'<span foreground="#cc3333">{message}</span>')
             return
 
         if self._on_saved is not None:

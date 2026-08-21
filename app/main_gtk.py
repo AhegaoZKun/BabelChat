@@ -21,6 +21,7 @@ from lingua import Language
 
 from app import debug_log
 from app.config import CONFIG_FILE, AppConfig, enabled_channels, resolve_chatlog_path
+from app.i18n import tr
 from app.overlay_gtk import ChatOverlayGtk
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_gtk import SettingsWindowGtk
@@ -70,6 +71,11 @@ def main() -> int:
     config = AppConfig.load()
     # Off unless asked for: it records every chat line in full.
     debug_log.configure(config.debug_capture_trace)
+
+    # The Qt entry point has always done this and the GTK one never did, so
+    # every Linux user got the default interface language regardless of what
+    # they picked in Settings — and the default is Russian.
+    tr.set_language(config.ui_language)
 
     # First run: no config file yet, or no translation API configured →
     # run the setup wizard (its own blocking GTK loop) before normal startup.

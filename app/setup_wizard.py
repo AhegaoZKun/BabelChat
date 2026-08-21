@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 from app.config import AppConfig, detect_wow_path
 from app.i18n import tr
 from app.provider_settings_qt import ProviderSettingsGroup
+from app.qt_widgets import scrollable
 from app.settings_dialog import (
     LANGUAGES,
     WOW_THEME_STYLESHEET,
@@ -50,6 +51,7 @@ class SetupWizard(QDialog):
         self._config = config
         self.setWindowTitle(tr("wizard.title"))
         self.setWindowIcon(_create_dialog_icon())
+        # Small enough for any screen; the pages scroll.
         self.setMinimumSize(550, 480)
         self.setStyleSheet(WOW_THEME_STYLESHEET)
 
@@ -61,11 +63,17 @@ class SetupWizard(QDialog):
 
         # Stacked pages
         self._stack = QStackedWidget()
-        self._stack.addWidget(self._create_welcome_page())
-        self._stack.addWidget(self._create_api_key_page())
-        self._stack.addWidget(self._create_wow_path_page())
-        self._stack.addWidget(self._create_language_page())
-        self._stack.addWidget(self._create_ready_page())
+        # Every page behind a scroll area. The provider page alone needs more
+        # height than a laptop screen once there are four services to fill in,
+        # and a stack page that cannot scroll gets squeezed instead: the
+        # credential fields rendered at 6px against a 32px minimum and the
+        # Validate buttons came out as blank slivers. On step 2 of 5, on every
+        # fresh install.
+        self._stack.addWidget(scrollable(self._create_welcome_page()))
+        self._stack.addWidget(scrollable(self._create_api_key_page()))
+        self._stack.addWidget(scrollable(self._create_wow_path_page()))
+        self._stack.addWidget(scrollable(self._create_language_page()))
+        self._stack.addWidget(scrollable(self._create_ready_page()))
         main_layout.addWidget(self._stack, stretch=1)
 
         # Navigation

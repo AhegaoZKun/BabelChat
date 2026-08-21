@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -33,59 +32,12 @@ from PyQt6.QtWidgets import (
 from app import debug_log
 from app.about_tab_qt import build_about_tab
 from app.config import CHANNEL_TOGGLES, AppConfig, detect_wow_path
-from app.i18n import UI_LANGUAGES, tr
-from app.provider_settings_qt import ProviderSettingsGroup
 
 # DeepL supported target languages
-# Every language named in itself, which is what a language picker does: it
-# needs no translation per interface language, and a speaker recognises their
-# own language faster than a translation of its name. These were English names
-# on an otherwise Russian screen — "Ваш язык: Russian".
-LANGUAGES = {
-    "EN": "English",
-    "RU": "Русский",
-    "DE": "Deutsch",
-    "FR": "Français",
-    "ES": "Español",
-    "IT": "Italiano",
-    "PT": "Português",
-    "PL": "Polski",
-    "NL": "Nederlands",
-    "SV": "Svenska",
-    "DA": "Dansk",
-    "FI": "Suomi",
-    "CS": "Čeština",
-    "RO": "Română",
-    "HU": "Magyar",
-    "BG": "Български",
-    "EL": "Ελληνικά",
-    "TR": "Türkçe",
-    "UK": "Українська",
-    "JA": "日本語",
-    "KO": "한국어",
-    "ZH": "中文",
-}
-
-
 # WoW-inspired dark theme stylesheet
 from app.hotkey_edit import HotkeyEdit  # noqa: E402  (re-export)
-
-
-def _scrollable(content: QWidget) -> QScrollArea:
-    """Put a tab behind a vertical scroll bar.
-
-    Without one the dialog could not be made shorter than the tallest tab —
-    1020px once there were four providers to configure — so on any screen under
-    about 1100px the Save button sat below the bottom edge with no way to reach
-    it. It also meant the layout took the shortfall out of whatever would give,
-    which is how the quota caption ended up 9px tall with 11px text in it.
-    """
-    area = QScrollArea()
-    area.setWidget(content)
-    area.setWidgetResizable(True)
-    area.setFrameShape(QScrollArea.Shape.NoFrame)
-    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    return area
+from app.i18n import UI_LANGUAGES, tr
+from app.provider_settings_qt import ProviderSettingsGroup
 
 
 def _create_dialog_icon() -> QIcon:
@@ -124,7 +76,9 @@ def _create_dialog_icon() -> QIcon:
 
 
 _SETTINGS_DIALOG_POS_FILE = "settings_dialog_pos.json"
+from app.languages import LANGUAGES  # noqa: E402  (re-export for the wizard)
 from app.qt_theme import WOW_THEME_STYLESHEET  # noqa: E402  (re-export for the wizard)
+from app.qt_widgets import scrollable  # noqa: E402
 
 
 class SettingsDialog(QDialog):
@@ -151,10 +105,10 @@ class SettingsDialog(QDialog):
 
         # Tab widget
         tabs = QTabWidget()
-        tabs.addTab(_scrollable(self._create_general_tab()), tr("settings.tab.general"))
-        tabs.addTab(_scrollable(self._create_overlay_tab()), tr("settings.tab.overlay"))
-        tabs.addTab(_scrollable(self._create_hotkeys_tab()), tr("settings.tab.hotkeys"))
-        tabs.addTab(_scrollable(self._create_about_tab()), tr("settings.tab.about"))
+        tabs.addTab(scrollable(self._create_general_tab()), tr("settings.tab.general"))
+        tabs.addTab(scrollable(self._create_overlay_tab()), tr("settings.tab.overlay"))
+        tabs.addTab(scrollable(self._create_hotkeys_tab()), tr("settings.tab.hotkeys"))
+        tabs.addTab(scrollable(self._create_about_tab()), tr("settings.tab.about"))
         layout.addWidget(tabs)
 
         # Buttons

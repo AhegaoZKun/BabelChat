@@ -120,3 +120,84 @@ def test_a_provider_without_a_quota_shows_no_bar(dialog):
 
     assert usage.show_detail("valid — 5,000 words a day") is False
     assert usage.isHidden()
+
+
+# ── the wizard, which every fresh install goes through ───────────────────────
+
+
+@pytest.fixture
+def wizard(monkeypatch):
+    from app.setup_wizard import SetupWizard
+
+    monkeypatch.setattr(tr, "_lang", "RU")
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+
+    widget = SetupWizard(AppConfig(wow_path=""))
+    yield widget
+    widget.deleteLater()
+
+
+def test_the_wizard_fits_the_screen_it_declares_it_fits(wizard):
+    """It declared a 550x480 minimum while its layout demanded 1241x767 in
+    Russian. A Qt layout short of vertical space does not clip, it squeezes —
+    so the declared minimum was not a size the window worked at, it was a size
+    the window was broken at."""
+    minimum = wizard.minimumSizeHint()
+    declared = wizard.minimumSize()
+
+    assert minimum.height() <= max(declared.height(), 1), (
+        f"the layout needs {minimum.height()}px but the window says it works at {declared.height()}px"
+    )
+    assert minimum.width() <= max(declared.width(), 1)
+
+
+def test_every_credential_field_on_the_provider_page_is_usable(wizard):
+    """This is step two of five on every fresh install. The fields rendered at
+    6-14px against a 32px minimum, and the Validate buttons came out as blank
+    slivers."""
+    from PyQt6.QtWidgets import QLineEdit
+
+    wizard.resize(560, 500)
+    wizard.show()
+    QApplication.processEvents()
+    wizard._stack.setCurrentIndex(1)
+    QApplication.processEvents()
+
+    fields = [edit for edit in wizard.findChildren(QLineEdit) if edit.isVisible()]
+
+    assert fields, "the provider page shows no credential fields at all"
+    too_short = [(f.placeholderText()[:30], f.height()) for f in fields if f.height() < 24]
+    assert too_short == [], f"unusable input boxes: {too_short}"
+
+
+def test_every_wizard_page_scrolls(wizard):
+    """A page that cannot scroll is a page whose contents get squeezed."""
+    from PyQt6.QtWidgets import QScrollArea
+
+    not_scrolling = [
+        index
+        for index in range(wizard._stack.count())
+        if not isinstance(wizard._stack.widget(index), QScrollArea)
+    ]
+
+    assert not_scrolling == [], f"pages that cannot scroll: {not_scrolling}"
+
+
+@pytest.mark.parametrize("language", ["RU", "EN", "ES"])
+def test_neither_window_demands_more_room_than_a_laptop_has(language, monkeypatch):
+    """Checked in every language, because the longest translation decides."""
+    from app.settings_dialog import SettingsDialog
+    from app.setup_wizard import SetupWizard
+
+    monkeypatch.setattr(tr, "_lang", language)
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+
+    width, height = SMALL_SCREEN
+    for build in (SettingsDialog, SetupWizard):
+        window = build(AppConfig(wow_path=""))
+        minimum = window.minimumSizeHint()
+        window.deleteLater()
+        assert minimum.height() <= height, f"{build.__name__} in {language} needs {minimum.height()}px"
+        assert minimum.width() <= width, f"{build.__name__} in {language} needs {minimum.width()}px"

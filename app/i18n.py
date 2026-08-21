@@ -804,6 +804,16 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 
     # Overlay tab
+    "settings.saved": {
+        "RU": "Сохранено.",
+        "EN": "Saved.",
+        "ES": "Guardado.",
+    },
+    "settings.save_failed": {
+        "RU": "Не удалось сохранить: {detail}",
+        "EN": "Could not save: {detail}",
+        "ES": "No se pudo guardar: {detail}",
+    },
     "settings.close": {
         "RU": "Закрыть",
         "EN": "Close",
