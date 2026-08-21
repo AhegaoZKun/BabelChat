@@ -264,4 +264,7 @@ STRINGS: dict[str, str] = {
     "error.cert_not_pem": "No es un archivo PEM. Debe empezar por BEGIN CERTIFICATE. Más fácil: deja el campo vacío, la raíz viene incluida.",
     "error.cert_unreadable": "No se puede leer el certificado — revisa los permisos. Déjalo vacío si dudas: la raíz viene incluida.",
     "error.tls_untrusted": "Conexión no confiable. Suele significar que el campo del certificado apunta al archivo equivocado — déjalo vacío, la raíz viene incluida.",    "settings.api.optional": " — opcional",
+    "error.credential_shape": "El servidor no pudo leer las credenciales. Normalmente significa que la clave de autorización completa — la cadena larga que termina en == — se pegó en el campo Client Secret. Hacen falta los dos valores por separado: Client ID y Client Secret, ambos con la forma 01234567-89ab-cdef-0123-456789abcdef.",
+    "error.scope_rejected": "La clave funciona, pero el proyecto está en el plan equivocado: la aplicación pide acceso para particulares (GIGACHAT_API_PERS) y este proyecto no lo tiene. Cree un proyecto GigaChat API con acceso para particulares.",
+    "error.credential_missing": "Rellene ambos campos: Client ID y Client Secret. Los dos aparecen en la página del proyecto en Sber Studio.",
 }

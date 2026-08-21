@@ -163,10 +163,22 @@ def test_the_guide_exists_in_both_languages_and_the_link_points_at_it():
 
 def test_the_guide_does_not_tell_the_user_to_find_the_base64_key():
     """It is the field that was removed, and the portal still shows one — the
-    guide has to say to ignore it, not to copy it."""
+    guide has to say to ignore it, not to copy it.
+
+    The phrasing has since had to grow: the app now accepts the authorization
+    key as well, so "you do not need it" alone is no longer the whole truth.
+    Matching on a sentence was brittle anyway; what matters is that both guides
+    name the thing and say it is not the value to enter."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
+    wordings = ("do not need it", "не нужен", "do not need to enter it", "отдельно вводить его не нужно")
     for name in ("gigachat.md", "gigachat_ru.md"):
         text = (root / "docs" / "user" / name).read_text(encoding="utf-8")
-        assert "do not need it" in text or "не нужен" in text, f"{name} does not warn about the authorization key"
+        lowered = text.lower()
+        assert "authorization key" in lowered or "ключ авторизации" in lowered, (
+            f"{name} never mentions the authorization key the portal shows"
+        )
+        assert any(wording in lowered for wording in wordings), (
+            f"{name} does not say the authorization key is not what to enter"
+        )

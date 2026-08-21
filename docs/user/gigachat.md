@@ -45,9 +45,11 @@ The project page shows two values:
 > click "generate a new one": the old secret stops working and you get a fresh
 > one immediately.
 
-The same page may also show an "authorization key" — a long string, often ending
-in `==`. **You do not need it.** That is just those two values joined and
-encoded, and BabelChat does the encoding itself.
+The same page also shows an **"authorization key"** — a long string, often
+ending in `==`. That is just those two values joined and encoded, and BabelChat
+does the encoding itself, so you do not need to enter it separately. If you do
+paste it — into either field — the app now recognises it and carries on. It used
+to answer with an unhelpful `http_400` instead.
 
 ## Step 4. Paste them into BabelChat
 
@@ -76,6 +78,27 @@ whole, with no leading or trailing spaces.
 
 The other possibility is that the project was created with corporate access
 instead of `GIGACHAT_API_PERS`. Check the scope on the project page.
+
+### "Connection error: http_400"
+
+That is the server saying it could not read the credentials it was sent, and
+there is almost always one reason: the whole "authorization key" — the long
+string ending in `==` — went into the **Client Secret** field. It is visibly
+longer than the Client ID; if the second field holds about twice as many dots as
+the first, that is what happened.
+
+From 3.4.0 the app recognises that paste and connects anyway, so updating the
+companion is enough. On an older build, enter the two separate values instead:
+Client ID and Client Secret, both shaped like
+`01234567-89ab-cdef-0123-456789abcdef`.
+
+The rarer second cause of the same `400`: the project was created with corporate
+access while the app asks for the individual tier (`GIGACHAT_API_PERS`). The
+message says so in as many words. Create the GigaChat API project again with the
+individual access type.
+
+A key that is merely wrong gets a `401`, not a `400` — so a `400` almost never
+means "wrong key".
 
 ### A certificate or TLS error
 

@@ -271,6 +271,13 @@ class ProviderSettingsGroup(QGroupBox):
                 "cert_not_pem": tr("error.cert_not_pem"),
                 "cert_unreadable": tr("error.cert_unreadable"),
                 "tls_untrusted": tr("error.tls_untrusted"),
+                # The two things a bare 400 used to cover, which between them
+                # are most of what goes wrong on this screen: the authorization
+                # key pasted where the secret goes, and a project on the
+                # corporate tariff.
+                "credential_shape": tr("error.credential_shape"),
+                "scope_rejected": tr("error.scope_rejected"),
+                "credential_missing": tr("error.credential_missing"),
             }
             row.set_status("invalid", known.get(detail, tr("settings.api.error", e=detail)))
             row.usage.hide()

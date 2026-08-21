@@ -59,6 +59,11 @@ CERT_UNREADABLE = "cert_unreadable"
 CERT_MISSING = "cert_missing"
 CERT_NOT_PEM = "cert_not_pem"
 CERT_NOT_ROOT = "cert_not_root"
+# The OAuth endpoint answers 400 for two quite different mistakes, and the bare
+# status told the user neither. Both are theirs to fix, so both get a name.
+CREDENTIAL_SHAPE = "credential_shape"
+SCOPE_REJECTED = "scope_rejected"
+CREDENTIAL_MISSING = "credential_missing"
 
 _SYSTEM_PROMPT = (
     "You translate World of Warcraft chat messages into {target}. "
@@ -107,6 +112,42 @@ def _safe_error(error: Exception) -> str:
     return text or type(error).__name__
 
 
+#: What the OAuth endpoint puts in `code` when it refuses the request. Both of
+#: these arrive as a bare 400, and they are not remotely the same problem:
+#: one is a value in the wrong field, the other a project created on the wrong
+#: tariff.
+_REJECTION_CODES = {
+    4: CREDENTIAL_SHAPE,  # "Can't decode 'Authorization' header"
+    7: SCOPE_REJECTED,  # "scope from db not fully includes consumed scope"
+}
+
+
+def _why_rejected(response: requests.Response) -> str:
+    """Which of the two 400s this is, read from the body rather than guessed.
+
+    Falls back to the status when the body is not the documented shape — a
+    proxy's HTML error page is a 400 too, and calling that a malformed
+    credential would send the reader after the wrong thing.
+    """
+    try:
+        payload = response.json()
+        code = payload.get("code")
+        message = str(payload.get("message") or "")
+    except ValueError:
+        return "http_400"
+
+    if code in _REJECTION_CODES:
+        return _REJECTION_CODES[code]
+    # The numeric codes are undocumented and have changed before; the wording
+    # is what Sber's own examples show, so it is worth a second look.
+    lowered = message.lower()
+    if "decode" in lowered and "authorization" in lowered:
+        return CREDENTIAL_SHAPE
+    if "scope" in lowered:
+        return SCOPE_REJECTED
+    return "http_400"
+
+
 def _extract_content(payload: object) -> str | None:
     """Pull the reply text out, tolerating a response shaped unexpectedly."""
     try:
@@ -132,6 +173,19 @@ def authorization_key(settings: dict[str, str]) -> str:
     """
     client_id = (settings.get("client_id") or "").strip()
     client_secret = (settings.get("client_secret") or "").strip()
+
+    # The portal shows all three values on one page, and the authorization key
+    # is the longest and most key-looking of them, so it is the one people
+    # paste into a field marked "secret". Encoding it a second time produced a
+    # header the server could not decode, and it said so as a bare 400.
+    #
+    # A real Client Secret cannot be mistaken for an authorization key: it is a
+    # UUID, and the dashes are outside the base64 alphabet, so it does not
+    # decode at all.
+    for pasted in (client_secret, client_id):
+        if pasted and split_authorization_key(pasted) != ("", ""):
+            return pasted
+
     if client_id and client_secret:
         return base64.b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
     return (settings.get("authorization_key") or "").strip()
@@ -314,6 +368,8 @@ class GigaChatBackend:
             return False, FAILURE.AUTH
         if response.status_code == 429:
             return False, FAILURE.QUOTA
+        if response.status_code == 400:
+            return False, _why_rejected(response)
         if response.status_code != 200:
             return False, f"http_{response.status_code}"
 
@@ -445,6 +501,12 @@ def _build(settings: dict[str, str]) -> GigaChatBackend:
 
 def _validate(settings: dict[str, str]) -> tuple[bool, str]:
     if not authorization_key(settings):
+        # One field filled and the other empty is a different mistake from an
+        # untouched form, and "no key" reads as the latter. Say which field is
+        # waiting rather than sending a request that can only be refused.
+        filled = [bool((settings.get(key) or "").strip()) for key in ("client_id", "client_secret")]
+        if any(filled):
+            return False, CREDENTIAL_MISSING
         return False, FAILURE.NO_KEY
     # Before the request: a handshake failure looks the same whether the file is
     # an intermediate, the wrong format or missing, and reporting all three as

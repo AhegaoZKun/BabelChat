@@ -96,6 +96,10 @@ babelchat_scanner_*/target/
 .curseforge
 .wago
 *.token
+# GigaChat credentials, handed over the same way: a file, never a paste into a
+# terminal or a chat log. The bare name is here because .gc matches none of the
+# patterns below, and a credential that is ignored only by luck is not ignored.
+.gc
 .secrets/
 # Anything at the repository root that reads as a credential file.
 .*token*
