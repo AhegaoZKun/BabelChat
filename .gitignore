@@ -34,6 +34,9 @@ settings_dialog_pos.json
 # Logs & lock files
 *.log
 *.lock
+# ...except the scanner's, which pins what CI builds. A cdylib nobody
+# publishes wants a reproducible dependency set, not a fresh resolve per run.
+!babelchat_scanner_win/Cargo.lock
 
 # Downloaded addons (research)
 AutoChatLog/

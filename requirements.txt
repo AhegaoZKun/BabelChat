@@ -22,6 +22,14 @@ ruff==0.15.6
 # lupa embeds a real Lua 5.1 interpreter — the same version WoW runs — so the
 # addon's Lua can be tested directly instead of re-implemented in Python.
 lupa>=2.0
+# PyYAML parses the release workflow so its 27 tests can assert on the real
+# file. It was absent here for as long as those tests existed, so they ran on a
+# developer machine and quietly turned into a module-level skip on CI — which
+# is the only place the workflow they check actually runs.
+PyYAML>=6.0
+# cryptography reads the bundled trust anchor: that it is self-signed, that it
+# has not expired, and that its fingerprint is still the reviewed one.
+cryptography>=42.0
 # Pillow renders the addon's minimap icon — see tools/make_addon_icon.py.
 pillow>=10.0.0
 

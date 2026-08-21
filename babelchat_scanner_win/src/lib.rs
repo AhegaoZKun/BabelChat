@@ -19,7 +19,6 @@ use windows::Win32::{
                  PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_READONLY,
                  PAGE_READWRITE, PAGE_WRITECOPY},
         Threading::{OpenProcess, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION},
-        ProcessStatus::{EnumProcesses, GetModuleBaseNameA},
     },
 };
 
