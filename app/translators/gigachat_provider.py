@@ -329,14 +329,14 @@ SPEC = register(
             ProviderField(
                 key="authorization_key",
                 label="provider.gigachat.key",
-                placeholder="Base64 of client_id:client_secret",
+                placeholder="provider.gigachat.key_hint",
                 help_url="https://developers.sber.ru/studio/workspaces",
-                help_label="Get key",
+                help_label="provider.get_key",
             ),
             ProviderField(
                 key="ca_bundle",
                 label="provider.gigachat.ca",
-                placeholder="path to russian_trusted_root_ca.pem — only needed if TLS fails",
+                placeholder="provider.gigachat.ca_hint",
                 secret=False,
                 required=False,
             ),

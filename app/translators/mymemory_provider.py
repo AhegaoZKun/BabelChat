@@ -194,7 +194,7 @@ SPEC = register(
             ProviderField(
                 key="email",
                 label="provider.mymemory.email",
-                placeholder="raises the daily allowance from 5,000 to 50,000 words",
+                placeholder="provider.mymemory.email_hint",
                 secret=False,
                 required=False,
             ),

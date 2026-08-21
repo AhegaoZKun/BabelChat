@@ -50,6 +50,25 @@ class TranslatorBackend(Protocol):
         ...
 
 
+def _text(value: str) -> str:
+    """Render a piece of provider copy for the screen.
+
+    Copy is declared as an i18n key. Rendering it is the one thing every
+    frontend must not reinvent: the GTK settings and wizard did, and printed
+    `provider.deepl.key` at the user as though it were a label. So the spec
+    renders its own copy and neither frontend touches the key.
+
+    A value that is not a key is returned as it stands — a format example like
+    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx" reads the same in any language and
+    does not belong in the string table.
+    """
+    if not value:
+        return ""
+    from app.i18n import _STRINGS, tr
+
+    return tr(value) if value in _STRINGS else value
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderField:
     """One credential input, and enough about it to draw the row.
@@ -67,6 +86,21 @@ class ProviderField:
     help_url: str = ""
     help_label: str = ""
 
+    def label_text(self) -> str:
+        return _text(self.label)
+
+    def placeholder_text(self) -> str:
+        """The example or hint shown inside the empty input.
+
+        A key is translated; anything else is a literal format example
+        ("xxxxxxxx-xxxx-...:fx") that means the same in every language.
+        """
+        return _text(self.placeholder)
+
+    def help_text(self) -> str:
+        """Label for the "where do I get this" link."""
+        return _text(self.help_label) if self.help_label else self.help_url
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderSpec:
@@ -81,6 +115,9 @@ class ProviderSpec:
     note: str = ""
     #: Free of charge and needs no account at all.
     keyless: bool = False
+
+    def note_text(self) -> str:
+        return _text(self.note)
 
     def is_configured(self, settings: dict[str, str]) -> bool:
         if self.keyless:

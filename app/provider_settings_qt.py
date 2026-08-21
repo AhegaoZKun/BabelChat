@@ -97,14 +97,14 @@ class _ProviderRow:
         layout.addWidget(header)
 
         if spec.note:
-            note = QLabel(tr(spec.note))
+            note = QLabel(spec.note_text())
             note.setStyleSheet(_NOTE_STYLE)
             note.setWordWrap(True)
             layout.addWidget(note)
 
         for index, field in enumerate(spec.fields):
             edit = QLineEdit(settings.get(field.key, ""))
-            edit.setPlaceholderText(field.placeholder or tr(field.label))
+            edit.setPlaceholderText(field.placeholder_text() or field.label_text())
             if field.secret:
                 # A key rendered in the clear ends up in screenshots and support
                 # threads. Visible on demand, hidden by default.
@@ -133,7 +133,7 @@ class _ProviderRow:
                 if field.help_url:
                     link = QLabel(
                         f'<a href="{field.help_url}" style="color: #FFD200; font-size: 11px;">'
-                        f"{field.help_label or field.help_url}</a>"
+                        f"{field.help_text()}</a>"
                     )
                     link.setOpenExternalLinks(True)
                     row.addWidget(link)
@@ -241,6 +241,14 @@ class ProviderSettingsGroup(QGroupBox):
                 row.set_status("unconfigured", tr("settings.api.not_configured"))
 
     # ── persistence ──────────────────────────────────────────────────────
+
+    def values_for(self, provider_id: str) -> dict[str, str]:
+        """What is currently typed for one provider, before it is saved."""
+        row = self._rows.get(provider_id)
+        return row.values if row else {}
+
+    def preferred_id(self) -> str:
+        return self._priority.currentData() or ""
 
     def apply_to(self, config) -> None:
         """Write the entered credentials and preference back onto `config`.

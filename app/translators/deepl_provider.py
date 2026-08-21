@@ -147,7 +147,7 @@ SPEC = register(
                 label="provider.deepl.key",
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx",
                 help_url="https://www.deepl.com/your-account/keys",
-                help_label="Get key",
+                help_label="provider.get_key",
             ),
         ),
         build=_build,

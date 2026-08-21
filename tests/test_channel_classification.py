@@ -47,8 +47,9 @@ def test_a_known_type_id_decides_regardless_of_the_name(channel_type, expected):
     ],
 )
 def test_trade_is_recognised_in_every_language_we_have_a_name_for(localised):
-    """This is the path an addon too old to send the id still takes."""
-    assert classify_public_channel(0, localised) == "Trade"
+    """This is the path an addon too old to send the id still takes — and None,
+    not 0, is what "no id" looks like."""
+    assert classify_public_channel(None, localised) == "Trade"
 
 
 @pytest.mark.parametrize(
@@ -56,7 +57,7 @@ def test_trade_is_recognised_in_every_language_we_have_a_name_for(localised):
     ["General - City", "Общий - Оргриммар", "Allgemein - Sturmwind", "Général - Hurlevent"],
 )
 def test_general_is_recognised_in_every_language_we_have_a_name_for(localised):
-    assert classify_public_channel(0, localised) == "General"
+    assert classify_public_channel(None, localised) == "General"
 
 
 # ── a channel nobody knows ───────────────────────────────────────────────────
@@ -65,8 +66,8 @@ def test_general_is_recognised_in_every_language_we_have_a_name_for(localised):
 def test_a_player_made_channel_is_not_passed_off_as_general():
     """It was, and that is why a message in one landed under the General toggle
     while the user believed General meant the game's General channel."""
-    assert classify_public_channel(0, "BabelTest") == CUSTOM_CHANNEL
-    assert classify_public_channel(0, "GuildRecruitTalk") == CUSTOM_CHANNEL
+    assert classify_public_channel(None, "BabelTest") == CUSTOM_CHANNEL
+    assert classify_public_channel(None, "GuildRecruitTalk") == CUSTOM_CHANNEL
 
 
 def test_an_unknown_type_id_falls_back_to_the_name_before_giving_up():
@@ -84,16 +85,17 @@ def test_the_current_token_carries_the_id_and_the_name():
 def test_a_token_from_an_older_addon_still_parses():
     """3.3.0 sent "CHANNEL:<name>" with no id. An app updated ahead of its
     addon — the normal case, since the addon is copied by hand — must cope."""
-    assert parse_channel_token("CHANNEL:2. Trade - City") == (0, "2. Trade - City")
+    assert parse_channel_token("CHANNEL:2. Trade - City") == (None, "2. Trade - City")
 
 
 def test_a_channel_name_containing_a_colon_survives():
     assert parse_channel_token("CHANNEL:0:LFM: mythic +10") == (0, "LFM: mythic +10")
+    assert parse_channel_token("CHANNEL:2:LFM: mythic +10") == (2, "LFM: mythic +10")
 
 
 def test_a_malformed_token_does_not_raise():
-    assert parse_channel_token("CHANNEL:") == (0, "")
-    assert parse_channel_token("CHANNEL") == (0, "")
+    assert parse_channel_token("CHANNEL:") == (None, "")
+    assert parse_channel_token("CHANNEL") == (None, "")
 
 
 # ── end to end, through the parser ───────────────────────────────────────────
@@ -158,3 +160,32 @@ def test_leaving_them_off_keeps_them_out_of_the_pipeline_set():
 
     assert Channel.CUSTOM not in enabled
     assert Channel.EMOTE not in enabled
+
+
+# ── zero is an answer, not a shrug ───────────────────────────────────────────
+
+
+def test_a_player_made_channel_named_after_a_real_one_stays_custom():
+    """WoW reports zoneChannelID 0 for a channel a player created. Treating that
+    0 as "the addon told us nothing" sent a private channel called "TradeHub"
+    into Trade — a toggle plenty of users leave on — and the message the user
+    thought was private was translated and shown.
+
+    The id, when present, is the game speaking. It outranks the name.
+    """
+    assert classify_public_channel(0, "TradeHub") == CUSTOM_CHANNEL
+    assert classify_public_channel(0, "Торговля моей гильдии") == CUSTOM_CHANNEL
+    assert classify_public_channel(0, "General chat for my guild") == CUSTOM_CHANNEL
+
+
+def test_no_id_and_an_id_of_zero_are_different_answers():
+    """The whole point of the None: they must not classify the same way."""
+    assert classify_public_channel(None, "Торговля - Оргриммар") == "Trade"
+    assert classify_public_channel(0, "Торговля - Оргриммар") == CUSTOM_CHANNEL
+
+
+def test_a_legacy_token_reports_no_id_rather_than_zero():
+    """An addon too old to send an id must not be mistaken for one reporting a
+    player-made channel."""
+    assert parse_channel_token("CHANNEL:Торговля - Оргриммар")[0] is None
+    assert parse_channel_token("CHANNEL:0:Торговля - Оргриммар")[0] == 0

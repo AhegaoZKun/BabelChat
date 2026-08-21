@@ -184,7 +184,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
             values = saved.get(spec.id, {})
             fields: dict[str, Gtk.Entry] = {}
             for index, pfield in enumerate(spec.fields):
-                label = spec.display_name if index == 0 else pfield.label
+                label = spec.display_name if index == 0 else pfield.label_text()
                 entry, _btn = key_row(
                     label,
                     values.get(pfield.key, ""),

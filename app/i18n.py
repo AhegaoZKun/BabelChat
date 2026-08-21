@@ -509,6 +509,36 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Azure region",
         "ES": "Región de Azure",
     },
+    "provider.get_key": {
+        "RU": "Получить ключ",
+        "EN": "Get key",
+        "ES": "Obtener clave",
+    },
+    "provider.gigachat.key_hint": {
+        "RU": "Base64 от client_id:client_secret",
+        "EN": "Base64 of client_id:client_secret",
+        "ES": "Base64 de client_id:client_secret",
+    },
+    "provider.gigachat.ca_hint": {
+        "RU": "путь к russian_trusted_root_ca.pem — нужен, только если TLS не проходит",
+        "EN": "path to russian_trusted_root_ca.pem — only needed if TLS fails",
+        "ES": "ruta a russian_trusted_root_ca.pem — solo si falla el TLS",
+    },
+    "provider.mymemory.email_hint": {
+        "RU": "поднимает дневной лимит с 5 000 до 50 000 слов",
+        "EN": "raises the daily allowance from 5,000 to 50,000 words",
+        "ES": "sube el límite diario de 5.000 a 50.000 palabras",
+    },
+    "provider.microsoft.portal": {
+        "RU": "Портал Azure",
+        "EN": "Azure portal",
+        "ES": "Portal de Azure",
+    },
+    "provider.microsoft.region_hint": {
+        "RU": "например germanywestcentral, eastus, westeurope",
+        "EN": "e.g. germanywestcentral, eastus, westeurope",
+        "ES": "p. ej. germanywestcentral, eastus, westeurope",
+    },
     "wizard.api.explain": {
         "RU": "Ключи нужны только для перевода целыми предложениями — встроенный словарь работает бесплатно и без них. Заполните того провайдера, который у вас есть; если ни одного нет, продолжайте и настройте позже в настройках.",
         "EN": "These keys are only for full-sentence translation — the in-game dictionary already works for free without any of them. Fill in whichever provider you have; if you have none, continue and set one up later from Settings.",

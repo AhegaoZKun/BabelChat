@@ -27,6 +27,8 @@ from app.settings_dialog import (
     WOW_THEME_STYLESHEET,
     _create_dialog_icon,
 )
+from app.translators import all_providers
+from app.translators import get as provider_get
 from app.wizard_pages_qt import build_ready_page, build_welcome_page
 from app.wizard_style import GOLD_BTN_STYLE as _GOLD_BTN_STYLE
 
@@ -334,28 +336,40 @@ class SetupWizard(QDialog):
             self._addon_status_label.setStyleSheet("color: #FF4040; font-weight: bold;")
 
     def _update_summary(self) -> None:
-        deepl_key = self._api_key_input.text().strip()
-        ms_key = self._ms_key_input.text().strip()
+        """Summarise what the wizard is about to save.
+
+        This read three widgets that stopped existing when the provider page
+        became registry-driven, and it runs on entering the Ready page — so the
+        wizard raised before `_finish` could ever be reached, and `_finish` is
+        the only place that saves the entered credentials. On a fresh install
+        the wizard always opens, so nothing could be configured through it at
+        all. It now asks the registry, like everything else does.
+        """
         own = LANGUAGES.get(self._own_lang.currentData(), "?")
         target = LANGUAGES.get(self._target_lang.currentData(), "?")
         wow = self._wow_path_input.text() or tr("wizard.ready.not_configured")
 
-        backends = []
-        if deepl_key:
-            masked = f"****{deepl_key[-4:]}" if len(deepl_key) >= 4 else "****"
-            backends.append(f"DeepL ({masked})")
-        if ms_key:
-            masked = f"****{ms_key[-4:]}" if len(ms_key) >= 4 else "****"
-            backends.append(f"Microsoft ({masked})")
-        backend_str = ", ".join(backends) if backends else "None"
+        configured = []
+        for spec in all_providers():
+            values = self._provider_group.values_for(spec.id)
+            if not spec.is_configured(values):
+                continue
+            # Show that a key is set without showing the key: a summary screen
+            # is the kind of thing people screenshot.
+            secret = next((values.get(f.key, "") for f in spec.fields if f.secret), "")
+            suffix = f" (****{secret[-4:]})" if len(secret) >= 4 else ""
+            configured.append(f"{spec.display_name}{suffix}")
 
-        priority_str = ""
-        if deepl_key and ms_key:
-            p = self._priority_combo.currentData()
-            priority_str = f"<br><b>Priority:</b> {'DeepL' if p == 'deepl' else 'Microsoft'} (other as fallback)"
+        backend_str = ", ".join(configured) if configured else tr("wizard.ready.not_configured")
+
+        preferred = ""
+        if len(configured) > 1:
+            spec = provider_get(self._provider_group.preferred_id())
+            if spec is not None:
+                preferred = f"<br><b>{tr('settings.api.preferred')}</b> {spec.display_name}"
 
         self._summary_label.setText(
-            f"<b>Translation:</b> {backend_str}{priority_str}<br>"
+            f"<b>Translation:</b> {backend_str}{preferred}<br>"
             f"<b>{tr('wizard.ready.wow_path')}</b> {wow}<br>"
             f"<b>{tr('wizard.ready.own_lang')}</b> {own}<br>"
             f"<b>{tr('wizard.ready.target_lang')}</b> {target}"

@@ -132,18 +132,27 @@ _CHANNEL_NAME_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
 CUSTOM_CHANNEL = "Custom"
 
 
-def classify_public_channel(channel_type: int, name: str) -> str:
+def classify_public_channel(channel_type: int | None, name: str) -> str:
     """Map a public channel onto a log channel name.
 
-    The type id decides when it is one we know. Otherwise the display name is
-    tried, which is all an older addon sends. A channel that matches neither is
-    reported as Custom rather than General: a player-made channel is not the
-    General channel, and calling it one silently routed it into a toggle the
-    user thought they understood.
+    `channel_type` is WoW's zoneChannelID, or None when the addon is too old to
+    send one. The distinction matters: **0 means the player made this channel**,
+    and it is not the same as "we do not know". Collapsing the two sent a
+    private channel named "TradeHub" into Trade — a toggle the user may well
+    have on — which is the exact failure this classification was rewritten to
+    stop.
+
+    So: a known id decides. An id of 0 is authoritative and means Custom. Only
+    an absent id falls back to the display name, which is all a legacy addon
+    gives us.
     """
-    known = _CHANNEL_TYPE_IDS.get(channel_type)
-    if known:
-        return known
+    if channel_type is not None:
+        known = _CHANNEL_TYPE_IDS.get(channel_type)
+        if known:
+            return known
+        if channel_type == 0:
+            return CUSTOM_CHANNEL
+        # A nonzero id we do not recognise: the name is better than nothing.
 
     lowered = name.strip().lower()
     for hints, log_channel in _CHANNEL_NAME_HINTS:
@@ -153,17 +162,24 @@ def classify_public_channel(channel_type: int, name: str) -> str:
     return CUSTOM_CHANNEL
 
 
-def parse_channel_token(token: str) -> tuple[int, str]:
-    """Split a "CHANNEL:<id>:<name>" event token into its parts.
+def parse_channel_token(token: str) -> tuple[int | None, str]:
+    """Split a "CHANNEL:<id>:<name>" event token into (id, name).
 
-    Accepts the older "CHANNEL:<name>" shape, which carries no id, so an app
-    updated ahead of its addon keeps working.
+    Returns None for the id when the token carries none — the older
+    "CHANNEL:<name>" shape, which an app updated ahead of its hand-installed
+    addon still receives. None and 0 are different answers: 0 is the game
+    telling us a player made this channel.
     """
     payload = token.split(":", 1)[1] if ":" in token else ""
     head, separator, tail = payload.partition(":")
-    if separator and head.strip().lstrip("-").isdigit():
-        return int(head), tail
-    return 0, payload
+    if separator:
+        try:
+            return int(head.strip()), tail
+        except ValueError:
+            # Not an id after all — a channel name that happens to contain a
+            # colon, which "LFM: mythic +10" does.
+            return None, payload
+    return None, payload
 
 
 def _timestamp() -> str:

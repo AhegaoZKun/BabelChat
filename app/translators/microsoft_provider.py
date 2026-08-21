@@ -121,14 +121,14 @@ SPEC = register(
             ProviderField(
                 key="api_key",
                 label="provider.microsoft.key",
-                placeholder="Microsoft Translator API key",
+                placeholder="provider.microsoft.key",
                 help_url="https://portal.azure.com/",
-                help_label="Azure portal",
+                help_label="provider.microsoft.portal",
             ),
             ProviderField(
                 key="region",
                 label="provider.microsoft.region",
-                placeholder="e.g. germanywestcentral, eastus, westeurope",
+                placeholder="provider.microsoft.region_hint",
                 secret=False,
                 required=False,
             ),

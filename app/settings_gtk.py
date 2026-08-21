@@ -149,7 +149,7 @@ class SettingsWindowGtk:
             self._provider_entries[spec.id] = {
                 pfield.key: self._entry_row(
                     root,
-                    f"{spec.display_name} — {pfield.label}",
+                    f"{spec.display_name} — {pfield.label_text()}",
                     values.get(pfield.key, ""),
                     secret=pfield.secret,
                 )
