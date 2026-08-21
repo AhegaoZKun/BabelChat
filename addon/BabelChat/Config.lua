@@ -86,6 +86,19 @@ function addonTable.CreateConfigUI()
     mainCB:SetScript("OnClick", function(self) db.dict.enabled = self:GetChecked() end)
     AddTooltip(mainCB, L["TT_ENABLE"])
 
+    -- The gloss and the overlay answer the same question, so by default only
+    -- one of them speaks. This is the escape hatch for players who want both.
+    yOffset = yOffset - 24
+    local alwaysCB = CreateFrame("CheckButton", "WCT_AlwaysGlossCB", panel, "InterfaceOptionsCheckButtonTemplate")
+    alwaysCB:SetPoint("TOPLEFT", 16, yOffset)
+    _G[alwaysCB:GetName() .. "Text"]:SetText(L["UI_ALWAYS_GLOSS"])
+    _G[alwaysCB:GetName() .. "Text"]:SetFontObject("GameFontHighlightSmall")
+    alwaysCB:SetChecked(db.dict.mode == "always")
+    alwaysCB:SetScript("OnClick", function(self)
+        db.dict.mode = self:GetChecked() and "always" or "auto"
+    end)
+    AddTooltip(alwaysCB, L["TT_ALWAYS_GLOSS"])
+
     -- Color button
     local colorBtn = CreateFrame("Button", "WCT_ColorBtn", panel, "UIPanelButtonTemplate")
     colorBtn:SetPoint("LEFT", mainCB, "RIGHT", 220, 0)

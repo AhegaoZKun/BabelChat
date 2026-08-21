@@ -19,7 +19,15 @@ local DEFAULTS = {
     dict = {
         enabled = true,
         targetLocale = "esES",
-        chatColor = "00ff00",
+        -- When to print the in-chat gloss: "auto" keeps out of the way
+        -- when the companion app is set up, because the overlay already
+        -- shows a full translation of the same line.
+        mode = "auto",
+        -- Grey, not the old bright green: this is now a short aside at the
+        -- end of the line rather than a translation on its own row, and it
+        -- should sit behind the message rather than compete with it. An
+        -- existing choice is left alone — it is the player's setting.
+        chatColor = "808080",
         settings = {
             showDungeons = true,
             showSocial = true,

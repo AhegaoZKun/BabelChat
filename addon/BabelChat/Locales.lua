@@ -48,6 +48,8 @@ L["CAT_STATUS"] = "Status / States"
 L["CAT_SLANG"] = "Slang & Shortcuts"
 L["CAT_ENDGAME"] = "Endgame: M+, delves, gear"
 L["GEN_HEADER"] = "General"
+L["UI_ALWAYS_GLOSS"] = " Show the gloss even when the app is running"
+L["TT_ALWAYS_GLOSS"] = "Off by default: the companion overlay already shows a full translation of the same message, so the in-chat gloss stays quiet while the app is set up."
 
 -- Channels
 L["CH_SAY"] = "Say"
@@ -158,6 +160,8 @@ if locale == "ruRU" then
     L["CAT_SLANG"] = "Сленг и сокращения"
     L["CAT_ENDGAME"] = "Эндгейм: М+, вылазки, экипировка"
     L["GEN_HEADER"] = "Основные"
+    L["UI_ALWAYS_GLOSS"] = " Показывать подсказку, даже когда работает приложение"
+    L["TT_ALWAYS_GLOSS"] = "По умолчанию выключено: оверлей компаньона и так показывает полный перевод того же сообщения, поэтому подсказка в чате молчит, пока приложение настроено."
 
     L["CH_SAY"] = "Сказать"
     L["CH_YELL"] = "Крик"
@@ -262,6 +266,8 @@ elseif locale == "esES" or locale == "esMX" then
     L["CAT_SLANG"] = "Jerga y atajos"
     L["CAT_ENDGAME"] = "Endgame: M+, cavernas, equipo"
     L["GEN_HEADER"] = "General"
+    L["UI_ALWAYS_GLOSS"] = " Mostrar la glosa aunque la app esté activa"
+    L["TT_ALWAYS_GLOSS"] = "Desactivado por defecto: el overlay ya muestra una traducción completa del mismo mensaje."
 
     L["CH_SAY"] = "Decir"
     L["CH_YELL"] = "Gritar"
