@@ -343,7 +343,9 @@ def test_a_capitalised_russian_term_matches_its_lower_case_key():
     assert changed is True
 
 
-@pytest.mark.parametrize("word", ["Ёлка", "Ярость", "Отряд"])
+# Р is the first letter whose lower case crosses into a different UTF-8 lead
+# byte, so a fold that stops one code short of it looks right everywhere else.
+@pytest.mark.parametrize("word", ["Ёлка", "Ярость", "Отряд", "Рейд", "Победа", "Ясно"])
 def test_the_whole_cyrillic_alphabet_folds(word):
     """Р-Я cross into a different UTF-8 lead byte and Ё sits outside the block
     altogether, so a fold that only handles А-П works for half the alphabet."""

@@ -381,9 +381,10 @@ def test_the_old_spanish_key_names_are_gone_from_the_panel(panel):
 
 # ── layout arithmetic ────────────────────────────────────────────────────────
 #
-# The panel cannot be rendered here, so the geometry is checked as the numbers
-# it is built from. That is exactly where the bug was: a five-pixel gap under a
-# fourteen-pixel heading, with a twenty-six-pixel control beneath it.
+# The panel IS built here now, so these are the two heights the recorded frames
+# are measured against: a heading's text and a checkbox's hit area. The bug was
+# a five-pixel gap under a fourteen-pixel heading, with a twenty-six-pixel
+# control beneath it.
 
 HEADING_HEIGHT = 14
 CHECKBOX_HEIGHT = 26

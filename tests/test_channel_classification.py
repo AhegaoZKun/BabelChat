@@ -189,3 +189,15 @@ def test_a_legacy_token_reports_no_id_rather_than_zero():
     player-made channel."""
     assert parse_channel_token("CHANNEL:Торговля - Оргриммар")[0] is None
     assert parse_channel_token("CHANNEL:0:Торговля - Оргриммар")[0] == 0
+
+
+def test_a_channel_name_containing_a_colon_is_not_read_as_an_id():
+    """"CHANNEL:Trade: Orgrimmar" from a legacy addon splits into something that
+    looks like a 3-part token. Reading the head as an id of 0 would classify a
+    real Trade channel as Custom and stop translating it."""
+    assert parse_channel_token("CHANNEL:Trade: Orgrimmar") == (None, "Trade: Orgrimmar")
+    assert parse_channel_token("CHANNEL:Торговля: Оргриммар") == (None, "Торговля: Оргриммар")
+
+    for token in ("CHANNEL:Trade: Orgrimmar", "CHANNEL:Торговля: Оргриммар"):
+        channel_type, name = parse_channel_token(token)
+        assert classify_public_channel(channel_type, name) == "Trade"

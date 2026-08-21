@@ -145,6 +145,18 @@ local function AutoDetectLocale()
     db.dict.targetLocale = clientLocale or "enUS"
 end
 
+-- A chat argument that is safe to treat as text.
+--
+-- Under chat messaging lockdown these arrive as secret values: they report as
+-- strings and raise on string.len. The type check comes first because
+-- string.len(42) succeeds — numbers coerce — so a length probe alone waves a
+-- number through to a caller that then indexes it as a string.
+local function IsUsableString(value)
+    local ok, kind = pcall(type, value)
+    if not ok or kind ~= "string" then return false end
+    return (pcall(string.len, value))
+end
+
 -- ==========================================
 -- CHAT EVENT FILTER (dual-path)
 -- ==========================================
@@ -186,16 +198,29 @@ local function ChatFilter(self, event, text, author, ...)
         local zoneChannelID = select(5, ...)
         -- Both are chat event arguments, so under chat messaging lockdown they
         -- are secret values, and every test below — truthiness, comparison,
-        -- gsub — is an operation a secret rejects. Probe first.
-        if pcall(string.len, channelString) then
+        -- gsub — is an operation a secret rejects. Probe before touching them.
+        --
+        -- The type check is not redundant with the length probe: string.len(42)
+        -- SUCCEEDS in Lua 5.1, because numbers coerce. A length probe alone
+        -- waves a number through and the gsub below then raises on it, which
+        -- would take the chat filter down for the rest of the session.
+        if IsUsableString(channelString) then
             -- Strip a leading "N. " channel-number prefix if present.
             local name = channelString:gsub("^%d+%.%s*", "")
             if name ~= "" then
-                local channelType = 0
-                if pcall(string.len, zoneChannelID) then
-                    channelType = tonumber(zoneChannelID) or 0
+                -- Zero means "a player made this channel" and the companion
+                -- treats it as such, so it must never stand in for "we could
+                -- not read the id". When the id is unreadable, send the older
+                -- two-part form and let the companion fall back to the name.
+                local channelType
+                if IsUsableString(zoneChannelID) or type(zoneChannelID) == "number" then
+                    channelType = tonumber(zoneChannelID)
                 end
-                shortEvent = "CHANNEL:" .. channelType .. ":" .. name
+                if channelType then
+                    shortEvent = "CHANNEL:" .. channelType .. ":" .. name
+                else
+                    shortEvent = "CHANNEL:" .. name
+                end
             end
         end
     end
@@ -397,7 +422,6 @@ initFrame:RegisterEvent("PLAYER_LOGIN")
 -- a game underneath it: that ordering is the part most worth a test, and it
 -- was unreachable while it lived inside OnEvent.
 function addonTable.InitialiseSavedVariables()
-    local db
     -- Migrate from old ChatTranslatorHelper if present
     if ChatTranslatorHelperDB and not BabelChatDB then
         BabelChatDB = ChatTranslatorHelperDB
@@ -427,6 +451,11 @@ function addonTable.InitialiseSavedVariables()
     AutoDetectLocale()
     return db
 end
+
+-- Exported so a test can call it: the token it builds for a public channel
+-- is what the companion classifies on, and getting it wrong files a real
+-- Trade channel as a private one.
+addonTable.ChatFilter = ChatFilter
 
 initFrame:SetScript("OnEvent", function(self, event)
     local db = addonTable.InitialiseSavedVariables()

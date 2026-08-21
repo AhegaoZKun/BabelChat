@@ -432,3 +432,35 @@ def test_set_listing_order_replaces_the_previous_order_rather_than_adding_to_it(
     assert first == ("gamma", "beta", "alpha")
     assert second == ("alpha", "gamma", "beta")
     assert len(second) == len(set(second)), "a provider appeared twice"
+
+
+def test_a_keyless_provider_is_available_without_being_named_in_the_config(registry):
+    """The point of a provider that needs no account is that it works before
+    anyone configures anything. Requiring an entry meant a user upgrading from a
+    DeepL-only config had no fallback at all until they opened Settings and
+    pressed Save — and they had no reason to."""
+    register_fake(registry, "paid")
+    register_fake(registry, "freebie", keyless=True)
+
+    service = TranslatorService({"paid": {"api_key": "k"}})
+
+    assert "freebie" in service.active_ids
+    assert service.has_backend is True
+
+
+def test_a_config_with_nothing_at_all_still_has_the_keyless_fallback(registry):
+    register_fake(registry, "freebie", keyless=True)
+
+    assert TranslatorService({}).active_ids == ("freebie",)
+    assert TranslatorService(None).has_backend is True
+
+
+def test_the_preferred_provider_still_wins_over_the_keyless_one(registry):
+    """Being always-available must not mean always-first: it is the fallback
+    because its quality is below the others."""
+    register_fake(registry, "paid")
+    register_fake(registry, "freebie", keyless=True)
+
+    service = TranslatorService({"paid": {"api_key": "k"}}, priority="paid")
+
+    assert service.active_ids[0] == "paid"

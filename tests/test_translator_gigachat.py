@@ -299,3 +299,25 @@ def test_a_repeated_server_error_reports_itself_not_max_retries(gigachat):
     result = backend.translate("hello", "RU")
 
     assert result.error == "http_503"
+
+
+@pytest.mark.parametrize(
+    "leaky",
+    [
+        "connection failed while sending headers {'Authorization': 'Bearer tok-abc123'}",
+        "upstream rejected: Bearer tok-abc123",
+        "proxy denied Basic base64key",
+        "retry with authorization: bearer tok-abc123",
+    ],
+    ids=["header_name", "bearer_value_only", "basic_value_only", "lower_case"],
+)
+def test_the_scrub_fires_on_the_credential_itself_not_only_on_the_header_name(leaky):
+    """Every leak fixture in this file happened to contain the literal string
+    "Authorization", so the Bearer and Basic markers were never the reason the
+    scrub fired — reducing the marker list to just the header name left the file
+    green. A real leak can carry the value without the header name."""
+    scrubbed = _safe_error(requests.RequestException(leaky))
+
+    assert "tok-abc123" not in scrubbed
+    assert "base64key" not in scrubbed
+    assert "withheld" in scrubbed

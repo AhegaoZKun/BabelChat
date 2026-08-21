@@ -250,6 +250,13 @@ def _migrate_split_channels(data: dict) -> None:
     # actually experienced was "Say is on, therefore yells are translated".
     if "channels_yell" not in data and "channels_say" in data:
         data["channels_yell"] = bool(data["channels_say"])
+    # A public channel the reader did not recognise used to be reported as
+    # General, so anyone with General on was reading their player-made channels
+    # through it. Classifying them separately is right — a private channel is
+    # not the game's General channel — but it must not take them away in
+    # silence, so the answer carries over the same way.
+    if "channels_custom" not in data and "channels_general" in data:
+        data["channels_custom"] = bool(data["channels_general"])
 
 
 # Config written before providers became generic: one flat field per provider

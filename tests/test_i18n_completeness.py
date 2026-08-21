@@ -27,6 +27,12 @@ LOCALISED_MODULES = (
     "provider_settings_qt.py",
     "wizard_pages_qt.py",
     "about_tab_qt.py",
+    # The GTK frontend was left out of this list, and stayed half English for
+    # it: Russian checkboxes under English headings. It cannot be built here
+    # (gi is not installed on the Windows dev box or on CI), so the source scan
+    # is the only check it gets — which is the reason to keep it honest.
+    "settings_gtk.py",
+    "setup_wizard_gtk.py",
 )
 
 
@@ -106,6 +112,8 @@ def test_a_missing_placeholder_argument_does_not_crash_the_interface():
 _NOT_LANGUAGE = re.compile(
     r"^(?:"
     r"\s*|[\W\d_]+|"  # punctuation, digits, symbols, icons
+    r"(?:\{[^}]*\}|[^A-Za-z]|[A-Za-z]?%)+|"  # f-string composition, not copy
+
     r"https?://\S+|"  # links
     r"[A-Za-z-]+\.(?:py|json|log|pem|ico|png|exe)|"  # filenames
     r"[A-Za-z]:[/\\].*|"  # example paths shown as placeholders
@@ -120,10 +128,29 @@ _NOT_LANGUAGE = re.compile(
     r")$"
 )
 
+# A string literal handed to something that draws it. The negative lookbehind
+# matters: every one of these calls is *supposed* to receive tr("some.key"), and
+# without it the key itself reads as hardcoded copy.
 _WIDGET_TEXT = re.compile(
-    r"(?:QCheckBox|QLabel|QPushButton|QGroupBox|setText|setToolTip|setPlaceholderText|addItem)"
-    r"\(\s*\"([^\"]{4,})\""
+    r"(?:QCheckBox|QLabel|QPushButton|QGroupBox"
+    r"|Gtk\.CheckButton|Gtk\.Label|Gtk\.Button|Gtk\.Expander"
+    r"|setText|setToolTip|setPlaceholderText|addItem"
+    r"|set_title|_section|_combo_row|_color_row|_scale_row|key_row)"
+    r"\((?:[^()\"]{0,40})(?<!tr\()\"([^\"]{4,})\""
 )
+
+
+def _only_the_words(text: str) -> str:
+    """What is left of a literal once composition is removed.
+
+    An f-string is a template, not copy: `BabelChat {VERSION}` and
+    `{tr('about.developer')} <b>Andrey Yumashev</b>` are assembling translated
+    pieces and proper nouns, and reading them whole reports the whole template
+    as untranslated English.
+    """
+    without_fields = re.sub(r"\{[^{}]*\}", " ", text)
+    without_markup = re.sub(r"<[^>]*>", " ", without_fields)
+    return without_markup.strip()
 
 
 @pytest.mark.parametrize("module", LOCALISED_MODULES)
@@ -138,7 +165,7 @@ def test_no_user_facing_string_is_written_straight_into_a_widget(module):
     hardcoded = [
         text
         for text in _WIDGET_TEXT.findall(source(module))
-        if not _NOT_LANGUAGE.match(text) and not text.startswith("<")
+        if not _NOT_LANGUAGE.match(_only_the_words(text))
     ]
     assert hardcoded == [], f"{module} writes these past i18n: {hardcoded}"
 

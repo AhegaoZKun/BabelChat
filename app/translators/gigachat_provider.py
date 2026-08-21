@@ -92,7 +92,11 @@ def _safe_error(error: Exception) -> str:
     by which a key reaches a log file.
     """
     text = str(error)
-    if any(marker in text for marker in ("Authorization", "Bearer ", "Basic ")):
+    # Case-insensitively: HTTP header names are, and libraries normalise them
+    # differently — urllib3 lower-cases some of what it echoes back, so a
+    # case-sensitive check let "authorization: bearer …" through untouched.
+    lowered = text.lower()
+    if any(marker in lowered for marker in ("authorization", "bearer ", "basic ")):
         return f"{type(error).__name__} (details withheld — they contained credentials)"
     return text or type(error).__name__
 

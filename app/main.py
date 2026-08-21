@@ -120,7 +120,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     return PipelineConfig(
         chatlog_path=chatlog,
         providers=config.providers,
-        translator_priority=getattr(config, "translator_priority", "deepl"),
+        translator_priority=config.translator_priority,
         target_lang=config.target_language,
         own_language=own_lang,
         enabled_channels=channels,

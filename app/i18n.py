@@ -203,6 +203,11 @@ _STRINGS: dict[str, dict[str, str]] = {
             "el archivo de registro del chat. Intentaremos detectarlo automáticamente."
         ),
     },
+    "wizard.wow.auto": {
+        "RU": "Найти автоматически",
+        "EN": "Auto-detect",
+        "ES": "Detectar",
+    },
     "wizard.wow.browse": {
         "RU": "Обзор...",
         "EN": "Browse...",
@@ -435,9 +440,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ES": "Validar clave",
     },
     "settings.privacy.trace": {
-        "RU": " Записывать перехваченный чат в файл (для диагностики)",
-        "EN": " Write captured chat to a file (for troubleshooting)",
-        "ES": " Guardar el chat capturado en un archivo (diagnóstico)",
+        "RU": "Записывать перехваченный чат в файл (для диагностики)",
+        "EN": "Write captured chat to a file (for troubleshooting)",
+        "ES": "Guardar el chat capturado en un archivo (diagnóstico)",
     },
     "settings.privacy.trace_hint": {
         "RU": "Файл содержит текст ВСЕХ сообщений целиком, включая чужие шёпоты. Включайте только на время разбора проблемы.",
@@ -779,6 +784,56 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 
     # Overlay tab
+    "settings.close": {
+        "RU": "Закрыть",
+        "EN": "Close",
+        "ES": "Cerrar",
+    },
+    "settings.theme_preset": {
+        "RU": "Пресет оформления",
+        "EN": "Theme preset",
+        "ES": "Estilo",
+    },
+    "settings.color.background": {
+        "RU": "Фон",
+        "EN": "Background",
+        "ES": "Fondo",
+    },
+    "settings.color.timestamp": {
+        "RU": "Время",
+        "EN": "Timestamp",
+        "ES": "Hora",
+    },
+    "settings.color.original": {
+        "RU": "Исходный текст",
+        "EN": "Original text",
+        "ES": "Texto original",
+    },
+    "settings.color.translated": {
+        "RU": "Перевод",
+        "EN": "Translated text",
+        "ES": "Traducción",
+    },
+    "settings.overlay.corner_radius": {
+        "RU": "Скругление углов",
+        "EN": "Corner radius",
+        "ES": "Radio de esquina",
+    },
+    "settings.overlay.font": {
+        "RU": "Шрифт",
+        "EN": "Font",
+        "ES": "Fuente",
+    },
+    "settings.titlebar_colors": {
+        "RU": "Цвета заголовка",
+        "EN": "Title bar colours",
+        "ES": "Colores del título",
+    },
+    "settings.channel_colors": {
+        "RU": "Цвета каналов",
+        "EN": "Channel colours",
+        "ES": "Colores de canal",
+    },
     "settings.appearance_group": {
         "RU": "Внешний вид",
         "EN": "Appearance",

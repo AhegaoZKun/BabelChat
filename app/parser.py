@@ -431,6 +431,3 @@ def parse_line(line: str) -> ChatMessage | None:
 def _is_system_message(text: str) -> bool:
     """Check if the message text matches known system message patterns."""
     return any(p.search(text) for p in _SYSTEM_PATTERNS)
-
-
-# Map addon CHAT_MSG_* event channel names to Channel enum

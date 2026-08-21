@@ -32,7 +32,17 @@ class TranslatorService:
         self._backends: dict[str, TranslatorBackend] = {}
         self._priority = priority
 
-        for provider_id, settings in (providers or {}).items():
+        # A provider that needs no account is available whether or not the
+        # config mentions it. Requiring an entry meant a user upgrading from a
+        # DeepL-only config had no fallback at all until they happened to open
+        # Settings and press Save — and the whole point of a keyless provider is
+        # that it works before anyone configures anything.
+        entries = dict(providers or {})
+        for spec in base.all_providers():
+            if spec.keyless:
+                entries.setdefault(spec.id, {})
+
+        for provider_id, settings in entries.items():
             spec = base.get(provider_id)
             if spec is None:
                 logger.warning("Skipping unknown translation provider %r", provider_id)

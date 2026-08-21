@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("lupa", reason="lupa provides the Lua 5.1 runtime the addon needs")
 
-from tests.lua_harness import load_companion_buffer  # noqa: E402
+from tests.lua_harness import AddonHarness, load_companion_buffer  # noqa: E402
 
 
 def flush(harness) -> None:
@@ -331,3 +331,79 @@ def test_nothing_is_buffered_while_the_companion_is_off():
     flush(h)
 
     assert h.buffer_entries() == []
+
+
+# ── the channel token the filter emits ───────────────────────────────────────
+
+
+def chat_filter_harness():
+    """Core.lua loaded far enough to call its chat filter."""
+    h = AddonHarness()
+    lua = h.lua
+    lua.execute(
+        "CreateFrame = function()  return setmetatable({}, {__index = function() return function() end end})end"
+    )
+    lua.execute("SlashCmdList = {}; strtrim = function(s) return (s:gsub('^%s*(.-)%s*$', '%1')) end")
+    lua.globals().GetLocale = lambda: "ruRU"
+    h.addon_table.L = lua.eval("setmetatable({}, {__index = function(_, k) return k end})")
+    h.load("Core.lua")
+    h.addon_table.InitialiseSavedVariables()
+    lua.execute("BabelChatDB.companion.enabled = true")
+    return h
+
+
+def channel_token(h, channel_string, zone_channel_id):
+    """The event token the filter would put in the buffer for this message."""
+    captured = []
+    original = h.addon_table.BufferAddEntry
+    h.addon_table.BufferAddEntry = lambda text, kind, event, author: captured.append(event)
+    try:
+        # CHAT_MSG_CHANNEL: (text, author, lang, channelString, author2, flags,
+        # zoneChannelID, channelIndex, channelBaseName)
+        h.addon_table.ChatFilter(
+            None, "CHAT_MSG_CHANNEL", "hi", "Vasya",
+            "", channel_string, "Vasya", 0, zone_channel_id, 1, "Trade",
+        )
+    finally:
+        h.addon_table.BufferAddEntry = original
+    return captured[0] if captured else None
+
+
+def test_a_known_channel_sends_its_type_id():
+    h = chat_filter_harness()
+
+    assert channel_token(h, "2. Торговля - Оргриммар", 2) == "CHANNEL:2:Торговля - Оргриммар"
+
+
+def test_a_player_made_channel_sends_zero():
+    h = chat_filter_harness()
+
+    assert channel_token(h, "5. TradeHub", 0) == "CHANNEL:0:TradeHub"
+
+
+def test_an_unreadable_id_falls_back_to_the_older_two_part_token():
+    """Zero means "a player made this" to the companion, so it must never stand
+    in for "we could not read the id" — that would file a real Trade channel as
+    a private one and stop translating it."""
+    h = chat_filter_harness()
+
+    assert channel_token(h, "2. Торговля - Оргриммар", None) == "CHANNEL:Торговля - Оргриммар"
+    assert channel_token(h, "2. Торговля - Оргриммар", h.secret()) == "CHANNEL:Торговля - Оргриммар"
+
+
+@pytest.mark.parametrize("unusable", ["number", "secret", "nil"])
+def test_a_channel_name_that_is_not_text_does_not_break_the_filter(unusable):
+    """string.len(42) succeeds in Lua 5.1 — numbers coerce — so a length probe
+    alone waves a number through to a gsub that raises on it, and that raise
+    takes the chat filter down for the rest of the session: no more capture, no
+    more gloss, no error the player can see.
+
+    The message still reaches the buffer; it just carries no channel detail.
+    Losing the channel is survivable, losing the filter is not."""
+    h = chat_filter_harness()
+    value = {"number": 42, "nil": None}.get(unusable) if unusable != "secret" else h.secret()
+
+    token = channel_token(h, value, 2)
+
+    assert token == "CHANNEL", f"expected the bare event, got {token!r}"
+    assert channel_token(h, "2. Торговля", 2) == "CHANNEL:2:Торговля", "the filter stopped working"

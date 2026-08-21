@@ -21,6 +21,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from app.config import AppConfig, detect_wow_path  # noqa: E402
+from app.i18n import tr  # noqa: E402
 from app.translators import all_providers  # noqa: E402
 from app.translators import get as provider_get  # noqa: E402
 
@@ -57,9 +58,9 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._index = 0
 
         # Nav bar
-        self._back = Gtk.Button(label="Back")
+        self._back = Gtk.Button(label=tr("wizard.back"))
         self._back.connect("clicked", lambda _b: self._go(-1))
-        self._next = Gtk.Button(label="Next")
+        self._next = Gtk.Button(label=tr("wizard.next"))
         self._next.add_css_class("suggested-action")
         self._next.connect("clicked", self._on_next)
         self._step_lbl = Gtk.Label()
@@ -168,7 +169,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
             # secret, and hiding it just makes it harder to check for typos.
             entry.set_visibility(not secret)
             entry.set_hexpand(True)
-            btn = Gtk.Button(label="Validate")
+            btn = Gtk.Button(label=tr("wizard.api.validate"))
             btn.connect("clicked", validate_cb)
             r.append(lbl)
             r.append(entry)
@@ -195,7 +196,7 @@ class _WizardWindow(Gtk.ApplicationWindow):
             self._provider_entries[spec.id] = fields
 
         prio_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        prio_lbl = Gtk.Label(label="Prefer")
+        prio_lbl = Gtk.Label(label=tr("settings.api.preferred"))
         prio_lbl.set_width_chars(14)
         prio_lbl.set_xalign(0.0)
         self._priority = self._dropdown(
@@ -225,9 +226,9 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._wow_entry.set_text(self._config.wow_path or "")
         self._wow_entry.set_placeholder_text("…/World of Warcraft")
         self._wow_entry.set_hexpand(True)
-        detect_btn = Gtk.Button(label="Auto-detect")
+        detect_btn = Gtk.Button(label=tr("wizard.wow.auto"))
         detect_btn.connect("clicked", self._auto_detect)
-        browse_btn = Gtk.Button(label="Browse…")
+        browse_btn = Gtk.Button(label=tr("wizard.wow.browse"))
         browse_btn.connect("clicked", self._browse)
         row.append(self._wow_entry)
         row.append(detect_btn)
