@@ -317,3 +317,16 @@ def test_the_addon_and_the_app_report_the_same_version():
     from app.about_dialog import VERSION
 
     assert toc_directive("Version") == VERSION
+
+
+@pytest.mark.parametrize("name", sorted(p.name for p in (TOC.parent).glob("*.lua")))
+def test_every_addon_file_parses_as_lua(name):
+    """A syntax error in a file WoW loads is silent to everyone but the player,
+    who sees the addon simply not work. Splitting a file is exactly when one
+    gets introduced."""
+    source = (TOC.parent / name).read_text(encoding="utf-8")
+    runtime = lua51.LuaRuntime()
+
+    compiled = runtime.eval("loadstring")(source, name)
+
+    assert compiled is not None, f"{name} does not parse"

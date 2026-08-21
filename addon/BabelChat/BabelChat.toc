@@ -59,3 +59,4 @@ DictEngine.lua
 CompanionBuffer.lua
 Config.lua
 Core.lua
+Commands.lua
