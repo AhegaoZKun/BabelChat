@@ -158,9 +158,14 @@ def test_the_message_is_still_available_at_debug(tmp_path, caplog):
     assert SECRET in caplog.text
 
 
-def test_a_whisper_from_a_disabled_channel_never_reaches_the_log(tmp_path, caplog):
-    """End to end, at the loudest level a user can turn on: a message from a
-    channel the user unticked leaves no trace of its text anywhere."""
+def test_a_whisper_from_a_disabled_channel_is_not_quoted_in_the_application_log(tmp_path, caplog):
+    """End to end, at the loudest logging level a user can turn on: a message
+    from a channel the user unticked is not quoted in the application log.
+
+    Deliberately narrower than it once claimed. The opt-in capture trace is a
+    separate file with a separate contract — see the tests below — and it does
+    record everything the addon delivered, by design and by its own on-screen
+    warning. Saying "anywhere" here was untrue of that file."""
     from app.parser import Channel
     from app.pipeline import PipelineConfig, TranslationPipeline
 
@@ -177,3 +182,57 @@ def test_a_whisper_from_a_disabled_channel_never_reaches_the_log(tmp_path, caplo
         pipeline._on_new_line(line)
 
     assert "something private" not in caplog.text
+
+
+# ── the trace file, whose contract is different on purpose ───────────────────
+
+
+def trace_path(tmp_path):
+    return tmp_path / "babelchat_raw.log"
+
+
+def test_the_trace_file_is_not_created_while_the_trace_is_off(tmp_path):
+    """The default. Nothing about capture reaches disk unless asked."""
+    path = trace_path(tmp_path)
+    debug_log.configure(False, str(path))
+
+    debug_log.record(1, "RAW", "WHISPER", "Stranger-Realm", SECRET)
+
+    assert not path.exists()
+
+
+def test_the_trace_records_a_disabled_channel_too_and_says_so(tmp_path):
+    """Pinning the contract rather than pretending otherwise.
+
+    The trace exists to diagnose capture — what the addon actually delivered —
+    so filtering it by the user's channel toggles would remove the evidence
+    someone turned it on to find. It therefore holds whispers from channels the
+    user has unticked, which is exactly what the checkbox's hint warns about.
+    That warning is part of the contract, so it is asserted here: if the copy
+    ever softens, this test is where it gets caught."""
+    from app.i18n import _STRINGS
+
+    path = trace_path(tmp_path)
+    debug_log.configure(True, str(path))
+    debug_log.record(1, "RAW", "WHISPER", "Stranger-Realm", SECRET)
+    debug_log.configure(False, str(path))
+
+    assert SECRET in path.read_text(encoding="utf-8")
+
+    hint = _STRINGS["settings.privacy.trace_hint"]
+    assert "whisper" in hint["EN"].lower(), "the warning must still name whispers"
+    assert "шёпот" in hint["RU"].lower()
+
+
+def test_turning_the_trace_off_stops_it_writing(tmp_path):
+    """The switch has to work in both directions, or "turn it on only while
+    investigating" is advice the app does not honour."""
+    path = trace_path(tmp_path)
+    debug_log.configure(True, str(path))
+    debug_log.record(1, "RAW", "SAY", "Friend", "first")
+    debug_log.configure(False, str(path))
+    debug_log.record(2, "RAW", "SAY", "Friend", "second")
+
+    written = path.read_text(encoding="utf-8")
+    assert "first" in written
+    assert "second" not in written

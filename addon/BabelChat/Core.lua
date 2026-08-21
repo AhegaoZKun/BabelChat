@@ -369,7 +369,17 @@ end
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 
-initFrame:SetScript("OnEvent", function(self, event)
+-- Everything that has to happen to BabelChatDB before anything reads it, in
+-- the one order that is correct: adopt the old addon's table if that is all
+-- the player has, rename the Spanish-derived keys, and only then fill in
+-- defaults. The other order sees the new keys missing, defaults them to
+-- `true`, and hands every player back the categories they had switched off.
+--
+-- Exported rather than left inline in the event handler so it can run without
+-- a game underneath it: that ordering is the part most worth a test, and it
+-- was unreachable while it lived inside OnEvent.
+function addonTable.InitialiseSavedVariables()
+    local db
     -- Migrate from old ChatTranslatorHelper if present
     if ChatTranslatorHelperDB and not BabelChatDB then
         BabelChatDB = ChatTranslatorHelperDB
@@ -388,14 +398,19 @@ initFrame:SetScript("OnEvent", function(self, event)
     end
     ApplyDefaults(BabelChatDB, DEFAULTS)
 
-    local db = BabelChatDB
-
     -- Initialize default channel states
+    local db = BabelChatDB
     for _, e in ipairs(CHAT_EVENTS) do
         if db.dict.settings.channels[e] == nil then
             db.dict.settings.channels[e] = true
         end
     end
+
+    return db
+end
+
+initFrame:SetScript("OnEvent", function(self, event)
+    local db = addonTable.InitialiseSavedVariables()
 
     -- Auto-detect locale
     AutoDetectLocale()

@@ -347,6 +347,17 @@ end
 -- whether the player set the companion up — the addon has no way to see
 -- whether the app is running right now, since the buffer is read-only from the
 -- app's side and nothing is ever written back.
+-- How many entries the engine currently holds, across all three of the places
+-- it keeps them. Exported so a test can watch a category toggle take effect
+-- rather than infer it from the shape of the source.
+function addonTable.MasterDictSize()
+    local count = 0
+    for _ in pairs(MasterDict) do count = count + 1 end
+    for _, bucket in pairs(PhraseIndex) do count = count + #bucket end
+    for _, bucket in pairs(BabbleIndex) do count = count + #bucket end
+    return count
+end
+
 function addonTable.ShouldSuppressGloss()
     local db = BabelChatDB
     if not db or not db.dict then return false end

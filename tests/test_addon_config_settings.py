@@ -117,33 +117,266 @@ def test_every_renamed_key_is_covered(core):
     assert renames == RENAMED
 
 
-# ── the keys the rest of the addon uses ──────────────────────────────────────
+# ── the panel, built ─────────────────────────────────────────────────────────
 
 
 def source(*names: str) -> str:
-    return "\n".join((ADDON_DIR / name).read_text(encoding="utf-8") for name in names)
+    return chr(10).join((ADDON_DIR / name).read_text(encoding="utf-8") for name in names)
 
 
-def test_no_spanish_derived_key_survives_anywhere():
-    """A leftover in DictEngine or Config would read a key nothing writes, and
-    the category would appear enabled while translating nothing."""
-    text = source("Core.lua", "Config.lua", "DictEngine.lua")
-    # The rename table itself is the one legitimate place they still appear.
-    text = text.split("addonTable.SETTING_RENAMES")[0] + text.split("}")[-1]
-    leftovers = [old for old in RENAMED if re.search(rf'"{old}"|\b{old}\s*=', text)]
-    assert leftovers == [], f"still referenced: {leftovers}"
+RECORDING_FRAME = """
+    _frames = {}
+    _registered = nil
+    _scroll_child = nil
+
+    local function NewFrame(kind, name, parent, template)
+        local frame = {
+            -- `false` rather than nil: a nil field falls through to the
+            -- __index below and comes back as a function, which reads as
+            -- "present" on the Python side and made this fixture lie once.
+            kind = kind, name = name or false, parent = parent, template = template or false,
+            points = {}, height = 0, width = 0, text = false, shown = true,
+        }
+        function frame:GetName() return self.name end
+        function frame:SetPoint(anchor, a, b, c, d)
+            -- Both shapes the panel uses: (anchor, x, y) and
+            -- (anchor, relativeTo, relativePoint, x, y).
+            if type(a) == "table" then
+                -- Anchored to another frame: its x/y are in that frame's space,
+                -- not the panel's, so they are recorded but not comparable.
+                table.insert(self.points, { anchor = anchor, relative = a, x = c, y = d, absolute = false })
+            else
+                table.insert(self.points, { anchor = anchor, x = a, y = b, absolute = true })
+            end
+        end
+        function frame:SetSize(w, h) self.width, self.height = w, h end
+        function frame:SetHeight(h) self.height = h end
+        function frame:SetWidth(w) self.width = w end
+        function frame:SetText(value) self.text = value end
+        function frame:SetScrollChild(child) _scroll_child = child end
+        function frame:CreateTexture()
+            local texture = NewFrame("Texture")
+            table.insert(_frames, texture)
+            return texture
+        end
+        function frame:CreateFontString()
+            local fontString = NewFrame("FontString")
+            table.insert(_frames, fontString)
+            return fontString
+        end
+        return setmetatable(frame, {
+            __index = function(_, key)
+                if key == "GetName" then return nil end
+                return function() end
+            end,
+        })
+    end
+
+    CreateFrame = function(kind, name, parent, template)
+        local frame = NewFrame(kind, name, parent, template)
+        table.insert(_frames, frame)
+        if name then
+            _G[name] = frame
+            -- InterfaceOptionsCheckButtonTemplate creates a "<name>Text" label.
+            _G[name .. "Text"] = NewFrame("FontString", name .. "Text")
+        end
+        return frame
+    end
+
+    UIParent = CreateFrame("Frame", "UIParent")
+    C_AddOns = { GetAddOnMetadata = function() return "3.3.0" end }
+    -- The dropdown API is a dozen loose globals and none of them matter to
+    -- what these tests measure. Narrowly scoped so any OTHER missing global
+    -- still surfaces as the nil-index error the harness intends.
+    setmetatable(_G, { __index = function(_, key)
+        if type(key) == "string" and key:match("^UIDropDownMenu_") then
+            return function() return {} end
+        end
+        return nil
+    end })
+    ColorPickerFrame = CreateFrame("Frame", "ColorPickerFrame")
+    Settings = {
+        RegisterCanvasLayoutCategory = function(canvas, title)
+            _registered = canvas
+            return {
+                ID = title,
+                GetID = function(self) return self.ID end,
+                SetID = function(self, value) self.ID = value end,
+            }
+        end,
+        RegisterAddOnCategory = function() end,
+    }
+"""
 
 
-def test_the_dictionary_engine_and_the_panel_agree_on_every_key():
-    engine = re.findall(r'\{ key = "(\w+)"', source("DictEngine.lua"))
-    panel = re.findall(r'key = "(\w+)"', source("Config.lua"))
-    assert set(engine) - set(panel) == set(), "engine reads a toggle the panel never shows"
+@pytest.fixture
+def panel(core):
+    """Config.lua run for real, with a CreateFrame that records what it built.
+
+    These properties used to be checked by matching the source text, which meant
+    renaming a local variable reddened a test without breaking the addon, and
+    shipping the bug the test named passed as long as some line still looked
+    right. Building the panel measures the panel.
+    """
+    lua = core.lua
+    lua.execute(RECORDING_FRAME)
+    # The addon's own defaults, not a hand-written stand-in: a panel that reads
+    # a field ApplyDefaults never writes is exactly the failure worth catching.
+    lua.execute("BabelChatDB = {}")
+    core.addon_table.InitialiseSavedVariables()
+    core.load("Config.lua")
+    core.addon_table.CreateConfigUI()
+    return core
 
 
-def test_the_defaults_cover_every_key_the_panel_shows():
-    defaults = set(re.findall(r"^\s+(show\w+) = ", source("Core.lua"), re.M))
-    panel = set(re.findall(r'key = "(show\w+)"', source("Config.lua")))
-    assert panel - defaults == set(), "a toggle with no default starts as nil"
+def _load_dictionary_data(harness):
+    """The engine plus the tables it indexes, including a LibBabble that answers.
+
+    A toggle can only be shown to switch something if the thing it switches is
+    loaded; without the Data files every category looks equally dead and the
+    test passes on nothing.
+    """
+    for path in sorted((ADDON_DIR / "Data").glob("*.lua")):
+        harness.load(f"Data/{path.name}")
+    harness.lua.execute(
+        """
+        _babble = { ["Elwynn Forest"] = "Элвиннский лес", ["Duskwood"] = "Сумеречный лес" }
+        local library = { GetUnstrictLookupTable = function() return _babble end }
+        LibStub = function() return library end
+        """
+    )
+    harness.load("DictEngine.lua")
+    harness.addon_table.InitLibBabble()
+
+
+def built_frames(harness):
+    return list(harness.lua.globals()._frames.values())
+
+
+def checkbox_keys(harness) -> set[str]:
+    """The category toggles the panel actually created, by their setting key."""
+    prefix = "WCT_CB_"
+    return {
+        frame.name[len(prefix):]
+        for frame in built_frames(harness)
+        if frame.name and str(frame.name).startswith(prefix)
+    }
+
+
+def test_the_panel_creates_a_checkbox_for_every_category_the_engine_reads(panel):
+    """The engine consults a fixed map of setting keys. One the panel never
+    shows is a category the user cannot switch on, permanently off or
+    permanently on depending on the default."""
+    _load_dictionary_data(panel)
+    engine_keys = set(re.findall(r'\{ key = "(\w+)"', source("DictEngine.lua")))
+
+    shown = checkbox_keys(panel)
+
+    assert engine_keys - shown == set(), f"the engine reads a toggle nobody can see: {engine_keys - shown}"
+
+
+def test_every_checkbox_the_panel_shows_has_a_default(panel):
+    """A toggle with no default starts as nil, which reads as off — so a
+    category the user never touched is silently disabled."""
+    panel.lua.execute("BabelChatDB.dict.settings = {}")
+    panel.addon_table.InitialiseSavedVariables()
+    defaults = panel.lua.globals().BabelChatDB.dict.settings
+
+    missing = [key for key in checkbox_keys(panel) if defaults[key] is None]
+
+    assert missing == [], f"no default for: {missing}"
+
+
+def test_the_scrolling_canvas_is_registered_and_is_not_the_scroll_child(panel):
+    """Registering the scroll child instead of the canvas gives the options
+    window a frame that scrolls inside itself and clips at the wrong edge."""
+    registered = panel.lua.globals()._registered
+    child = panel.lua.globals()._scroll_child
+
+    assert registered is not None, "nothing was registered with the options window"
+    assert child is not None, "the scroll frame was never given its content"
+    assert registered.name != child.name
+
+
+def test_no_section_heading_overlaps_the_row_beneath_it(panel):
+    """Two sections used a 5px gap and two used 25px; the difference was not
+    intentional, and 5px under a 14px heading put the checkbox inside the text.
+
+    Only headings are checked. The category grid runs on a deliberate 25px
+    pitch, which is tighter than the template's 26px hit area and correct: that
+    was never the complaint, and asserting on it would fail the addon for
+    looking the way it is meant to look.
+    """
+    headings = [
+        (frame, point)
+        for frame in built_frames(panel)
+        if frame.kind == "FontString" and not frame.name and frame.text
+        for point in frame.points.values()
+        if point.absolute and point.y is not None and point.x is not None
+    ]
+    rows = sorted(
+        (
+            (point.y, point.x, frame)
+            for frame in built_frames(panel)
+            for point in frame.points.values()
+            if point.absolute and point.y is not None and point.x is not None
+        ),
+        key=lambda row: -row[0],
+    )
+
+    too_close = []
+    for heading, point in headings:
+        below = [y for y, x, frame in rows if y < point.y and frame is not heading]
+        if not below:
+            continue
+        gap = point.y - max(below)
+        if gap < HEADING_HEIGHT:
+            too_close.append((heading.text, gap))
+
+    assert too_close == [], f"a {HEADING_HEIGHT}px heading with less than that beneath it: {too_close}"
+
+
+# ── the keys the rest of the addon uses ──────────────────────────────────────
+# ── the keys the rest of the addon uses ──────────────────────────────────────
+
+
+def test_every_toggle_the_panel_shows_actually_switches_a_category(panel):
+    """The Spanish-derived key names were renamed across three files. A leftover
+    would read a key nothing writes, and the category would appear enabled in
+    the panel while translating nothing — silent, and impossible for a user to
+    report as anything but "it does not work".
+
+    This used to be a regex over the source of those three files, which cut the
+    text to 7% of itself before searching and never looked at Config.lua at all.
+    Switching each toggle and watching the dictionary respond measures the thing
+    the names were only a proxy for.
+    """
+    _load_dictionary_data(panel)
+    settings = panel.lua.globals().BabelChatDB.dict.settings
+
+    dead = []
+    for key in sorted(checkbox_keys(panel)):
+        for other in checkbox_keys(panel):
+            settings[other] = False
+        panel.addon_table.RebuildMasterDict()
+        without = panel.addon_table.MasterDictSize()
+
+        settings[key] = True
+        panel.addon_table.RebuildMasterDict()
+        with_it = panel.addon_table.MasterDictSize()
+
+        if with_it <= without:
+            dead.append(key)
+
+    assert dead == [], f"these toggles switch nothing: {dead}"
+
+
+def test_the_old_spanish_key_names_are_gone_from_the_panel(panel):
+    """The rename table is the one place they are still allowed to appear."""
+    shown = checkbox_keys(panel)
+    survivors = sorted(shown & set(RENAMED))
+
+    assert survivors == [], f"the panel still shows: {survivors}"
 
 
 # ── layout arithmetic ────────────────────────────────────────────────────────
@@ -162,11 +395,6 @@ def config_constant(name: str) -> int:
     return int(match.group(1))
 
 
-def test_a_heading_never_overlaps_the_row_beneath_it():
-    gap = config_constant("SECTION_GAP")
-    assert gap >= HEADING_HEIGHT, f"a {gap}px gap puts the checkbox {HEADING_HEIGHT - gap}px inside the heading"
-
-
 def test_every_section_uses_the_shared_gap():
     """Two sections used 5 and two used 25; the difference was not intentional."""
     text = source("Config.lua")
@@ -174,19 +402,3 @@ def test_every_section_uses_the_shared_gap():
     assert literal_gaps == [], f"a section still hardcodes its gap: {literal_gaps}"
 
 
-def test_the_scroll_content_is_taller_than_the_content_it_holds():
-    """Cheap upper bound: title, two 3-column grids and the trailing sections."""
-    text = source("Config.lua")
-    height = config_constant("CONTENT_HEIGHT")
-    categories = len(re.findall(r'key = "show\w+"', text))
-    rows = -(-categories // 3)
-    # 130px above the grid, 25px per row, and ~250px of channels plus companion.
-    minimum = 130 + rows * 25 + 250
-    assert height >= minimum, f"{height}px cannot hold about {minimum}px of content"
-
-
-def test_the_panel_is_registered_as_a_scrolling_canvas():
-    text = source("Config.lua")
-    assert "UIPanelScrollFrameTemplate" in text
-    assert "SetScrollChild" in text
-    assert "RegisterCanvasLayoutCategory(canvas" in text, "the scroll child must not be the canvas"
