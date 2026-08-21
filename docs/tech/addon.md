@@ -24,9 +24,10 @@ ChatFrame_AddMessageEventFilter(event, ChatFilter)
 ```
 
 The `ChatFilter` function:
-1. Runs dictionary translation if enabled → produces annotation
-2. Writes to companion buffer (ALL channels, regardless of dict filter)
-3. Returns modified text (annotation below original) for in-game display
+1. Writes to the companion buffer (ALL channels, regardless of the dict filter)
+2. Runs the dictionary if it has anything to say, appending the gloss to the
+   same line
+3. Returns the modified text for in-game display
 
 ## Ring Buffer (CompanionBuffer.lua)
 
@@ -40,11 +41,28 @@ The `ChatFilter` function:
 
 Based on Pirson's WoW Translator (MIT License), rewritten for v2:
 
-- **Annotation-based** (not inline replacement): `→ term1, term2`
-- **Hyperlink-aware**: skips `|H...|h` and `|cff...|r` blocks
-- **Overlap guard**: matched ranges tracked, no double translations
-- **Multi-word priority**: longest phrases matched first
-- **13 categories**: Social, Classes, Combat, Raid, Groups, Stats, Professions, Trade, Status, Guild, Roles, Slang
+- **Appended, on the same line**: `wts bis ring 500k  wts = продаю · bis = лучшее в слоте`,
+  in grey. Not a second line: that doubled the height of every glossed message
+  and broke copy-chat, which is most of why a busy Trade channel was unreadable.
+- **One entry per term**, in the order the message says them — "ty ty ty" is one
+  thing worth saying, not three, and a gloss that runs in a different order from
+  the sentence above it is harder to read than no gloss at all.
+- **Capped at three pairs** plus a `+N` count.
+- **First alternative only**: the data says "Спасибо/спс", which is a
+  lexicographer's note, not a translation.
+- **Quiet when the companion is running** (`mode = "auto"`): otherwise both
+  answer the same message, in different words.
+- **Hyperlink-aware**: skips `|H...|h` and `|cff...|r` blocks, including the
+  named colour form.
+- **UTF-8 aware boundaries**: guillemets, the em dash and the non-breaking space
+  are punctuation, not letters, and the Cyrillic block is case-folded by hand
+  since Lua's `string.lower` is ASCII-only.
+- **Overlap guard**: matched ranges tracked, no double translations.
+- **Multi-word priority**: longest phrases matched first, looked up from the
+  trimmed word so punctuation cannot downgrade a phrase to its first word.
+- **13 categories**: Social, Classes, Combat, Raid, Groups, Stats, Professions,
+  Trade, Status, Guild, Roles, Slang, Endgame — plus zone and item-set names
+  from LibBabble.
 
 ## Config UI (Config.lua)
 

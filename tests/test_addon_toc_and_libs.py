@@ -188,3 +188,25 @@ def test_english_clients_get_populated_item_set_names(locale):
     table = lua.eval(b'LibStub("LibBabble-ItemSet-3.0"):GetUnstrictLookupTable()')
     assert table is not None, "no lookup table — the Item Sets toggle would do nothing"
     assert len(list(table)) > 100, "an English client must get the full set list"
+
+
+# ── documentation that claims a number ───────────────────────────────────────
+
+
+def test_the_readme_term_count_is_the_number_of_terms_there_are():
+    """It said 314 while the data files held 383. A number in a README is a
+    claim, and a stale one is the kind a contributor trusts and repeats."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    actual = sum(
+        len(re.findall(r'^\s*\["?[^\]]+"?\]\s*=\s*\{', path.read_text(encoding="utf-8"), re.M))
+        for path in (root / "addon" / "BabelChat" / "Data").glob("*.lua")
+    )
+
+    for name in ("README.md", "README_ru.md"):
+        text = (root / name).read_text(encoding="utf-8")
+        claimed = {int(n) for n in re.findall(r"(\d{3}) (?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)", text)}
+        assert claimed, f"{name} no longer states a term count — update this test with it"
+        assert claimed == {actual}, f"{name} claims {sorted(claimed)}, the data files hold {actual}"

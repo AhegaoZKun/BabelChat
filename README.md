@@ -45,7 +45,7 @@ Common phrases like "gg", "ty", "ready?", "pull" translate instantly from a buil
 - **Smart overlay** — WoW-themed dark UI, proper channel colors, click-through, draggable
 - **Bidirectional** — translate incoming chat AND compose outgoing messages in any language
 - **Built-in phrasebook** — 45 phrases + 30 gaming abbreviations translated instantly without API
-- **WoW glossary** — 314 gaming terms (lfm, wts, dps, tank, etc.) in 14 languages
+- **WoW glossary** — 383 gaming terms (lfm, wts, dps, tank, etc.) in 14 languages
 - **Channel filters** — Party, Raid, Guild, Say/Yell, Whisper, Instance
 - **DeepL Free API** — 500,000 characters/month free (~10K messages)
 - **Translation cache** — thread-safe SQLite + LRU, same text never translated twice
@@ -162,7 +162,7 @@ Copy `addon/BabelChat/` to `World of Warcraft/_retail_/Interface/AddOns/BabelCha
 
 ## WoW Glossary
 
-BabelChat includes a dictionary of **314 gaming terms** in **14 languages**, organized by category:
+BabelChat includes a dictionary of **383 gaming terms** in **14 languages**, organized by category:
 
 | Category        | Examples                              | Count |
 | --------------- | ------------------------------------- | ----- |
@@ -178,7 +178,11 @@ BabelChat includes a dictionary of **314 gaming terms** in **14 languages**, org
 | Roles           | tank, healer, dps                     | 7     |
 | Guild           | gm, officer, recruit, gbank           | 5     |
 
-Dictionary terms are shown as clean annotations below the original message — the chat stays readable.
+Glossed terms are appended to the message itself, in grey, as `term = meaning`
+pairs separated by a middle dot — at most three, then a count. Keeping it on
+one line is what makes a busy Trade channel readable, and it leaves copy-chat
+working. When the companion app is running, the addon stays quiet and lets the
+overlay do the talking instead of both answering the same message.
 
 ### Contributing terms
 
@@ -271,7 +275,7 @@ This project is a collaboration between three authors:
 
 | Component                                                                | Author              | Support                                                 |
 | ------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------- |
-| **WoW Glossary** — 314 terms in 14 languages, in-game dictionary idea    | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
+| **WoW Glossary** — 383 terms in 14 languages, in-game dictionary idea    | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
 | **Companion App** — overlay, DeepL translation, memory reader, streaming | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/)                   |
 
 ## Documentation
