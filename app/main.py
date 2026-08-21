@@ -136,6 +136,10 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         enabled_channels |= {Channel.SERVICES}
     if config.channels_lfg:
         enabled_channels |= {Channel.LOOKING_FOR_GROUP}
+    if config.channels_custom:
+        enabled_channels |= {Channel.CUSTOM}
+    if config.channels_emote:
+        enabled_channels |= {Channel.EMOTE}
 
     return PipelineConfig(
         chatlog_path=chatlog,

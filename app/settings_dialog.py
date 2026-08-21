@@ -250,6 +250,17 @@ class SettingsDialog(QDialog):
         ch_grid.addWidget(self._ch_general, 2, 1)
         ch_grid.addWidget(self._ch_services, 2, 2)
         ch_grid.addWidget(self._ch_lfg, 3, 0)
+
+        # Channels the classifier can now tell apart. Both off by default: a
+        # player-made channel is usually private, and emotes were previously
+        # indistinguishable from speech.
+        self._ch_custom = QCheckBox(tr("settings.ch.custom"))
+        self._ch_custom.setChecked(self._config.channels_custom)
+        ch_grid.addWidget(self._ch_custom, 3, 1)
+
+        self._ch_emote = QCheckBox(tr("settings.ch.emote"))
+        self._ch_emote.setChecked(self._config.channels_emote)
+        ch_grid.addWidget(self._ch_emote, 3, 2)
         layout.addWidget(ch_group)
 
         layout.addStretch()
@@ -441,6 +452,8 @@ class SettingsDialog(QDialog):
         self._config.channels_general = self._ch_general.isChecked()
         self._config.channels_services = self._ch_services.isChecked()
         self._config.channels_lfg = self._ch_lfg.isChecked()
+        self._config.channels_custom = self._ch_custom.isChecked()
+        self._config.channels_emote = self._ch_emote.isChecked()
         self._config.overlay_opacity = self._opacity_slider.value()
         self._config.overlay_font_size = self._font_size.value()
         self._config.translation_enabled_default = self._translate_default.isChecked()

@@ -141,24 +141,35 @@ local function ChatFilter(self, event, text, author, ...)
     -- Strip CHAT_MSG_ prefix for compact event name
     local shortEvent = event:gsub("^CHAT_MSG_", "")
 
-    -- For public/numbered channels, capture the channel name so the companion
-    -- can distinguish Trade / Services / General / LookingForGroup. The
-    -- CHAT_MSG_CHANNEL signature is (text, author, lang, channelString, ...);
-    -- channelString looks like "2. Trade - City". We keep the human name and
-    -- encode it into the event token as "CHANNEL:<Name>" (names never contain
-    -- a '|', so the pipe-delimited buffer format stays intact).
+    -- For public channels, send the channel's TYPE id alongside its name.
+    --
+    -- CHAT_MSG_CHANNEL is (text, author, lang, channelString, author2, flags,
+    -- zoneChannelID, channelIndex, channelBaseName, ...). `...` starts at arg3,
+    -- so channelString is select(2, ...) and zoneChannelID is select(5, ...).
+    --
+    -- The name alone was the bug: the companion matched it against English
+    -- words, so on a Russian client "Торговля" matched nothing and every public
+    -- channel — Trade included — was filed as General. zoneChannelID is the
+    -- same number on every locale, and it is 0 for a player-made channel, which
+    -- is exactly the distinction that was missing.
+    --
+    -- Encoded as "CHANNEL:<id>:<name>". An older addon sends "CHANNEL:<name>",
+    -- which the companion still understands.
     if event == "CHAT_MSG_CHANNEL" then
         local channelString = select(2, ...)
-        -- channelString is a chat event argument, so under chat messaging
-        -- lockdown it is a secret value — and both the truthiness test and the
-        -- gsub below are operations a secret rejects. Probe first: string.len
-        -- fails on a secret, on nil, and on a non-string alike, which is
-        -- exactly the set of values we must not touch.
+        local zoneChannelID = select(5, ...)
+        -- Both are chat event arguments, so under chat messaging lockdown they
+        -- are secret values, and every test below — truthiness, comparison,
+        -- gsub — is an operation a secret rejects. Probe first.
         if pcall(string.len, channelString) then
             -- Strip a leading "N. " channel-number prefix if present.
             local name = channelString:gsub("^%d+%.%s*", "")
             if name ~= "" then
-                shortEvent = "CHANNEL:" .. name
+                local channelType = 0
+                if pcall(string.len, zoneChannelID) then
+                    channelType = tonumber(zoneChannelID) or 0
+                end
+                shortEvent = "CHANNEL:" .. channelType .. ":" .. name
             end
         end
     end

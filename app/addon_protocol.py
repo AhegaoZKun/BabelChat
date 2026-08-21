@@ -44,7 +44,7 @@ _ADDON_CHANNEL_TO_LOG = {
     "INSTANCE_CHAT": "Instance",
     "INSTANCE_CHAT_LEADER": "Instance Leader",
     "CHANNEL": "Say",
-    "EMOTE": "Say",
+    "EMOTE": "Emote",
     "BATTLEGROUND": "Instance",
     "BATTLEGROUND_LEADER": "Instance Leader",
 }
@@ -99,21 +99,71 @@ def extract_max_seq(content: bytes) -> int:
     return max_seq
 
 
-def _classify_public_channel(name: str) -> str:
-    """Map a public channel's display name onto a log channel.
+# WoW's zoneChannelID: the same number on every locale, and 0 for a channel a
+# player made. Only the three we are confident of are listed; anything else
+# falls through to the name, and then to Custom, rather than being guessed at.
+_CHANNEL_TYPE_IDS = {
+    1: "General",
+    2: "Trade",
+    26: "LookingForGroup",
+}
 
-    Matching is on the English name, so a localised client falls through to
-    General — a known defect, tracked separately. It lives here rather than in
-    two reader copies so the fix lands once.
+# Fallback for buffers written by an addon too old to send the type id. Names
+# are matched as substrings because the client appends a zone: "Торговля - Оргриммар".
+_CHANNEL_NAME_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("trade", "торговля", "handel", "commerce", "comercio", "commercio", "comércio", "comercio"), "Trade"),
+    (("service", "услуги", "servicios", "servizi", "serviços", "dienste"), "Services"),
+    (
+        (
+            "lookingforgroup",
+            "looking for group",
+            "lfg",
+            "поиск группы",
+            "поиск спутников",
+            "buscar grupo",
+            "recherche de groupe",
+            "suche nach gruppe",
+        ),
+        "LookingForGroup",
+    ),
+    (("general", "общий", "allgemein", "général", "generale", "geral"), "General"),
+)
+
+CUSTOM_CHANNEL = "Custom"
+
+
+def classify_public_channel(channel_type: int, name: str) -> str:
+    """Map a public channel onto a log channel name.
+
+    The type id decides when it is one we know. Otherwise the display name is
+    tried, which is all an older addon sends. A channel that matches neither is
+    reported as Custom rather than General: a player-made channel is not the
+    General channel, and calling it one silently routed it into a toggle the
+    user thought they understood.
     """
+    known = _CHANNEL_TYPE_IDS.get(channel_type)
+    if known:
+        return known
+
     lowered = name.strip().lower()
-    if "trade" in lowered:
-        return "Trade"
-    if "service" in lowered or "comercio" in lowered:
-        return "Services"
-    if "lookingforgroup" in lowered or "looking for group" in lowered or "lfg" in lowered:
-        return "LookingForGroup"
-    return "General"
+    for hints, log_channel in _CHANNEL_NAME_HINTS:
+        if any(hint in lowered for hint in hints):
+            return log_channel
+
+    return CUSTOM_CHANNEL
+
+
+def parse_channel_token(token: str) -> tuple[int, str]:
+    """Split a "CHANNEL:<id>:<name>" event token into its parts.
+
+    Accepts the older "CHANNEL:<name>" shape, which carries no id, so an app
+    updated ahead of its addon keeps working.
+    """
+    payload = token.split(":", 1)[1] if ":" in token else ""
+    head, separator, tail = payload.partition(":")
+    if separator and head.strip().lstrip("-").isdigit():
+        return int(head), tail
+    return 0, payload
 
 
 def _timestamp() -> str:
@@ -128,7 +178,8 @@ def make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
     as "deliver the bare text" rather than inventing a channel.
     """
     if channel.startswith("CHANNEL:"):
-        log_channel = _classify_public_channel(channel.split(":", 1)[1])
+        channel_type, name = parse_channel_token(channel)
+        log_channel = classify_public_channel(channel_type, name)
         # Author can be empty on some channel messages; a placeholder keeps the
         # line in the parser's "[Channel] Author: text" shape instead of it
         # being dropped for looking malformed.

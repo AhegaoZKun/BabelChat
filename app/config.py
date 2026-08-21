@@ -101,6 +101,10 @@ class AppConfig:
     channels_general: bool = False
     channels_services: bool = False
     channels_lfg: bool = False
+    # Player-made channels. Off by default: they are usually private, and
+    # sending them to a translation service is a decision, not a default.
+    channels_custom: bool = False
+    channels_emote: bool = False
 
     # Translation
     skip_own_messages: bool = True

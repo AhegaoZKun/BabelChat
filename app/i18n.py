@@ -679,6 +679,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Services",
         "ES": "Servicios",
     },
+    "settings.ch.custom": {
+        "RU": "Свои каналы",
+        "EN": "Custom channels",
+        "ES": "Canales propios",
+    },
+    "settings.ch.emote": {
+        "RU": "Эмоции",
+        "EN": "Emotes",
+        "ES": "Emotes",
+    },
     "settings.ch.lfg": {
         "RU": "Поиск группы",
         "EN": "LFG",
