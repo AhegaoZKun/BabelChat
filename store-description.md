@@ -17,7 +17,7 @@ BabelChat appends the meaning, in grey, on the same line:
 No second line, no colour spam, no arrows. The original stays readable, copy-chat
 still works, and a busy Trade channel stays a Trade channel.
 
-That is the **addon on its own** — 383 gaming terms in 14 languages. No account,
+That is the **addon on its own** — 436 gaming terms in 14 languages. No account,
 no key, no companion app, nothing to configure.
 
 Add the **free companion app** and whole sentences get translated too, in an
@@ -66,23 +66,23 @@ regardless.
 
 ## What's in the glossary
 
-**383 terms across 13 categories, in 14 languages**, plus every zone and item-set
+**436 terms across 13 categories, in 14 languages**, plus every zone and item-set
 name from LibBabble.
 
 | Category | Examples | Terms |
 |---|---|---|
-| Social | ty, gg, brb, wp, omw | 71 |
+| Social | ty, gg, brb, wp, omw, cya, pls | 83 |
+| Raid & dungeon | wipe, prog, soak, kite, brez, pull, adds | 63 |
 | Classes & specs | dk, ret, bm, disc, resto | 59 |
-| Raid & dungeon | wipe, prog, soak, kite, brez | 54 |
-| Slang | ez, copium, bricked, w2w | 48 |
-| Combat | aggro, aoe, cc, dot, cleave | 33 |
-| Groups | lfm, lf1m, premade, pug | 29 |
-| Endgame & Midnight | delve, m+, keystone, catalyst, warband | 22 |
-| Stats | crit, haste, mastery, vers | 19 |
+| Slang | ez, copium, bricked, w2w, gogo | 49 |
+| Combat | aggro, aoe, cc, dot, purge, arena | 39 |
+| Groups | lfm, lf1m, inv, pug, mythic, heroic | 36 |
+| Endgame & Midnight | delve, m+, keystone, catalyst, timed, chest | 26 |
+| Stats | crit, haste, mastery, vers, mana, parse | 25 |
 | Professions | jc, bs, enchant, herb, alch | 17 |
-| Status | afk, oom | 11 |
-| Trade | wtb, wts, bis, mats, cod | 8 |
-| Roles | tank, healer, dps | 7 |
+| Status | afk, oom, combat, ooc, bio | 14 |
+| Roles | tank, healer, dps, melee, ranged | 11 |
+| Trade | wtb, wts, bis, mats, cod, sold | 9 |
 | Guild | gm, officer, recruit, gbank | 5 |
 
 **Languages:** English, Russian, Spanish (ES/MX), German, French, Italian,
@@ -167,7 +167,7 @@ BabelChat дописывает серым, на той же строке:
 Без второй строки, без цветного мусора, без стрелок. Оригинал остаётся читаемым,
 копирование чата работает, и Торговля остаётся Торговлей.
 
-Это **аддон сам по себе** — 383 игровых термина на 14 языках. Без аккаунта, без
+Это **аддон сам по себе** — 436 игровых терминов на 14 языках. Без аккаунта, без
 ключей, без приложения, без настройки.
 
 Поставь ещё и **бесплатное приложение-компаньон** — и переводиться будут целые
@@ -205,23 +205,23 @@ BabelChat дописывает серым, на той же строке:
 
 ## Что в словаре
 
-**383 термина в 13 категориях на 14 языках**, плюс все названия зон и комплектов
+**436 терминов в 13 категориях на 14 языках**, плюс все названия зон и комплектов
 из LibBabble. У каждой категории свой переключатель.
 
 | Категория | Примеры | Терминов |
 |---|---|---|
-| Общение | ty, gg, brb, wp, omw | 71 |
+| Общение | ty, gg, brb, wp, omw, cya, pls | 83 |
+| Рейды и подземелья | wipe, prog, soak, kite, brez, pull, adds | 63 |
 | Классы и специализации | dk, ret, bm, disc, resto | 59 |
-| Рейды и подземелья | wipe, prog, soak, kite, brez | 54 |
-| Сленг | ez, copium, bricked, w2w | 48 |
-| Бой | aggro, aoe, cc, dot, cleave | 33 |
-| Группы | lfm, lf1m, premade, pug | 29 |
-| Эндгейм и Midnight | delve, m+, keystone, catalyst | 22 |
-| Характеристики | crit, haste, mastery, vers | 19 |
+| Сленг | ez, copium, bricked, w2w, gogo | 49 |
+| Бой | aggro, aoe, cc, dot, purge, arena | 39 |
+| Группы | lfm, lf1m, inv, pug, mythic, heroic | 36 |
+| Эндгейм и Midnight | delve, m+, keystone, catalyst, timed | 26 |
+| Характеристики | crit, haste, mastery, vers, mana, parse | 25 |
 | Профессии | jc, bs, enchant, herb, alch | 17 |
-| Состояние | afk, oom | 11 |
-| Торговля | wtb, wts, bis, mats, cod | 8 |
-| Роли | tank, healer, dps | 7 |
+| Состояние | afk, oom, combat, ooc, bio | 14 |
+| Роли | tank, healer, dps, melee, ranged | 11 |
+| Торговля | wtb, wts, bis, mats, cod, sold | 9 |
 | Гильдия | gm, officer, recruit, gbank | 5 |
 
 ## Мелочи, которые заметны на практике

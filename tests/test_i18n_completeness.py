@@ -118,6 +118,8 @@ _NOT_LANGUAGE = re.compile(
     r"[A-Za-z]:[/\\].*|"  # example paths shown as placeholders
     r"(?:Ctrl|Alt|Shift|Win)[+]\S+|"  # hotkey combinations
     r"[#][0-9a-fA-F]{3,8}|"  # colour codes
+    r"WoW:.*|"  # the connection badge: a brand name and a symbol
+    r"(?:Enter|Esc|Tab|Space)|"  # key names, which WoW does not translate
     r"(?:xx?-)?(?:small|medium|large)|"  # Pango size keywords
     r"\S*[/]World of Warcraft\S*|"  # the path shown as an example
     r"(?:BTC|TON|USDT(?: TRC20)?)[:]?|"  # currency tickers on the About tab
@@ -155,7 +157,13 @@ def _only_the_words(text: str) -> str:
     pieces and proper nouns, and reading them whole reports the whole template
     as untranslated English.
     """
-    without_fields = re.sub(r"\{[^{}]*\}", " ", text)
+    # The scan reads source, so "→" is six characters here — three of them
+    # letters. Left in, an arrow glyph reads as untranslated English.
+    # A literal backslash, escaped for the pattern: bare "\u" is read by re as
+    # the start of a unicode escape and rejected for want of four hex digits.
+    backslash = re.escape(chr(92))
+    without_escapes = re.sub(backslash + r"(?:u[0-9a-fA-F]{4}|[nrt])", " ", text)
+    without_fields = re.sub(r"\{[^{}]*\}", " ", without_escapes)
     without_markup = re.sub(r"<[^>]*>", " ", without_fields)
     # A literal split across source lines can end mid-tag; what is left is
     # an attribute list, not a sentence.
@@ -370,3 +378,40 @@ def test_both_frontends_offer_the_same_translation_languages():
 
     assert len(SHARED) >= 20
     assert SHARED["RU"] == "Русский", "languages are named in themselves"
+
+
+@pytest.mark.parametrize("module", ["overlay.py", "overlay_gtk.py"])
+def test_the_overlay_takes_its_words_from_the_table(module):
+    """The GTK overlay never imported the string table at all, so every word on
+    the surface a Linux player actually looks at was English — the filter tabs,
+    the reply box, the tooltips, the "translating…" flash.
+
+    The remaining literals are symbols and the product name, which are the same
+    in every language."""
+    text = source(module)
+
+    assert "from app.i18n import tr" in text, f"{module} does not use the string table"
+
+    literals = [
+        found for _quote, found in _WIDGET_TEXT.findall(text) if not _NOT_LANGUAGE.match(_only_the_words(found))
+    ]
+
+    assert literals == [], f"{module} draws these without translating them: {literals}"
+
+
+def test_both_overlays_draw_the_same_filter_tabs():
+    """Each had its own hand-written list. The Qt one never grew Custom or
+    Emote, so messages from either appeared under no tab but All; the GTK one
+    said "LFG" where the channel is LookingForGroup, so that tab matched
+    nothing at all."""
+    from app.config import FILTER_TABS
+
+    names = [name for name, _key in FILTER_TABS]
+
+    assert names[0] == "All"
+    assert "Custom" in names and "Emote" in names
+    assert "LookingForGroup" in names and "LFG" not in names
+    assert len(names) == len(set(names)), f"a tab is listed twice: {names}"
+
+    for module in ("overlay.py", "overlay_gtk.py"):
+        assert "FILTER_TABS" in source(module), f"{module} keeps its own list"

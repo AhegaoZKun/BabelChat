@@ -12,7 +12,7 @@ Gaming terms get their meaning appended in grey on the same line:
 wtb gilded crest, cod    wtb = Куплю · gilded = Золочёная эмблема · crest = Эмблема +1
 ```
 
-**383 terms in 14 languages**, plus every zone and item-set name from LibBabble.
+**436 terms in 14 languages**, plus every zone and item-set name from LibBabble.
 The language comes from your WoW client, so a Russian client glosses in Russian.
 
 ## With the companion app

@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.about_dialog import VERSION
-from app.config import CHANNEL_TOGGLES, AppConfig
+from app.config import CHANNEL_TOGGLES, FILTER_TABS, AppConfig
 from app.i18n import tr
 from app.parser import Channel
 from app.pipeline import TranslatedMessage
@@ -53,7 +53,7 @@ class _ResizeGrip(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("color: #555; font-size: 14px; background: transparent;")
         self.setCursor(QCursor(Qt.CursorShape.SizeFDiagCursor))
-        self.setToolTip("Resize")
+        self.setToolTip(tr("overlay.resize_hint"))
 
     def mousePressEvent(self, event: object) -> None:
         if hasattr(event, "button") and event.button() == Qt.MouseButton.LeftButton:
@@ -143,25 +143,10 @@ class ChannelFilterBar(QWidget):
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setSpacing(2)
 
-        _filter_keys = [
-            "All", "Party", "Raid", "Guild", "Say", "Whisper", "Instance",
-            "Trade", "General", "Services", "LookingForGroup",
-        ]
-        _filter_tr = {
-            "All": "overlay.filter.all",
-            "Party": "overlay.filter.party",
-            "Raid": "overlay.filter.raid",
-            "Guild": "overlay.filter.guild",
-            "Say": "overlay.filter.say",
-            "Whisper": "overlay.filter.whisper",
-            "Instance": "overlay.filter.instance",
-            "Trade": "overlay.filter.trade",
-            "General": "overlay.filter.general",
-            "Services": "overlay.filter.services",
-            "LookingForGroup": "overlay.filter.lfg",
-        }
-        for name in _filter_keys:
-            btn = QPushButton(tr(_filter_tr[name]))
+        # From the shared declaration: the hand-written list here never grew
+        # Custom or Emote, so a message from either had no tab of its own.
+        for name, label_key in FILTER_TABS:
+            btn = QPushButton(tr(label_key))
             btn.setFixedHeight(20)
             btn.setCheckable(True)
             btn.setChecked(name == "All")
@@ -559,7 +544,7 @@ class ChatOverlay(QWidget):
         title_bar.addWidget(self._wow_status)
 
         # Translation toggle
-        self._toggle_btn = QPushButton("TR: ON")
+        self._toggle_btn = QPushButton(tr("overlay.badge.on"))
         self._toggle_btn.setFixedSize(50, 20)
         self._toggle_btn.clicked.connect(self._toggle_translation)
         self._toggle_btn.setStyleSheet(
@@ -922,13 +907,13 @@ class ChatOverlay(QWidget):
     def _toggle_translation(self) -> None:
         self._translation_enabled = not self._translation_enabled
         if self._translation_enabled:
-            self._toggle_btn.setText("TR: ON")
+            self._toggle_btn.setText(tr("overlay.badge.on"))
             self._toggle_btn.setStyleSheet(
                 "QPushButton { background: rgba(0,100,0,200); color: #40FF40; "
                 "border: 1px solid #40FF40; border-radius: 3px; font-size: 10px; }"
             )
         else:
-            self._toggle_btn.setText("TR: OFF")
+            self._toggle_btn.setText(tr("overlay.badge.off"))
             self._toggle_btn.setStyleSheet(
                 "QPushButton { background: rgba(100,0,0,200); color: #FF4040; "
                 "border: 1px solid #FF4040; border-radius: 3px; font-size: 10px; }"

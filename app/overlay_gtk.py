@@ -84,7 +84,8 @@ try:
 except (ValueError, ImportError):  # typelib not installed
     LayerShell = None
 
-from app.config import AppConfig
+from app.config import FILTER_TABS, AppConfig
+from app.i18n import tr
 from app.overlay_theme import OverlayTheme, dim, hex_to_rgb, resolve_theme  # noqa: E402
 from app.parser import Channel  # noqa: E402
 from app.pipeline import TranslatedMessage  # noqa: E402
@@ -157,9 +158,12 @@ _FILTER_CHANNELS: dict[str, set[Channel]] = {
     "Services": {Channel.SERVICES},
     "LFG": {Channel.LOOKING_FOR_GROUP},
 }
-# Order of the filter tabs in the bar.
-_FILTER_ORDER = ["All", "Say", "Party", "Raid", "Guild", "Whisper",
-                 "Instance", "Trade", "General", "Services", "LFG"]
+# Order of the filter tabs in the bar, from the shared declaration. The list
+# that used to live here was written in English and shown as written, whatever
+# language the rest of the interface was in — and it said "LFG" where the
+# channel is called LookingForGroup, so that tab matched nothing.
+_FILTER_ORDER = [name for name, _key in FILTER_TABS]
+_FILTER_LABELS = dict(FILTER_TABS)
 
 
 class _MessageRow(Gtk.Box):
@@ -559,9 +563,9 @@ class ChatOverlayGtk:
         # Quick translation on/off toggle. Reflects/controls pipeline state via
         # the on_toggle_translation callback wired by main.
         active = bool(self._config.translation_enabled_default)
-        self._translate_toggle = Gtk.ToggleButton(label="TR: ON" if active else "TR: OFF")
+        self._translate_toggle = Gtk.ToggleButton(label=tr("overlay.badge.on") if active else tr("overlay.badge.off"))
         self._translate_toggle.set_active(active)
-        self._translate_toggle.set_tooltip_text("Toggle translation on/off")
+        self._translate_toggle.set_tooltip_text(tr("overlay.translate_toggle"))
         self._translate_toggle.add_css_class("bc-tl")
         self._translate_toggle.set_cursor_from_name("pointer")
         self._translate_toggle.connect("toggled", self._on_translate_toggled)
@@ -660,7 +664,7 @@ class ChatOverlayGtk:
         reply_row.add_css_class("bc-reply")
         self._reply_entry = Gtk.Entry()
         self._reply_entry.set_hexpand(True)
-        self._reply_entry.set_placeholder_text("Type a reply, press Enter to translate…")
+        self._reply_entry.set_placeholder_text(tr("overlay.reply.placeholder"))
         self._reply_entry.connect("activate", self._on_reply_activate)
 
         # Target-language selector for outgoing replies, next to the input.
@@ -672,7 +676,7 @@ class ChatOverlayGtk:
         except ValueError:
             self._reply_lang_dd.set_selected(0)
         self._reply_lang_dd.set_cursor_from_name("pointer")
-        self._reply_lang_dd.set_tooltip_text("Translate reply into…")
+        self._reply_lang_dd.set_tooltip_text(tr("overlay.reply.into"))
         self._reply_lang_dd.connect("notify::selected", self._on_reply_lang_changed)
 
         reply_row.append(self._reply_entry)
@@ -686,10 +690,10 @@ class ChatOverlayGtk:
         self._reply_status.set_hexpand(True)
         self._reply_status.set_wrap(True)
         self._reply_status.set_selectable(True)
-        self._copy_btn = Gtk.Button(label="Copy")
+        self._copy_btn = Gtk.Button(label=tr("overlay.reply.copy"))
         self._copy_btn.set_cursor_from_name("pointer")
         self._copy_btn.set_sensitive(False)
-        self._copy_btn.set_tooltip_text("Copy translation to clipboard")
+        self._copy_btn.set_tooltip_text(tr("overlay.reply.copy"))
         self._copy_btn.connect("clicked", self._on_copy_clicked)
         result_row.append(self._reply_status)
         result_row.append(self._copy_btn)
@@ -716,7 +720,7 @@ class ChatOverlayGtk:
         grip.set_content_width(16)
         grip.set_content_height(16)
         grip.add_css_class("bc-grip")
-        grip.set_tooltip_text("Drag to resize")
+        grip.set_tooltip_text(tr("overlay.resize_hint"))
         grip.set_cursor_from_name("nwse-resize")
         grip.set_halign(Gtk.Align.END)
         grip.set_valign(Gtk.Align.END)
@@ -931,7 +935,7 @@ class ChatOverlayGtk:
         self._filter_buttons: dict[str, Gtk.ToggleButton] = {}
         first: Gtk.ToggleButton | None = None
         for name in _FILTER_ORDER:
-            btn = Gtk.ToggleButton(label=name)
+            btn = Gtk.ToggleButton(label=tr(_FILTER_LABELS[name]))
             if first is None:
                 first = btn
             else:
@@ -963,7 +967,7 @@ class ChatOverlayGtk:
 
     def _on_translate_toggled(self, btn: Gtk.ToggleButton) -> None:
         active = btn.get_active()
-        btn.set_label("TR: ON" if active else "TR: OFF")
+        btn.set_label(tr("overlay.badge.on") if active else tr("overlay.badge.off"))
         if self.on_toggle_translation is not None:
             self.on_toggle_translation(active)
 
@@ -976,7 +980,7 @@ class ChatOverlayGtk:
             if getattr(self, "_result_row", None) is not None:
                 self._result_row.set_visible(True)
             self._reply_status.set_markup(
-                '<span foreground="#cccc66">translating…</span>'
+                f'<span foreground="#cccc66">{tr("overlay.reply.translating")}</span>'
             )
         # Translate off the GTK main thread so the UI doesn't freeze.
         threading.Thread(
@@ -1007,9 +1011,9 @@ class ChatOverlayGtk:
         # Clipboard only — user pastes into WoW themselves.
         clipboard = self._copy_btn.get_clipboard()
         clipboard.set(self._last_reply_text)
-        self._copy_btn.set_label("Copied")
+        self._copy_btn.set_label(tr("overlay.reply.copied"))
         def _reset() -> bool:
-            self._copy_btn.set_label("Copy")
+            self._copy_btn.set_label(tr("overlay.reply.copy"))
             return False
         GLib.timeout_add_seconds(1, _reset)
 

@@ -213,6 +213,23 @@ CHANNEL_TOGGLES: tuple[ChannelToggle, ...] = (
 )
 
 
+#: Tabs whose string-table key is not simply the lower-cased name.
+_FILTER_KEYS = {"LookingForGroup": "lfg"}
+
+#: The overlay's filter tabs, in the order they are drawn, paired with the
+#: string-table key for each label. Derived from CHANNEL_TOGGLES rather than
+#: written out again: both overlays had their own hand-written copy, the Qt one
+#: was missing Custom and Emote, and the GTK one showed the tab names in English
+#: whatever language the interface was in.
+FILTER_TABS: tuple[tuple[str, str], ...] = (
+    ("All", "overlay.filter.all"),
+    *dict.fromkeys(
+        (toggle.tab, "overlay.filter." + _FILTER_KEYS.get(toggle.tab, toggle.tab.lower()))
+        for toggle in CHANNEL_TOGGLES
+    ),
+)
+
+
 def enabled_channels(config: AppConfig) -> set:
     """The parser channels the user's toggles add up to."""
     from app.parser import Channel

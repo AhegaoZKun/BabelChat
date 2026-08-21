@@ -1090,6 +1090,16 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Services",
         "ES": "Servicios",
     },
+    "overlay.filter.custom": {
+        "RU": "Свои",
+        "EN": "Custom",
+        "ES": "Propios",
+    },
+    "overlay.filter.emote": {
+        "RU": "Эмоции",
+        "EN": "Emotes",
+        "ES": "Emotes",
+    },
     "overlay.filter.lfg": {
         "RU": "Поиск группы",
         "EN": "LFG",
@@ -1097,6 +1107,31 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
 
     # Reply translator
+    "overlay.badge.on": {
+        "RU": "ПЕР: ВКЛ",
+        "EN": "TR: ON",
+        "ES": "TR: SÍ",
+    },
+    "overlay.badge.off": {
+        "RU": "ПЕР: ВЫКЛ",
+        "EN": "TR: OFF",
+        "ES": "TR: NO",
+    },
+    "overlay.translate_toggle": {
+        "RU": "Включить или выключить перевод",
+        "EN": "Toggle translation on or off",
+        "ES": "Activar o desactivar la traducción",
+    },
+    "overlay.reply.into": {
+        "RU": "Переводить ответ на…",
+        "EN": "Translate the reply into…",
+        "ES": "Traducir la respuesta a…",
+    },
+    "overlay.resize_hint": {
+        "RU": "Потяни, чтобы изменить размер",
+        "EN": "Drag to resize",
+        "ES": "Arrastra para redimensionar",
+    },
     "overlay.reply.toggle": {
         "RU": "Перевести",
         "EN": "Translate",
