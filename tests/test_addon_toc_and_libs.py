@@ -252,6 +252,9 @@ DOCS = (
     "docs/user/configuration_ru.md",
     "docs/user/faq.md",
     "docs/user/faq_ru.md",
+    # Spanish was outside every document check, which is how three claims about
+    # administrator rights survived in it alone.
+    "README_es.md",
     "docs/publishing.md",
     # The two that a stranger reads first: the store page and the file inside
     # the zip. Both had been left out and both were the most out of date.
@@ -344,11 +347,35 @@ def test_no_document_tells_the_user_to_run_as_administrator(name):
     talks them into granting a privilege the app does not use.
     """
     text = (ROOT / name).read_text(encoding="utf-8")
-    telling = [
-        line.strip()
-        for line in text.splitlines()
-        if re.search(r"(?:Run|Right-click).*as administrator|Запуск от имени администратора", line)
-    ]
+
+    # The first version matched two exact phrases and fired on none of the seven
+    # lines that were telling people to elevate, in three languages across four
+    # files — one of which was not even in DOCS. Match the instruction rather
+    # than the word: a document is allowed to say "administrator rights are not
+    # needed", and has to be able to.
+    instructs = re.compile(
+        r"(?:run|ejecuta|ejecutar|right-click|запусти|запуск|убедись)"
+        # Not [^.] — the gap is usually "`BabelChat.exe` **", and excluding the
+        # dot in the filename is why the Russian and Spanish steps went unseen.
+        # A dot does not match a newline, so this stays on one line.
+        r".{0,60}?"
+        r"(?:as (?:an )?administrator|como administrador"
+        r"|от (?:имени )?администратора)",
+        re.IGNORECASE,
+    )
+    # Two exceptions, and both have to be allowed or the documentation cannot
+    # say the true thing. A line about WoW itself being elevated is correct
+    # advice — a normal-privilege process cannot read an elevated one. And a
+    # line that quotes the old instruction in order to retract it is the most
+    # useful sentence in the file for anyone who followed it before.
+    permitted = re.compile(
+        r"(?:wow|сам игр|the same way|так же"  # about the game, not the app
+        r"|out of date|устарел|don't|не надо|dropped the request"  # a retraction
+        r"|if you have a shortcut|остался ярлык|tells the user)",  # or a reference to this rule
+        re.IGNORECASE,
+    )
+
+    telling = [line.strip() for line in text.splitlines() if instructs.search(line) and not permitted.search(line)]
 
     assert telling == [], f"{name} still tells the user to elevate: {telling}"
 
@@ -394,9 +421,7 @@ def test_every_lua_file_the_addon_ships_is_loaded_by_the_toc():
     }
     root = TOC.parent
     on_disk = {
-        str(path.relative_to(root)).replace("\\", "/")
-        for path in root.rglob("*.lua")
-        if "Libs" not in path.parts
+        str(path.relative_to(root)).replace("\\", "/") for path in root.rglob("*.lua") if "Libs" not in path.parts
     }
 
     unloaded = sorted(on_disk - listed)

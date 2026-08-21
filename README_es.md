@@ -116,7 +116,7 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 ### Windows — Inicio rápido
 
 1. Descarga `BabelChatWindows.zip` de [Releases](https://github.com/Yumash/BabelChat/releases)
-2. Extrae y ejecuta `BabelChat.exe` **como Administrador**
+2. Extrae y ejecuta `BabelChat.exe` — **no** hacen falta permisos de administrador
 3. Sigue el asistente (obtén una [clave API gratuita de DeepL](https://www.deepl.com/pro-api), configura la ruta de WoW, instala el addon)
 4. Abre WoW, entra a un grupo — las traducciones aparecerán automáticamente
 
@@ -133,7 +133,7 @@ Si usabas nuestro addon anterior (ChatTranslatorHelper, era TWW), BabelChat migr
 git clone https://github.com/Yumash/BabelChat.git
 cd BabelChat
 pip install -r requirements.txt
-python -m app.main  # ejecutar como Administrador
+python -m app.main
 ```
 
 ### Desde el código fuente (Linux)
@@ -205,7 +205,7 @@ Edita el archivo `addon/BabelChat/Data/*.lua` correspondiente:
 
 ## Limitaciones
 
-- **Requiere acceso elevado a la memoria** — Administrador en Windows; `ptrace_scope=0` en Linux
+- **Lee la memoria del proceso** — sin permisos elevados en Windows; `ptrace_scope=0` en Linux
 - **Compositor de Linux** – Requiere que el compositor sea compatible con layer-shell (GNOME no lo es).
 - **Límite DeepL Free** — 500K caracteres/mes (~10K mensajes). Hay planes de pago
 - **Mensajes salientes** — copiar → pegar en chat WoW (por diseño, cumplimiento ToS)
