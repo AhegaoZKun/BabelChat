@@ -259,7 +259,7 @@ def _migrate_gigachat_credential(data: dict) -> None:
     credential because this function did not recognise it would be the worse
     failure by far.
     """
-    from app.translators.gigachat_provider import split_authorization_key
+    from app.translators.gigachat_credential import split_authorization_key
 
     settings = (data.get("providers") or {}).get("gigachat")
     if not isinstance(settings, dict):

@@ -20,14 +20,14 @@ from pathlib import Path
 
 import pytest
 
-from app.translators.gigachat_provider import (
+from app.translators.gigachat_credential import (
     CERT_MISSING,
     CERT_NOT_PEM,
     CERT_NOT_ROOT,
-    SPEC,
     bundled_root_certificate,
     describe_certificate,
 )
+from app.translators.gigachat_provider import SPEC
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLED = ROOT / "assets" / "certs" / "russian_trusted_root_ca.pem"

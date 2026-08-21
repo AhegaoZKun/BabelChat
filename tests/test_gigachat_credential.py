@@ -18,7 +18,8 @@ import json
 import pytest
 
 from app.config import AppConfig, _migrate_gigachat_credential
-from app.translators.gigachat_provider import SPEC, authorization_key, split_authorization_key
+from app.translators.gigachat_credential import authorization_key, split_authorization_key
+from app.translators.gigachat_provider import SPEC
 
 
 def encoded(client_id: str, client_secret: str) -> str:
