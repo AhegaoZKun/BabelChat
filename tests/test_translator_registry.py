@@ -206,10 +206,27 @@ def test_a_provider_that_cannot_be_built_does_not_take_the_others_down(registry,
     assert "Broken" in caplog.text
 
 
-def test_resolve_order_ignores_providers_that_are_not_configured(registry):
+def test_resolve_order_puts_the_preferred_provider_first(registry):
     register_fake(registry, "alpha")
     register_fake(registry, "beta")
-    assert resolve_order("beta", ["alpha"]) == ["alpha"]
+    register_fake(registry, "gamma")
+
+    assert resolve_order("gamma", ["alpha", "beta", "gamma"]) == ["gamma", "alpha", "beta"]
+
+
+def test_resolve_order_ignores_a_preference_for_a_provider_that_is_not_set_up(registry):
+    """Asserting `resolve_order("beta", ["alpha"]) == ["alpha"]` was output
+    equals input — the second argument IS the configured list. A preference for
+    an unconfigured provider has to leave the others in their own order and add
+    nothing."""
+    register_fake(registry, "alpha")
+    register_fake(registry, "beta")
+    register_fake(registry, "gamma")
+
+    order = resolve_order("beta", ["alpha", "gamma"])
+
+    assert order == ["alpha", "gamma"]
+    assert "beta" not in order
 
 
 # ── "is the app set up?" ─────────────────────────────────────────────────────
@@ -324,25 +341,38 @@ def test_providers_survive_a_save_and_load_round_trip(tmp_path):
 # ── defects the second review found ──────────────────────────────────────────
 
 
-def test_a_keyless_provider_survives_being_saved(registry):
-    """Its only field is optional, so "has a non-blank value" dropped it from the
-    config entirely — and the fallback that needs no account never existed."""
+def test_a_keyless_provider_survives_being_saved(registry, tmp_path):
+    """Its only field is optional, so "has a non-blank value" dropped it from
+    the config entirely — and the fallback that needs no account never existed.
+
+    The defect was in the SAVE, so this writes a config and reads it back. The
+    three in-memory helpers below were all it used to check, and none of them
+    touches the file."""
     register_fake(registry, "freebie", keyless=True)
 
-    assert configured_ids({"freebie": {}}) == ["freebie"]
-    assert any_configured({"freebie": {}}) is True
-    assert TranslatorService({"freebie": {}}).active_ids == ("freebie",)
+    config_file = tmp_path / "config.json"
+    AppConfig(providers={"freebie": {}}, translator_priority="freebie").save(str(config_file))
+    reloaded = AppConfig.load(str(config_file))
+
+    assert "freebie" in reloaded.providers, "the keyless provider did not survive the round trip"
+    assert configured_ids(reloaded.providers) == ["freebie"]
+    assert any_configured(reloaded.providers) is True
+    assert TranslatorService(reloaded.providers).active_ids == ("freebie",)
 
 
-def test_a_null_provider_entry_does_not_crash_construction(registry, caplog):
-    """A hand-edited or newer-build config can carry `"deepl": null`."""
+def test_a_null_provider_entry_is_ignored_and_said_so_without_its_contents(registry, caplog):
+    """A hand-edited or newer-build config can carry `"deepl": null`. It must
+    not crash, and the complaint must be diagnosable — but a config entry can
+    hold a key, so the log names the provider and not the value."""
     register_fake(registry, "alpha")
 
-    service = TranslatorService({"alpha": None, "beta": {"api_key": "x"}})
+    with caplog.at_level(logging.WARNING):
+        service = TranslatorService({"alpha": None, "beta": {"api_key": "s3cret-value"}})
 
     assert service.active_ids == ()
     assert configured_ids({"alpha": None}) == []
     assert any_configured({"alpha": None}) is False
+    assert "s3cret-value" not in caplog.text
 
 
 def test_a_provider_entry_of_the_wrong_type_is_ignored(registry):
@@ -386,11 +416,19 @@ def test_set_listing_order_keeps_unlisted_providers_at_the_end(registry):
     assert base.known_ids() == ("gamma", "alpha", "beta")
 
 
-def test_set_listing_order_is_idempotent(registry):
+def test_set_listing_order_replaces_the_previous_order_rather_than_adding_to_it(registry):
+    """Calling it twice with the same argument could not tell idempotence from
+    determinism — no intermediate state was ever captured. Two DIFFERENT orders
+    can: the second must win outright, with nothing duplicated."""
     register_fake(registry, "alpha")
     register_fake(registry, "beta")
+    register_fake(registry, "gamma")
 
-    base.set_listing_order(("beta", "alpha"))
-    base.set_listing_order(("beta", "alpha"))
+    base.set_listing_order(("gamma", "beta", "alpha"))
+    first = base.known_ids()
+    base.set_listing_order(("alpha", "gamma", "beta"))
+    second = base.known_ids()
 
-    assert base.known_ids() == ("beta", "alpha")
+    assert first == ("gamma", "beta", "alpha")
+    assert second == ("alpha", "gamma", "beta")
+    assert len(second) == len(set(second)), "a provider appeared twice"

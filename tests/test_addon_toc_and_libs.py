@@ -85,11 +85,50 @@ def test_the_toc_opens_with_a_directive():
     assert first.startswith("## "), first
 
 
-def test_the_interface_version_targets_the_current_client():
+def test_the_interface_version_matches_the_client_that_is_installed():
+    """Repeating the TOC's own number back at it proved nothing. The number has
+    to match the installed client, which .build.info is the ground truth for —
+    and where no client is installed there is nothing to check, so this skips
+    rather than pretending."""
+    from pathlib import Path
+
+    build_info = next(
+        (
+            candidate
+            for candidate in (
+                Path("D:/World of Warcraft/.build.info"),
+                Path("C:/Program Files (x86)/World of Warcraft/.build.info"),
+            )
+            if candidate.exists()
+        ),
+        None,
+    )
+    if build_info is None:
+        pytest.skip("no WoW installation to compare against")
+
+    text = build_info.read_text(encoding="utf-8", errors="replace")
+    installed = re.findall(r"(\d+)\.(\d+)\.(\d+)\.\d+", text)
+    if not installed:
+        pytest.skip(".build.info carries no version this test recognises")
+
+    major, minor, patch = max(installed, key=lambda v: tuple(int(part) for part in v))
+    expected = f"{int(major)}{int(minor):02d}{int(patch):02d}"
+
     first = TOC.read_text(encoding="utf-8").splitlines()[0]
     versions = re.findall(r"\d{6}", first)
+
     assert versions, "no interface version in the TOC"
-    assert versions[0] == "120100", "the first entry must be the current retail interface"
+    assert versions[0] == expected, f"the client is {major}.{minor}.{patch}, the TOC targets {versions[0]}"
+
+
+def test_the_interface_version_is_shaped_like_one():
+    """Holds on any machine, including CI, where no client is installed."""
+    first = TOC.read_text(encoding="utf-8").splitlines()[0]
+    versions = re.findall(r"\d{6}", first)
+
+    assert versions, "no interface version in the TOC"
+    assert len(versions) == len(set(versions)), f"a version is listed twice: {versions}"
+    assert versions == sorted(versions, reverse=True), "the current interface must be listed first"
 
 
 # ── the libraries actually load, on every locale a client can report ─────────
@@ -169,7 +208,9 @@ def test_no_locale_gets_a_silently_dead_toggle(locale):
         lua = load_library(locale, *library_files(library))
         table = lua.eval(f'LibStub("{library}"):GetUnstrictLookupTable()'.encode())
         assert table is not None, f"{library} has no table on {locale}"
-        assert len(list(table)) > 0, f"{library} table is empty on {locale}"
+        # A floor, not "not empty": one entry passes a >0 check while the
+        # locale is in practice unusable, which is the failure this names.
+        assert len(list(table)) > 50, f"{library} has only {len(list(table))} entries on {locale}"
 
 
 @pytest.mark.parametrize("locale", ["enUS", "enGB"])

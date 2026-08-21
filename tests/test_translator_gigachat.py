@@ -8,6 +8,7 @@ anywhere a support thread might end up carrying it.
 
 from __future__ import annotations
 
+import logging
 import pathlib
 import time
 
@@ -145,14 +146,23 @@ def test_a_spent_quota_is_not_retried(gigachat):
 
 
 def test_an_untrusted_tls_chain_is_reported_not_worked_around(gigachat):
-    """The popular workaround is verify=False. It must never be what happens."""
+    """The popular workaround is to retry with verify=False, which turns a
+    certificate warning into an open door. It must never be what happens —
+    including on the retry, which is where it would be tempting.
+
+    Asserting `session.verify is not False` could not fail: the fixture sets it
+    to True and this path never writes it. Watching the flag across every call
+    the backend makes can."""
     backend, session = gigachat
     session.script(OAUTH_URL, requests.exceptions.SSLError("certificate verify failed"))
-
+    session.script(OAUTH_URL, requests.exceptions.SSLError("certificate verify failed"))
     result = backend.translate("hello", "RU")
 
     assert result.error == TLS_UNTRUSTED
-    assert session.verify is not False
+    assert session.calls, "the backend never reached the network"
+    for call in session.calls:
+        assert call["session_verify"] is not False, f"verification was switched off: {call}"
+        assert call.get("verify", True) is not False, f"verify=False passed per call: {call}"
 
 
 def test_an_unreachable_network_returns_the_original_text(gigachat):
@@ -212,16 +222,33 @@ def test_an_error_carrying_a_header_is_scrubbed_before_it_is_logged():
 
 
 def test_a_network_failure_message_never_carries_the_token(gigachat, caplog):
+    """Both legs, not just the login one. The chat request carries
+    `Authorization: Bearer <token>` — the more valuable of the two secrets — and
+    it was the leg nothing covered."""
     backend, session = gigachat
     session.script(
         OAUTH_URL,
         requests.exceptions.ConnectionError("failed: {'Authorization': 'Basic base64key'}"),
     )
 
-    result = backend.translate("hello", "RU")
+    with caplog.at_level(logging.DEBUG):
+        result = backend.translate("hello", "RU")
 
     assert "base64key" not in (result.error or "")
     assert "base64key" not in caplog.text
+
+    caplog.clear()
+    session.script(OAUTH_URL, token_response(token="bearer-secret-123"))
+    session.script(
+        CHAT_URL,
+        requests.exceptions.ConnectionError("failed: {'Authorization': 'Bearer bearer-secret-123'}"),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        result = backend.translate("hello", "RU")
+
+    assert "bearer-secret-123" not in (result.error or "")
+    assert "bearer-secret-123" not in caplog.text
 
 
 def test_validate_reports_success_without_handing_back_the_token(gigachat):
@@ -235,10 +262,17 @@ def test_validate_reports_success_without_handing_back_the_token(gigachat):
 
 
 def test_a_supplied_root_certificate_applies_to_this_session_only():
-    backend = GigaChatBackend("key", ca_bundle="/etc/ssl/russian_root.pem")
+    """The Russian root CA has to be trusted for this provider and nothing else.
 
-    assert backend._session.verify == "/etc/ssl/russian_root.pem"
-    assert requests.Session().verify is True, "the global trust store stays untouched"
+    Asserting `requests.Session().verify is True` was a property of the requests
+    library, not of BabelChat. A second BabelChat backend is the comparison that
+    means something."""
+    with_bundle = GigaChatBackend("key", ca_bundle="/etc/ssl/russian_root.pem")
+    without_bundle = GigaChatBackend("key")
+
+    assert with_bundle._session.verify == "/etc/ssl/russian_root.pem"
+    assert without_bundle._session.verify is True, "the bundle leaked into another provider's session"
+    assert with_bundle._session is not without_bundle._session
 
 
 def test_an_unreadable_certificate_path_does_not_escape_the_provider():

@@ -30,12 +30,27 @@ def test_no_candidate_is_a_bare_filename():
     assert all(len(path.parts) > 1 for path in candidate_paths())
 
 
-def test_a_library_planted_in_the_working_directory_is_not_a_candidate(tmp_path, monkeypatch):
+def test_a_library_planted_in_the_working_directory_is_never_loaded(tmp_path, monkeypatch):
+    """The vulnerability was that the loader searched the working directory, so
+    the property has to be about what gets LOADED, not only about what the
+    candidate list happens to contain. Asserting on candidate_paths alone could
+    not fail: it is __file__-relative, so tmp_path was never going to appear in
+    it however the loading worked."""
     planted = tmp_path / library_name()
     planted.write_bytes(b"not a real library")
     monkeypatch.chdir(tmp_path)
 
-    assert planted.resolve() not in candidate_paths()
+    loaded = []
+
+    class RecordingCDLL:
+        def __init__(self, path, winmode=None):
+            loaded.append(pathlib.Path(path).resolve())
+            raise OSError("stub")
+
+    monkeypatch.setattr(native_scanner.ctypes, "CDLL", RecordingCDLL)
+    load_scanner()
+
+    assert planted.resolve() not in loaded, "the loader opened a library from the working directory"
 
 
 def test_candidates_are_deduplicated():
@@ -51,14 +66,22 @@ def test_a_frozen_build_looks_beside_the_executable_first(monkeypatch, tmp_path)
     assert first.parent == tmp_path.resolve()
 
 
-def test_the_library_name_matches_the_platform():
-    expected = WINDOWS_LIBRARY if sys.platform == "win32" else LINUX_LIBRARY
-    assert library_name() == expected
+def test_the_library_name_carries_the_platform_extension():
+    """Comparing library_name() to the module's own two constants restates the
+    implementation. What matters is that each platform gets a name its loader
+    can actually open."""
+    assert WINDOWS_LIBRARY.endswith(".dll")
+    assert LINUX_LIBRARY.startswith("lib") and LINUX_LIBRARY.endswith(".so")
+    assert library_name() == (WINDOWS_LIBRARY if sys.platform == "win32" else LINUX_LIBRARY)
+    assert library_name() != ""
 
 
-def test_a_missing_library_returns_none_rather_than_raising(monkeypatch):
-    """The Python scanner takes over — slower, but the app still runs."""
-    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [])
+def test_a_library_that_is_not_on_disk_returns_none_rather_than_raising(monkeypatch, tmp_path):
+    """The Python scanner takes over — slower, but the app still runs.
+
+    Feeding an empty candidate list meant the loop body never ran, so nothing
+    under test executed. A path that is named but absent exercises the miss."""
+    monkeypatch.setattr(native_scanner, "candidate_paths", lambda name=None: [tmp_path / library_name()])
 
     assert load_scanner() is None
 
@@ -115,17 +138,32 @@ def test_a_library_missing_our_export_is_skipped_not_fatal(monkeypatch, tmp_path
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the bundled library is the Windows build")
 def test_the_shipped_library_declares_the_scanner_entry_point():
+    import ctypes
+
     lib = load_scanner()
     assert lib is not None, "the Windows build ships this library; a miss is a packaging bug"
-    assert lib.find_and_read_buffer.restype is not None
+    # restype is never None — ctypes defaults it to c_int — so asserting that it
+    # is set proves nothing. The signature the loader declares is what a wrong
+    # call would get wrong.
+    assert lib.find_and_read_buffer.restype is ctypes.c_int32
+    assert lib.find_and_read_buffer.argtypes is not None
 
 
-def test_the_loader_is_shared_by_both_platform_readers():
-    """Both readers carried their own copy, and the Windows one grew the fix
-    while the Linux one did not."""
-    windows = pathlib.Path("app/memory_reader_windows.py").read_text(encoding="utf-8")
-    linux = pathlib.Path("app/memory_reader_linux.py").read_text(encoding="utf-8")
-    for source in (windows, linux):
-        assert "from app.native_scanner import load_scanner" in source
-        assert "_DLL_NAMES" not in source
-        assert "_LIB_NAMES" not in source
+def test_the_loader_is_shared_by_both_platform_readers(monkeypatch):
+    """Both readers carried their own copy, and the Windows one grew the
+    search-order fix while the Linux one did not.
+
+    Checked by making the shared loader return a sentinel and importing each
+    reader, rather than by grepping their source: a reader could import the
+    shared name and still call its own copy, and the source check also only
+    passed when pytest happened to run from the repository root.
+    """
+    import importlib
+
+    sentinel = object()
+    monkeypatch.setattr(native_scanner, "load_scanner", lambda *a, **k: sentinel)
+
+    for module_name in ("app.memory_reader_windows", "app.memory_reader_linux"):
+        module = importlib.reload(importlib.import_module(module_name))
+        handle = module._rust_lib
+        assert handle is sentinel, f"{module_name} does not get its scanner from the shared loader"

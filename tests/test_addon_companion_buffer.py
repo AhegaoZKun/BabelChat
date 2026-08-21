@@ -105,11 +105,24 @@ def test_same_text_from_different_authors_is_kept():
     assert len(h.buffer_entries()) == 2
 
 
-# ── secret values (chat messaging lockdown) ──────────────────────────────────
+# ── values the buffer must refuse (chat messaging lockdown) ──────────────────
+#
+# In an instance the chat arguments arrive as secrets: values that report as
+# strings but raise on string.len. The addon guards them in two steps — a type
+# check, then a pcall around the length probe.
+#
+# The harness cannot model the second step. Plain Lua has no way to build a
+# value that answers `type()` with "string" and then raises, so the stand-in is
+# a table and every test below stops at the TYPE check — the same branch a
+# number or a boolean takes. That is worth having: it is the branch that runs
+# first, and the ring-buffer and sequence-number consequences below are real
+# either way. It is not proof that a secret cannot reach the buffer. The probe
+# behind the type check is verified in game, not here.
 
 
-def test_secret_text_is_rejected_without_raising():
-    """In a dungeon the message text arrives secret. It must be dropped, quietly."""
+def test_a_value_that_is_not_text_is_rejected_without_raising():
+    """In a dungeon the message text arrives as a secret. It must be dropped,
+    quietly — no error in the player's chat frame, no gap in the sequence."""
     h = load_companion_buffer()
     h.addon_table.BufferAddEntry(h.secret(), "RAW", "PARTY", "Healer")
     flush(h)
@@ -117,7 +130,7 @@ def test_secret_text_is_rejected_without_raising():
     assert h.buffer_entries() == []
 
 
-def test_secret_author_degrades_to_unknown_and_keeps_the_message():
+def test_an_author_that_is_not_text_degrades_to_unknown_and_keeps_the_message():
     h = load_companion_buffer()
     h.addon_table.BufferAddEntry("heal me", "RAW", "PARTY", h.secret())
     flush(h)
@@ -142,7 +155,7 @@ def test_unknown_kind_is_recorded_as_raw():
     assert h.buffer_entries() == ["1|RAW|SAY|Bob|hi"]
 
 
-def test_a_secret_does_not_poison_later_messages():
+def test_a_rejected_value_does_not_poison_later_messages():
     """The regression this guards: a secret stored in the dedup ring or the
     accumulator used to raise again on every subsequent message and every flush."""
     h = load_companion_buffer()
@@ -153,7 +166,7 @@ def test_a_secret_does_not_poison_later_messages():
     assert h.buffer_entries() == ["1|RAW|PARTY|Bob|still working"]
 
 
-def test_repeated_secrets_do_not_consume_sequence_numbers():
+def test_repeated_rejections_do_not_consume_sequence_numbers():
     h = load_companion_buffer()
     for _ in range(5):
         h.addon_table.BufferAddEntry(h.secret(), "RAW", "INSTANCE_CHAT", "Tank")
@@ -163,7 +176,7 @@ def test_repeated_secrets_do_not_consume_sequence_numbers():
     assert h.buffer_entries() == ["1|RAW|PARTY|Bob|first real one"]
 
 
-def test_flush_survives_a_buffer_full_of_traffic_after_secrets():
+def test_flush_survives_a_buffer_full_of_traffic_after_rejections():
     h = load_companion_buffer()
     for i in range(30):
         h.addon_table.BufferAddEntry(h.secret(), "RAW", "PARTY", "Tank")
@@ -172,7 +185,11 @@ def test_flush_survives_a_buffer_full_of_traffic_after_secrets():
 
     entries = h.buffer_entries()
     assert len(entries) == 30
-    assert all("secret" not in e for e in entries)
+    # The real property: 30 rejected values leave 30 good ones, numbered 1..30
+    # with no gaps. Checking that the word "secret" is absent was trivially true
+    # — nothing ever concatenates the stand-in.
+    assert [e.split("|")[0] for e in entries] == [str(n) for n in range(1, 31)]
+    assert [e.split("|")[-1] for e in entries] == [f"real {i}" for i in range(30)]
 
 
 # ── hostile message content ──────────────────────────────────────────────────

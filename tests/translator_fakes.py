@@ -33,7 +33,10 @@ class FakeSession:
         self._script[url] = list(responses)
 
     def _answer(self, method: str, url: str, **kwargs):
-        self.calls.append({"method": method, "url": url, **kwargs})
+        # `session_verify` is captured per call, not read at the end: a backend
+        # that switched verification off for a retry and set it back would be
+        # invisible to a check made after the fact.
+        self.calls.append({"method": method, "url": url, "session_verify": self.verify, **kwargs})
         queue = self._script.get(url)
         if not queue:
             raise AssertionError(f"unscripted {method} to {url}")
