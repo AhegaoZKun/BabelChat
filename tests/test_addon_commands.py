@@ -207,3 +207,42 @@ def test_ordinary_chat_still_stays_quiet_while_the_companion_runs(addon):
     _text, changed = addon.addon_table.TranslateChat("LFM ICC HC 25m Need Tank and Healer")
 
     assert bool(changed) is False
+
+
+# ── the "and N more" counter ─────────────────────────────────────────────────
+
+
+def test_the_overflow_counter_is_separated_and_reads_as_words(addon):
+    """Written as " +4" it ran onto the end of the last translation and read as
+    part of it: "HC = Хероик +4" looks like a term, not like a count of what did
+    not fit. The first person to see it asked what the +4 was."""
+    addon.lua.execute("_printed = {}")
+
+    text, changed = addon.addon_table.TranslateChat("LFM ICC HC 25m Need Tank and Healer", True)
+
+    assert bool(changed) is True
+    assert " · и ещё 4" in text, text
+    assert "Хероик +4" not in text
+    assert "+4" not in text
+
+
+def test_the_counter_is_absent_when_everything_fitted(addon):
+    text, changed = addon.addon_table.TranslateChat("ty", True)
+
+    assert bool(changed) is True
+    assert "ещё" not in text.split("ty  ")[-1] or "=" in text
+    assert " · и ещё" not in text
+
+
+def test_the_gloss_survives_a_missing_locale_table(addon):
+    """DictEngine is loaded on its own in other tests, and reading the locale
+    table at load time would take the whole gloss down for a word."""
+    saved = addon.addon_table.L
+    addon.addon_table.L = None
+    try:
+        text, changed = addon.addon_table.TranslateChat("LFM ICC HC 25m Need Tank and Healer", True)
+        assert bool(changed) is True
+        assert "LFM = " in text
+        assert "+4" in text, "the fallback counter should still appear"
+    finally:
+        addon.addon_table.L = saved

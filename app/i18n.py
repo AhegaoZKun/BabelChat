@@ -539,6 +539,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "✗ Could not copy the addon: {detail}. Check that WoW is closed and the folder is writable.",
         "ES": "✗ No se pudo copiar el complemento: {detail}. Comprueba que WoW esté cerrado y la carpeta sea escribible.",
     },
+    "about.donate_card": {
+        "RU": "Поддержать картой (СБП, Visa, Mastercard)",
+        "EN": "Support with a card (SBP, Visa, Mastercard)",
+        "ES": "Apoyar con tarjeta (SBP, Visa, Mastercard)",
+    },
     "provider.guide": {
         "RU": "Пошаговая инструкция",
         "EN": "Step-by-step guide",

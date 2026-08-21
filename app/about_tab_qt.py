@@ -21,6 +21,19 @@ from PyQt6.QtWidgets import (
 from app.about_dialog import VERSION
 from app.i18n import tr
 
+#: Where support goes. Declared once: the same details appear in the app's About
+#: tab, in the addon's options panel and in both READMEs, and three hand-written
+#: copies of a payment address is exactly the kind of thing that goes stale in
+#: one place and stays wrong for a year.
+DONATE_CARD_URL = "https://pay.cloudtips.ru/p/ea5537e6"
+
+WALLETS: tuple[tuple[str, str], ...] = (
+    ("USDT TRC20", "TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx"),
+    ("BTC", "1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja"),
+    ("TON", "UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK"),
+)
+
+
 
 def build_about_tab(dialog) -> QWidget:
     tab = QWidget()
@@ -114,11 +127,15 @@ def build_about_tab(dialog) -> QWidget:
     app_donate_desc.setWordWrap(True)
     layout.addWidget(app_donate_desc)
 
-    for label, addr in [
-        ("USDT TRC20", "TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx"),
-        ("BTC", "1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja"),
-        ("TON", "UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK"),
-    ]:
+    card_link = QLabel(
+        f'<a href="{DONATE_CARD_URL}" style="color: #FFD200; font-size: 12px;">'
+        f"{tr('about.donate_card')}</a>"
+    )
+    card_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    card_link.setOpenExternalLinks(True)
+    layout.addWidget(card_link)
+
+    for label, addr in WALLETS:
         row = QHBoxLayout()
         crypto_label = QLabel(f"<b>{label}:</b>")
         crypto_label.setStyleSheet("color: #ccc; font-size: 11px;")

@@ -283,6 +283,21 @@ pyinstaller build-linux.spec    # Linux бинарник
 - **[Руководство пользователя](https://github.com/Yumash/BabelChat/blob/main/docs/user/README.md)** — быстрый старт, настройка, FAQ
 - **[Техническая документация](https://github.com/Yumash/BabelChat/blob/main/docs/tech/README.md)** — архитектура, memory reader, pipeline, аддон
 
+
+## Поддержать разработку
+
+BabelChat бесплатен и останется бесплатным. Если он выручил в пуге — вот
+куда идёт поддержка: она покрывает лимиты перевода сверх бесплатных тарифов
+и время на разработку.
+
+[**Поддержать картой — СБП, Visa, Mastercard**](https://pay.cloudtips.ru/p/ea5537e6)
+
+| | |
+| --- | --- |
+| USDT TRC20 | `TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx` |
+| BTC | `1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja` |
+| TON | `UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK` |
+
 ## Благодарности
 
 - **[WoW Translator](https://www.curseforge.com/wow/addons/wow-translator)** от **Pirson** (лицензия MIT) — глоссарий WoW-терминов на 14 языках. Словарь BabelChat основан на данных этого аддона.

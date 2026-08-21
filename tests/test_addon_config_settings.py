@@ -577,12 +577,30 @@ def test_the_panel_offers_the_three_places_the_addon_lives(panel):
     assert any("wago.io" in url for url in addresses), addresses
 
 
-def test_every_link_is_a_full_address(panel):
+def test_every_box_holds_something_that_can_be_pasted_as_it_stands(panel):
     """A truncated or relative address is worse than none: it looks copyable and
-    goes nowhere."""
-    bad = {name: url for name, url in link_boxes(panel).items() if not url.startswith("https://")}
+    goes nowhere. Web addresses must be complete URLs; a wallet address is not a
+    URL but must still be whole and free of stray whitespace, because it is
+    pasted into a payment form where a typo loses the money."""
+    bad = {}
+    for name, value in link_boxes(panel).items():
+        if value != value.strip() or " " in value:
+            bad[name] = f"whitespace in {value!r}"
+        elif "." in value.split("/")[0] and not value.startswith("https://"):
+            bad[name] = f"looks like a URL but is not https: {value!r}"
+        elif not value.startswith("https://") and len(value) < 26:
+            bad[name] = f"too short to be a wallet address: {value!r}"
 
-    assert bad == {}, f"not a usable address: {bad}"
+    assert bad == {}, f"not usable as it stands: {bad}"
+
+
+def test_the_panel_offers_a_way_to_support_the_work(panel):
+    """Asked for explicitly, and the card link is the one most people can
+    actually use — the wallets are for those who prefer them."""
+    values = set(link_boxes(panel).values())
+
+    assert any("pay.cloudtips.ru" in value for value in values), values
+    assert sum(1 for value in values if not value.startswith("https://")) >= 3, "the wallets are missing"
 
 
 @pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])

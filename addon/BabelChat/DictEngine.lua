@@ -64,6 +64,15 @@ local function FirstWord(phrase)
     return phrase:match("^[^%s]+") or phrase
 end
 
+-- The locale table, read when it is needed rather than captured at load. This
+-- file is loaded on its own in tests, and Locales.lua is not always with it; a
+-- captured nil would take the gloss down for a piece of decoration.
+local function Localised(key, fallback)
+    local table_of_strings = addonTable.L
+    local value = table_of_strings and table_of_strings[key]
+    return value or fallback
+end
+
 -- Lua has no case folding beyond ASCII, so a sentence that opens with "Спс"
 -- misses the key "спс" and the message the player wanted glossed comes back
 -- untouched. For a Russian-speaking audience that is the first word of most
@@ -383,7 +392,11 @@ function addonTable.TranslateChat(text, force)
     local gloss = table_concat(pairsShown, " · ")
     local hidden = #matches - #pairsShown
     if hidden > 0 then
-        gloss = gloss .. " +" .. hidden
+        -- Separated like any other entry and given a word. Written as " +4" it
+        -- ran straight onto the end of the last translation and read as part of
+        -- it — "HC = Хероик +4" looks like a term, not like a count of what did
+        -- not fit.
+        gloss = gloss .. " · " .. string_format(Localised("GLOSS_MORE", "+%d"), hidden)
     end
 
     -- Appended to the same line, not a second one. A newline here doubled the

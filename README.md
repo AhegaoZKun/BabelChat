@@ -294,6 +294,21 @@ This project is a collaboration between three authors:
 - **AhegaoZKun** — [@AhegaoZKun](https://github.com/AhegaoZKun) — Linux/Wayland support, Rust memory scanners, Microsoft Translator backend
 - **Claude** (Anthropic) — AI co-author
 
+
+## Support the work
+
+BabelChat is free and stays free. If it saved you a pug, this is where
+support goes — it pays for the translation allowances the free tiers do not
+cover and for the time.
+
+[**Support with a card — SBP, Visa, Mastercard**](https://pay.cloudtips.ru/p/ea5537e6)
+
+| | |
+| --- | --- |
+| USDT TRC20 | `TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx` |
+| BTC | `1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja` |
+| TON | `UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK` |
+
 ## License
 
 [MIT License](https://github.com/Yumash/BabelChat/blob/main/LICENSE)

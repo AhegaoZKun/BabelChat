@@ -13,7 +13,7 @@ local SECTION_GAP = 25
 
 -- Height of the scrolling content. Generous on purpose: too tall only means
 -- a little empty space at the bottom, too short silently clips a section.
-local CONTENT_HEIGHT = 810
+local CONTENT_HEIGHT = 930
 
 local function CountEntries(dict)
     if type(dict) ~= "table" then return 0 end
@@ -346,6 +346,14 @@ function addonTable.CreateConfigUI()
     -- ════════════════════════════════════
     -- SECTION 6: ABOUT
     -- ════════════════════════════════════
+    yOffset = yOffset - 30
+
+    -- Separator
+    local line5 = panel:CreateTexture(nil, "ARTWORK")
+    line5:SetSize(580, 1)
+    line5:SetPoint("TOPLEFT", 16, yOffset)
+    line5:SetColorTexture(1, 1, 1, 0.1)
+
     yOffset = yOffset - SECTION_GAP
     local aboutHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     aboutHeader:SetPoint("TOPLEFT", 16, yOffset)
@@ -368,18 +376,22 @@ function addonTable.CreateConfigUI()
         { label = "GitHub", url = "https://github.com/Yumash/BabelChat" },
         { label = "CurseForge", url = "https://www.curseforge.com/wow/addons/babelchat" },
         { label = "Wago", url = "https://addons.wago.io/addons/babelchat" },
+        { label = L["ABOUT_DONATE"], url = "https://pay.cloudtips.ru/p/ea5537e6" },
+        { label = "USDT TRC20", url = "TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx" },
+        { label = "BTC", url = "1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja" },
+        { label = "TON", url = "UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK" },
     }
     for index, link in ipairs(LINKS) do
         yOffset = yOffset - 24
         local caption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         caption:SetPoint("TOPLEFT", 16, yOffset - 4)
         caption:SetText(link.label .. ":")
-        caption:SetWidth(80)
+        caption:SetWidth(120)
         caption:SetJustifyH("LEFT")
 
         local box = CreateFrame("EditBox", "WCT_Link" .. index, panel, "InputBoxTemplate")
-        box:SetPoint("TOPLEFT", 100, yOffset)
-        box:SetSize(400, 20)
+        box:SetPoint("TOPLEFT", 140, yOffset)
+        box:SetSize(370, 20)
         box:SetAutoFocus(false)
         box:SetText(link.url)
         box:SetCursorPosition(0)

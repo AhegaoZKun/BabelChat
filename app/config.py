@@ -159,6 +159,7 @@ class AppConfig:
                 data = json.loads(try_path.read_text(encoding="utf-8"))
                 _migrate_provider_keys(data, try_path)
                 _migrate_split_channels(data)
+                _migrate_gigachat_credential(data)
                 defaults = asdict(cls())
                 # Ignore unknown keys (e.g. fields removed in newer versions)
                 # instead of crashing cls(**...) with a TypeError.
@@ -227,6 +228,35 @@ def enabled_channels(config: AppConfig) -> set:
 def enabled_filter_tabs(config: AppConfig) -> set[str]:
     """The overlay filter tabs the user's toggles add up to."""
     return {toggle.tab for toggle in CHANNEL_TOGGLES if getattr(config, toggle.field)}
+
+
+def _migrate_gigachat_credential(data: dict) -> None:
+    """Split a stored GigaChat authorization key back into its two halves.
+
+    The key is base64 of `client_id:client_secret`, and asking a player for that
+    form meant asking them to know what base64 is. The settings screen now shows
+    the two values Sber's portal shows, so a config saved before that is decoded
+    into them — nobody has to go and fetch their credentials again.
+
+    A value that does not decode into a pair is left exactly where it is. It
+    still works: the backend falls back to the stored key. Discarding a working
+    credential because this function did not recognise it would be the worse
+    failure by far.
+    """
+    from app.translators.gigachat_provider import split_authorization_key
+
+    settings = (data.get("providers") or {}).get("gigachat")
+    if not isinstance(settings, dict):
+        return
+    if settings.get("client_id") or settings.get("client_secret"):
+        return
+
+    client_id, client_secret = split_authorization_key(settings.get("authorization_key") or "")
+    if not client_id:
+        return
+    settings["client_id"] = client_id
+    settings["client_secret"] = client_secret
+    settings.pop("authorization_key", None)
 
 
 def _migrate_split_channels(data: dict) -> None:

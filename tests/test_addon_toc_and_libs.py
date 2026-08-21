@@ -450,3 +450,36 @@ def test_every_addon_file_parses_as_lua(name):
     )(source, name)
 
     assert ok, f"{name} does not parse: {error}"
+
+
+# ── payment details, which must not drift ────────────────────────────────────
+
+DONATE_CARD = "https://pay.cloudtips.ru/p/ea5537e6"
+
+
+@pytest.mark.parametrize("name", ["README.md", "README_ru.md"])
+def test_both_readmes_offer_the_same_way_to_support_the_work(name):
+    """One README carrying a payment link the other does not is how a Russian
+    reader ends up with the version that has no way to pay."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+
+    assert DONATE_CARD in text, f"{name} has no card link"
+
+
+def test_every_place_that_shows_a_wallet_shows_the_same_one():
+    """The app's About tab, the addon's options panel and both READMEs each
+    render these. Four hand-written copies of a payment address is how one goes
+    stale and stays wrong — a mistyped address loses real money, silently."""
+    from app.about_tab_qt import DONATE_CARD_URL, WALLETS
+
+    assert DONATE_CARD_URL == DONATE_CARD
+
+    panel = (ROOT / "addon" / "BabelChat" / "Config.lua").read_text(encoding="utf-8")
+    readmes = [(ROOT / name).read_text(encoding="utf-8") for name in ("README.md", "README_ru.md")]
+
+    for label, address in WALLETS:
+        assert address in panel, f"{label} is missing from the addon panel"
+        for text, name in zip(readmes, ("README.md", "README_ru.md"), strict=True):
+            assert address in text, f"{label} is missing from {name}"
+
+    assert DONATE_CARD in panel, "the card link is missing from the addon panel"
