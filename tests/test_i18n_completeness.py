@@ -413,5 +413,6 @@ def test_both_overlays_draw_the_same_filter_tabs():
     assert "LookingForGroup" in names and "LFG" not in names
     assert len(names) == len(set(names)), f"a tab is listed twice: {names}"
 
-    for module in ("overlay.py", "overlay_gtk.py"):
+    # The Qt filter bar lives in overlay_widgets.py since the overlay was split.
+    for module in ("overlay_widgets.py", "overlay_gtk.py"):
         assert "FILTER_TABS" in source(module), f"{module} keeps its own list"

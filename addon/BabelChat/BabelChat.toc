@@ -44,7 +44,7 @@ Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 # Localization
 Locales.lua
 
-# Dictionary data (314 entries x 14 languages)
+# Dictionary data, one file per category
 Data\Social.lua
 Data\Combate.lua
 Data\Clases.lua

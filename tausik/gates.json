@@ -28,9 +28,8 @@
       "addon/BabelChat/Data/Combate.lua",
       "addon/BabelChat/Data/Grupos.lua",
       "app/i18n.py",
-      "app/overlay.py",
       "app/overlay_gtk.py"
     ],
-    "_reason_overlay": "app/overlay.py (1189) and app/overlay_gtk.py (1028) are logic, not data, and the cap is telling the truth about them. Exempted only so this branch can close, and only with the split tracked as its own task (overlay-split) — the same arrangement as app/i18n.py. Both are pre-existing: this branch added two dictionary entries to overlay.py and did not touch overlay_gtk.py at all."
+    "_reason_overlay": "app/overlay_gtk.py (1032) is over the cap and still exempt: splitting it is the same job done for the Qt overlay, and it cannot be verified here because gi is not installed on Windows or on CI — a blind refactor of the Linux frontend right before a release is worse than the file being long. Tracked as overlay-split. app/overlay.py came off this list: it is 473 lines now, down from 1221."
   }
 }

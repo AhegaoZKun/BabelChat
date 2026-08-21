@@ -5,7 +5,7 @@
 BabelChat is a two-component system: a WoW addon (Lua) captures chat messages, and a companion app (Python) translates them.
 
 ```
-WoW Process                          Companion App (Python, admin)
+WoW Process                          Companion App (Python, no elevation)
 ┌─────────────────────┐              ┌──────────────────────────────┐
 │  BabelChat addon    │              │  Memory Reader               │
 │  ├── ChatFilter     │  ReadProc    │  ├── Rust scanner + pymem    │
@@ -18,11 +18,11 @@ WoW Process                          Companion App (Python, admin)
                                      │  ├── Detect language          │
                                      │  ├── Phrasebook (instant)     │
                                      │  ├── Cache (SQLite + LRU)     │
-                                     │  ├── DeepL API (0.5-2s)       │
+                                     │  ├── Provider chain (0.5-2s)  │
                                      │  └── Streaming emit           │
                                      │          │                   │
                                      │          ▼                   │
-                                     │  Overlay (PyQt6)             │
+                                     │  Overlay (PyQt6 / GTK4)      │
                                      │  ├── Channel colors           │
                                      │  ├── Click-through            │
                                      │  └── Progressive rendering    │
@@ -33,48 +33,84 @@ WoW Process                          Companion App (Python, admin)
 
 1. WoW fires `CHAT_MSG_*` event → addon's `ChatFilter` intercepts
 2. Addon writes `SEQ|KIND|EVENT|author|text` to ring buffer (50 entries)
-3. Every 1.5s, addon flushes buffer to `BabelChatDB.wctbuf` (Lua SavedVariable string)
+3. Every 0.25s (`FLUSH_INTERVAL` in `CompanionBuffer.lua`, matched to the companion's poll rate), the addon flushes the buffer to `BabelChatDB.wctbuf` (Lua SavedVariable string)
 4. Companion app reads buffer via `ReadProcessMemory` every 250ms
 5. Parser extracts messages, dedup filters duplicates (60s TTL, monotonic clock)
 6. Language detector (lingua-py, offline) identifies source language
-7. Translation stages (phrasebook → cache → slang expansion → WoW terms → DeepL)
-8. **Streaming**: original message emitted immediately, translation update follows when DeepL responds
+7. Translation stages (abbreviations → phrasebook → cache → slang expansion → WoW terms → provider chain)
+8. **Streaming**: original message emitted immediately, translation update follows when the provider responds
 9. Overlay renders with channel colors, updates in-place on translation arrival
 
-## Module Map (23 modules, ~7,500 LOC)
+## Translation Providers
+
+Four providers register themselves at import of `app.translators`. The listing
+and fall-through order is set there, once: **gigachat, mymemory, deepl,
+microsoft**. `AppConfig.translator_priority` defaults to `gigachat`.
+
+The order is not a quality ranking. GigaChat leads because it is the only one of
+the four reachable from Russia without a VPN or a foreign card; MyMemory follows
+because it needs no account at all, so `TranslatorService` adds it even when the
+config does not mention it — that is what makes translation work on a fresh
+install before anything is configured. `TranslatorService` tries the preferred
+provider first and falls through the rest on failure or quota.
+
+Adding a provider means one `ProviderSpec` (id, display name, credential fields,
+`build`, `validate`) and nothing else: both settings dialogs and both wizards
+render whatever the registry holds.
+
+## Module Map (54 modules, ~13,500 LOC)
+
+Run `wc -l app/*.py app/translators/*.py` before trusting this table. The larger
+modules, and every module the rest of this document names:
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `memory_reader` | 25 | Platform dispatcher |
-| `memory_reader_windows` | ~430 | ReadProcessMemory via the Rust scanner, pymem fallback |
-| `memory_reader_linux` | ~360 | The same for Linux |
-| `addon_protocol` | ~200 | The record format and channel classification, shared by both |
-| `settings_dialog` | ~900 | Settings UI (tabs: General, Languages, Channels, About + donations) |
-| `overlay` | ~870 | Smart overlay (WoW-themed, channel colors, streaming updates) |
-| `setup_wizard` | ~670 | First-run wizard (5 steps) |
-| `phrasebook` | ~510 | 45 phrases + 30 abbreviations (EN, RU, DE, FR, ES) |
-| `parser` | ~490 | WoW chat log parser (EN+RU clients, addon v2.1 format) |
-| `i18n` | ~940 | RU/EN/ES UI localization (all strings) |
-| `pipeline` | ~410 | Translation orchestration with streaming |
-| `main` | ~310 | Entry point, single-instance guard, logging |
+| `i18n` | ~1,260 | RU/EN/ES UI localization (all strings) |
+| `overlay_gtk` | ~1,030 | Linux overlay: layer-shell, X11 and plain modes |
+| `overlay` | ~580 | Windows overlay window: behaviour, rendering, streaming updates |
+| `phrasebook` | ~510 | 53 phrases + 75 abbreviations (EN, RU, DE, FR, ES) |
+| `setup_wizard` | ~460 | First-run wizard, PyQt (5 steps) |
+| `settings_gtk` | ~440 | Linux settings window |
+| `pipeline` | ~440 | Translation orchestration with streaming |
+| `memory_reader_windows` | ~440 | ReadProcessMemory via the Rust scanner, pymem fallback |
+| `parser` | ~430 | WoW chat log parser (EN+RU clients, addon record format) |
+| `settings_dialog` | ~430 | Windows settings UI (tabs: General, Overlay, Hotkeys, About) |
+| `translators/gigachat_provider` | ~400 | GigaChat backend: it is an LLM, so the request is a chat completion pinned to translating |
+| `main` | ~400 | Windows entry point, single-instance guard, logging |
+| `config` | ~390 | Config JSON, atomic save, migrations, channel toggle table |
+| `tray_sni` | ~390 | Linux tray icon over the StatusNotifierItem D-Bus spec |
+| `setup_wizard_gtk` | ~370 | First-run wizard, GTK |
+| `memory_reader_linux` | ~330 | `process_vm_readv` via the Rust scanner |
+| `provider_settings_qt` | ~290 | Credential fields rendered from the provider registry |
+| `translators/base` | ~285 | `ProviderSpec`, registry, retry policy, result types |
+| `overlay_chrome` | ~280 | Building that window's furniture — title bar, toolbar, chat area, reply row |
+| `overlay_theme` | ~250 | Overlay colour presets (read by the GTK frontend) |
+| `overlay_reply` | ~250 | The reply box, and the clipboard hand-off that keeps it out of automation |
+| `addon_protocol` | ~220 | The record format and channel classification, shared by both readers |
+| `translators/mymemory_provider` | ~205 | Keyless fallback backend |
+| `main_gtk` | ~205 | Linux entry point |
+| `overlay_widgets` | ~205 | Resize grip, channel filter bar, reply translation worker, channel colours |
 | `glossary_data` | ~200 | Pirson's WoW glossary (80 abbreviations, 102 expansions) |
-| `about_dialog` | ~170 | About tab with version, credits, donations |
-| `cache` | ~150 | Two-level: LRU (1000 entries) + SQLite (7-day TTL), thread-safe |
-| `detector` | ~140 | Language detection + Cyrillic fallback for short text |
-| `translator` | ~140 | DeepL API wrapper with retry, timeout, exception fallback |
-| `config` | ~125 | Config JSON, atomic save, .bak backup, WoW path detection |
-| `hotkeys` | ~120 | Global hotkey manager (RegisterHotKey) |
+| `cache` | ~180 | Two-level: LRU + SQLite (7-day TTL), thread-safe |
+| `translators/deepl_provider` | ~155 | DeepL backend |
+| `translators/microsoft_provider` | ~140 | Microsoft Translator backend |
+| `detector` | ~135 | Language detection + Cyrillic fallback for short text |
+| `x11_window` | ~135 | EWMH always-on-top and positioning for the X11 overlay mode |
+| `hotkeys_windows` / `hotkeys_linux` | ~120 each | Global hotkeys per platform, behind the `hotkeys` dispatcher |
+| `translators/service` | ~110 | Picks a provider, falls through to the next on failure |
+| `native_scanner` | ~110 | ctypes binding to the Rust scanner library |
 | `watcher` | ~105 | File watcher fallback (polls WoWChatLog.txt) |
-| `tray` | ~100 | System tray icon |
 | `glossary` | ~90 | WoW abbreviation lookup + context-gated expansion |
-| `slang` | ~85 | Gaming slang normalizer for DeepL |
-| `text_utils` | ~70 | URL stripping, token preservation, color code removal |
+| `slang` | ~85 | Gaming slang normalizer before the provider call |
+| `text_utils` | ~80 | URL stripping, token preservation, color code removal |
+| `translator` | ~55 | Re-export shim: the import path the rest of the app uses |
+| `memory_reader`, `hotkeys` | ~25, ~10 | Platform dispatchers |
 
 ## Threading Model
 
 | Thread | Owns | Writes to |
 |--------|------|-----------|
-| Main (PyQt6 event loop) | Overlay, Settings, Tray | `_config` via `update_config()` |
+| Main (PyQt6 or GTK4 event loop) | Overlay, Settings, Tray | `_config` via `update_config()` |
 | Memory reader | `WoWAddonBufReader._run_loop` | Calls `pipeline._on_new_line` |
 | File watcher (fallback) | `ChatLogWatcher._poll_loop` | Calls `pipeline._on_new_line` |
 | Rust scanner | Region scan lives in the native library | Return values only (no shared state) |
@@ -91,18 +127,36 @@ WoW Process                          Companion App (Python, admin)
 | Decision | Rationale |
 |----------|-----------|
 | Memory buffer, not file watcher | WoW buffers WoWChatLog.txt with 1-5 min delay. Addon → Lua string → ReadProcessMemory = <1s |
-| Overlay, not in-game UI | WoW Lua sandbox cannot make HTTP requests. External overlay can call DeepL |
+| Overlay, not in-game UI | WoW Lua sandbox cannot make HTTP requests. An external overlay can call a translation API |
 | Streaming translation | Show original immediately (0ms), translation arrives async (0.5-2s). Perceived latency = 0 |
 | Outgoing via clipboard | ToS compliance — no automation, user manually pastes |
-| Python, not C++/Rust | Bottleneck is I/O (ReadProcessMemory), not CPU. Python gives PyQt6 + lingua-py + DeepL SDK |
+| Python, not C++/Rust | Bottleneck is I/O (ReadProcessMemory), not CPU. Python gives PyQt6/GTK4 + lingua-py + the provider SDKs |
+| GigaChat first in the chain | Reachability, not quality: no card, no VPN, free for individuals. MyMemory second because it needs no account at all |
 | MIT license | Compatible with Pirson's WoW Translator (MIT), simplest for community |
 
 ## Tests
 
-133 tests across 6 files:
-- `test_cache.py` — thread-safe cache, LRU eviction, TTL, concurrent access
-- `test_glossary.py` — abbreviation lookup, context-gated expansion, data integrity
-- `test_parser.py` — channel parsing, whispers, edge cases, Unicode, addon v2.1 format
-- `test_phrasebook.py` — multilingual lookup, abbreviations, normalization
-- `test_pipeline.py` — E2E with mock DeepL: phrasebook, cache, streaming, dedup, filtering
-- `test_text_utils.py` — URL stripping, token preservation, color code removal
+795 tests in 30 files — `QT_QPA_PLATFORM=offscreen python -m pytest -q`.
+The addon's Lua is exercised under a real Lua 5.1 interpreter through `lupa`
+(`tests/lua_harness.py`), so the Lua in `addon/` is tested from Python rather
+than re-implemented in it.
+
+- Engine: `test_cache.py`, `test_dedup.py`, `test_parser.py`,
+  `test_phrasebook.py`, `test_glossary.py`, `test_text_utils.py`,
+  `test_pipeline.py`, `test_channel_classification.py`
+- Providers: `test_translator_registry.py`, `test_translator_gigachat.py`,
+  `test_translator_mymemory.py`, `test_gigachat_credential.py`
+- Addon: `test_addon_toc_and_libs.py`, `test_addon_dict_engine.py`,
+  `test_addon_dict_corpus.py`, `test_addon_dict_locales.py`,
+  `test_addon_companion_buffer.py`, `test_addon_companion_contract.py`,
+  `test_addon_commands.py`, `test_addon_config_settings.py`,
+  `test_dict_coverage.py`
+- UI and packaging: `test_i18n_completeness.py`, `test_settings_layout.py`,
+  `test_overlay_theme.py`, `test_hotkeys_wired.py`, `test_native_scanner.py`,
+  `test_config_upgrade.py`, `test_debug_log_privacy.py`,
+  `test_release_workflow.py`, and `test_tray_sni.py`, which needs PyGObject and
+  skips where it is absent
+
+`test_addon_toc_and_libs.py` also guards this document: a term count or a
+category count that does not match the data files fails the suite, as does any
+line that tells the user to elevate — the build stopped asking for elevation.

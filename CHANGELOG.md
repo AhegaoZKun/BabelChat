@@ -7,7 +7,7 @@
 - **GigaChat as the default translation provider** — free for individuals (1M tokens a year), no card, a Sber ID is enough, and it works from Russia without a VPN. This is why the release exists: DeepL's free tier asks for a card to verify identity and Microsoft needs an Azure account, and neither is reachable for a large part of the audience.
 - **MyMemory as a keyless fallback** — needs no account at all, so a new player gets working translation on first launch before configuring anything, and an existing user keeps a fallback when their provider hits quota. It is available whether or not the config mentions it.
 - **Providers declare themselves** — adding one used to mean editing `translator.py`, `config.py`, both settings dialogs, both setup wizards and both entry points; missing one produced a backend that worked but could not be configured. A provider is now a single `ProviderSpec`, and both frontends render whatever the registry holds.
-- **Two channels the app could not previously tell apart** — player-made channels and emotes each get their own toggle, colour, prefix and overlay filter tab.
+- **Two channels the app could not previously tell apart** — player-made channels and emotes each get their own toggle and their own overlay filter tab, and on the Windows overlay their own colour and prefix. The GTK overlay still draws both in Say's colour and without a badge.
 - **Midnight 12.1.0 compatibility** — TOC interface versions, a brand icon, and the addon renamed to BabelChat throughout.
 
 ### Fixed / Исправлено / Corregido
@@ -34,7 +34,7 @@
 
 ### Tests / Тесты / Pruebas
 
-- **168 → 535.** The addon's Lua is exercised under a real Lua 5.1 interpreter through `lupa` — the same version WoW runs — rather than being re-implemented in Python.
+- **168 → 795.** The addon's Lua is exercised under a real Lua 5.1 interpreter through `lupa` — the same version WoW runs — rather than being re-implemented in Python.
 - **The test harness was quietly making every Cyrillic assertion meaningless.** Lua's `string.lower` and its `%w`/`%s` classes read the process C locale, and under `Russian_Russia.1252` two distinct Cyrillic letters fold to the same bytes while the trail byte of "Р" matches `%s`. WoW runs under the C locale; the harness now pins it.
 - **A set of tests could not fail and have been rewritten**, each confirmed by reintroducing the defect it names. The settings panel is now built with a recording `CreateFrame` instead of being matched against its own source text, and the dictionary is tested against the data that actually ships on lines players type.
 - The TOC's `SavedVariables` line and its file load order are pinned, and every addon file is syntax-checked.
