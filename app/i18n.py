@@ -723,9 +723,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ES": "Hermandad",
     },
     "settings.ch.say": {
-        "RU": "Сказать / Крик",
-        "EN": "Say / Yell",
-        "ES": "Decir / Gritar",
+        "RU": "Сказать",
+        "EN": "Say",
+        "ES": "Decir",
     },
     "settings.ch.yell": {
         "RU": "Крик",

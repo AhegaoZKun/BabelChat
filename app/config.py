@@ -169,28 +169,60 @@ class AppConfig:
         return cls()
 
 
-#: Every channel the user can switch on or off, in the order both settings
-#: screens draw them, paired with the string-table key for its label.
-#:
-#: It lives here rather than in a frontend because it drifted: Yell had a row on
-#: Linux and none on Windows, and Custom and Emote had rows on Windows and none
-#: on Linux. A setting the app applies but no screen offers is worse than no
-#: setting at all — the user cannot see it, change it, or report it.
-CHANNEL_TOGGLES: tuple[tuple[str, str], ...] = (
-    ("channels_party", "settings.ch.party"),
-    ("channels_raid", "settings.ch.raid"),
-    ("channels_guild", "settings.ch.guild"),
-    ("channels_say", "settings.ch.say"),
-    ("channels_yell", "settings.ch.yell"),
-    ("channels_whisper", "settings.ch.whisper"),
-    ("channels_instance", "settings.ch.instance"),
-    ("channels_trade", "settings.ch.trade"),
-    ("channels_general", "settings.ch.general"),
-    ("channels_services", "settings.ch.services"),
-    ("channels_lfg", "settings.ch.lfg"),
-    ("channels_custom", "settings.ch.custom"),
-    ("channels_emote", "settings.ch.emote"),
+@dataclass(frozen=True, slots=True)
+class ChannelToggle:
+    """One switch in the settings window, and everything that depends on it.
+
+    Four separate hand-written copies of this mapping used to exist — the two
+    settings dialogs, the two entry points, and the overlay's filter tabs — and
+    every one of them drifted. Yell had a row on Linux and none on Windows;
+    Custom and Emote had rows on Windows and none on Linux; and once both got
+    rows, Yell was still read by nobody, because Say quietly enabled it. A
+    setting no screen offers cannot be reported. A setting a screen offers and
+    the app ignores is worse: the user believes they changed something.
+    """
+
+    #: The AppConfig field the checkbox writes.
+    field: str
+    #: Key into the string table for the checkbox label.
+    label: str
+    #: Names of the parser channels this switch turns on.
+    channels: tuple[str, ...]
+    #: Filter tab in the overlay that shows them.
+    tab: str
+
+
+CHANNEL_TOGGLES: tuple[ChannelToggle, ...] = (
+    ChannelToggle("channels_party", "settings.ch.party", ("PARTY", "PARTY_LEADER"), "Party"),
+    ChannelToggle("channels_raid", "settings.ch.raid", ("RAID", "RAID_LEADER", "RAID_WARNING"), "Raid"),
+    ChannelToggle("channels_guild", "settings.ch.guild", ("GUILD", "OFFICER"), "Guild"),
+    ChannelToggle("channels_say", "settings.ch.say", ("SAY",), "Say"),
+    ChannelToggle("channels_yell", "settings.ch.yell", ("YELL",), "Say"),
+    ChannelToggle("channels_whisper", "settings.ch.whisper", ("WHISPER_FROM", "WHISPER_TO"), "Whisper"),
+    ChannelToggle("channels_instance", "settings.ch.instance", ("INSTANCE", "INSTANCE_LEADER"), "Instance"),
+    ChannelToggle("channels_trade", "settings.ch.trade", ("TRADE",), "Trade"),
+    ChannelToggle("channels_general", "settings.ch.general", ("GENERAL",), "General"),
+    ChannelToggle("channels_services", "settings.ch.services", ("SERVICES",), "Services"),
+    ChannelToggle("channels_lfg", "settings.ch.lfg", ("LOOKING_FOR_GROUP",), "LookingForGroup"),
+    ChannelToggle("channels_custom", "settings.ch.custom", ("CUSTOM",), "Custom"),
+    ChannelToggle("channels_emote", "settings.ch.emote", ("EMOTE",), "Emote"),
 )
+
+
+def enabled_channels(config: AppConfig) -> set:
+    """The parser channels the user's toggles add up to."""
+    from app.parser import Channel
+
+    enabled = set()
+    for toggle in CHANNEL_TOGGLES:
+        if getattr(config, toggle.field):
+            enabled |= {Channel[name] for name in toggle.channels}
+    return enabled
+
+
+def enabled_filter_tabs(config: AppConfig) -> set[str]:
+    """The overlay filter tabs the user's toggles add up to."""
+    return {toggle.tab for toggle in CHANNEL_TOGGLES if getattr(config, toggle.field)}
 
 
 def _migrate_split_channels(data: dict) -> None:
@@ -209,6 +241,11 @@ def _migrate_split_channels(data: dict) -> None:
     """
     if "channels_emote" not in data and "channels_say" in data:
         data["channels_emote"] = bool(data["channels_say"])
+    # Yell was bundled into Say for the same reason and now has its own toggle,
+    # so it inherits the same way. Its old default was off, but what the user
+    # actually experienced was "Say is on, therefore yells are translated".
+    if "channels_yell" not in data and "channels_say" in data:
+        data["channels_yell"] = bool(data["channels_say"])
 
 
 # Config written before providers became generic: one flat field per provider

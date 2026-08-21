@@ -90,22 +90,6 @@ local function Lower(text)
     end))
 end
 
--- Spaces Lua does not know about. Players paste from Discord, from the armoury
--- and from guild sites, and what comes back is often a non-breaking space
--- (bytes 194,160) or one of the U+2000 family (226,128,128-138 and 226,128,175)
--- rather than a plain one. %s matches none of them, so the whole message
--- arrives as one unsplittable token and nothing in it is ever glossed.
---
--- Each is replaced with the same number of plain spaces, so the tokeniser sees
--- the gap while every byte position into the original message stays valid.
-local NBSP = string_char(194) .. string_char(160)
-local WIDE_SPACE = string_char(226) .. string_char(128) .. "([" .. string_char(128) .. "-" .. string_char(138) .. string_char(175) .. "])"
-
-local function Splittable(text)
-    local out = string_gsub(text, NBSP, "  ")
-    return (string_gsub(out, WIDE_SPACE, "   "))
-end
-
 -- Multi-byte characters that are punctuation rather than letters, by lead byte.
 -- 0xC2 opens U+0080-U+00BF: the non-breaking space, « », the section sign.
 -- 0xE2 opens U+2000-U+2FFF: the em dash, curly quotes, the ellipsis, bullets.
@@ -298,36 +282,39 @@ local function CollectMatches(text)
         end
     end
 
-    -- One pass over the message's words. Every source is consulted at the
-    -- position where a word actually starts, which is what makes the result
-    -- boundary-safe and ordered without a second sort over the dictionary.
-    for startPos, word in Splittable(text):gmatch("()([^%s|]+)") do
-        -- A token carries whatever punctuation sits against it, so "ty," and
-        -- "«спс»" and "—raid finder" are each a single token and none of them
-        -- reaches the dictionary as written. Trim the non-word characters off
-        -- both ends and move the position with them.
-        local trimStart, trimEnd = startPos, startPos + #word - 1
-        while trimStart <= trimEnd and not IsWordCharAt(text, trimStart) do
-            trimStart = trimStart + 1
-        end
-        while trimEnd >= trimStart and not IsWordCharAt(text, trimEnd) do
-            trimEnd = trimEnd - 1
-        end
+    -- One pass over the message, a word at a time. A "word" is a maximal run of
+    -- word characters, which is what makes "dps/heal", "gg,wp" and "brb/afk"
+    -- work: splitting on whitespace and then trimming the ends only ever saw
+    -- those as one token, so they went to the dictionary as one key and missed.
+    -- That is the canonical shape of an LFG line, and it used to gloss.
+    --
+    -- Scanning by character class also means a non-breaking space or an em dash
+    -- separates words for free — its lead byte is punctuation — so there is no
+    -- rewriting of the message beforehand and no byte offsets to keep in step.
+    local length = string_len(text)
+    local pos = 1
+    while pos <= length do
+        if not IsWordCharAt(text, pos) then
+            pos = pos + 1
+        else
+            local wordStart = pos
+            while pos <= length and IsWordCharAt(text, pos) do
+                pos = pos + 1
+            end
+            local wordEnd = pos - 1
 
-        if trimEnd >= trimStart then
-            local bare = string_sub(text, trimStart, trimEnd)
+            local bare = string_sub(text, wordStart, wordEnd)
             local bareLower = Lower(bare)
 
-            -- Phrases are consulted from the trimmed position too. Looking them
-            -- up on the raw token meant "«raid finder»" missed the phrase and
-            -- fell through to the single word, glossing "raid" — a shorter
-            -- answer, and the wrong one.
-            claimLongest(PhraseIndex[bareLower], trimStart)
-            claimLongest(BabbleIndex[bareLower], trimStart)
+            -- Phrases are consulted from the word's own position, so punctuation
+            -- in front of one cannot downgrade it to its first word — "«raid
+            -- finder»" used to gloss "raid", a shorter answer and the wrong one.
+            claimLongest(PhraseIndex[bareLower], wordStart)
+            claimLongest(BabbleIndex[bareLower], wordStart)
 
             local single = MasterDict[bareLower]
             if single then
-                claim(trimStart, trimEnd, bare, single)
+                claim(wordStart, wordEnd, bare, single)
             end
         end
     end

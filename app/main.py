@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication
 
 from app import debug_log
 from app.about_dialog import AboutDialog
-from app.config import AppConfig, resolve_chatlog_path
+from app.config import AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path
 from app.hotkeys import GlobalHotkeyManager
 from app.i18n import tr
 from app.overlay import ChatOverlay
@@ -115,31 +115,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     chatlog = resolve_chatlog_path(config)
     own_lang = _LANG_CODE_TO_LINGUA.get(config.own_language, Language.ENGLISH)
 
-    enabled_channels: set[Channel] = set()
-    if config.channels_party:
-        enabled_channels |= {Channel.PARTY, Channel.PARTY_LEADER}
-    if config.channels_raid:
-        enabled_channels |= {Channel.RAID, Channel.RAID_LEADER, Channel.RAID_WARNING}
-    if config.channels_guild:
-        enabled_channels |= {Channel.GUILD, Channel.OFFICER}
-    if config.channels_say:
-        enabled_channels |= {Channel.SAY, Channel.YELL}
-    if config.channels_whisper:
-        enabled_channels |= {Channel.WHISPER_FROM, Channel.WHISPER_TO}
-    if config.channels_instance:
-        enabled_channels |= {Channel.INSTANCE, Channel.INSTANCE_LEADER}
-    if config.channels_trade:
-        enabled_channels |= {Channel.TRADE}
-    if config.channels_general:
-        enabled_channels |= {Channel.GENERAL}
-    if config.channels_services:
-        enabled_channels |= {Channel.SERVICES}
-    if config.channels_lfg:
-        enabled_channels |= {Channel.LOOKING_FOR_GROUP}
-    if config.channels_custom:
-        enabled_channels |= {Channel.CUSTOM}
-    if config.channels_emote:
-        enabled_channels |= {Channel.EMOTE}
+    channels = enabled_channels(config)
 
     return PipelineConfig(
         chatlog_path=chatlog,
@@ -147,36 +123,20 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
-        enabled_channels=enabled_channels,
+        enabled_channels=channels,
         skip_own_messages=config.skip_own_messages,
         translation_enabled=config.translation_enabled_default,
     )
 
 
 def _enabled_filter_names(config: AppConfig) -> set[str]:
-    """Build the set of overlay filter tab names from config channel booleans."""
-    names: set[str] = set()
-    if config.channels_party:
-        names.add("Party")
-    if config.channels_raid:
-        names.add("Raid")
-    if config.channels_guild:
-        names.add("Guild")
-    if config.channels_say:
-        names.add("Say")
-    if config.channels_whisper:
-        names.add("Whisper")
-    if config.channels_instance:
-        names.add("Instance")
-    if config.channels_trade:
-        names.add("Trade")
-    if config.channels_general:
-        names.add("General")
-    if config.channels_services:
-        names.add("Services")
-    if config.channels_lfg:
-        names.add("LookingForGroup")
-    return names
+    """Overlay filter tabs, from the same declaration the checkboxes come from.
+
+    This was a fifth hand-written copy of the channel mapping, and it was
+    missing Custom and Emote — so a message from either had no tab of its own
+    and appeared only under All.
+    """
+    return enabled_filter_tabs(config)
 
 
 _console_initialized = False

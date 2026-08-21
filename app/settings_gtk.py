@@ -105,10 +105,10 @@ class SettingsWindowGtk:
         grid = Gtk.Grid()
         grid.set_row_spacing(4)
         grid.set_column_spacing(16)
-        for i, (attr, label_key) in enumerate(CHANNEL_TOGGLES):
-            cb = Gtk.CheckButton(label=tr(label_key))
-            cb.set_active(bool(getattr(self._config, attr)))
-            self._checks[attr] = cb
+        for i, toggle in enumerate(CHANNEL_TOGGLES):
+            cb = Gtk.CheckButton(label=tr(toggle.label))
+            cb.set_active(bool(getattr(self._config, toggle.field)))
+            self._checks[toggle.field] = cb
             grid.attach(cb, i % 2, i // 2, 1, 1)
         root.append(grid)
 

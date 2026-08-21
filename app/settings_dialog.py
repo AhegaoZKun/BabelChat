@@ -222,11 +222,11 @@ class SettingsDialog(QDialog):
         ch_group = QGroupBox(tr("settings.channels_group"))
         ch_grid = QGridLayout(ch_group)
         self._channel_boxes: dict[str, QCheckBox] = {}
-        for index, (attribute, label_key) in enumerate(CHANNEL_TOGGLES):
-            box = QCheckBox(tr(label_key))
-            box.setChecked(getattr(self._config, attribute))
+        for index, toggle in enumerate(CHANNEL_TOGGLES):
+            box = QCheckBox(tr(toggle.label))
+            box.setChecked(getattr(self._config, toggle.field))
             ch_grid.addWidget(box, index // 3, index % 3)
-            self._channel_boxes[attribute] = box
+            self._channel_boxes[toggle.field] = box
         layout.addWidget(ch_group)
 
         layout.addStretch()

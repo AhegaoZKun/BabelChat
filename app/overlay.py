@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.about_dialog import VERSION
-from app.config import AppConfig
+from app.config import CHANNEL_TOGGLES, AppConfig
 from app.i18n import tr
 from app.parser import Channel
 from app.pipeline import TranslatedMessage
@@ -98,6 +98,10 @@ CHANNEL_COLORS: dict[Channel, str] = {
     Channel.GENERAL: "#FFC0C0",
     Channel.SERVICES: "#FFC0C0",
     Channel.LOOKING_FOR_GROUP: "#FFC0C0",
+    # A player-made channel and an emote are not speech, and rendering either in
+    # Say's white left them indistinguishable from it.
+    Channel.CUSTOM: "#C0E0FF",
+    Channel.EMOTE: "#FF7F00",
 }
 
 CHANNEL_PREFIXES: dict[Channel, str] = {
@@ -118,6 +122,8 @@ CHANNEL_PREFIXES: dict[Channel, str] = {
     Channel.GENERAL: "[Gen]",
     Channel.SERVICES: "[Svc]",
     Channel.LOOKING_FOR_GROUP: "[LFG]",
+    Channel.CUSTOM: "[Ch]",
+    Channel.EMOTE: "[Emote]",
 }
 
 TRANSLATION_COLOR = "#FFD200"  # Gold for translated text
@@ -205,20 +211,11 @@ class ChannelFilterBar(QWidget):
         )
 
 
-# Mapping from filter tab name to channels
-_FILTER_CHANNELS: dict[str, set[Channel]] = {
-    "All": set(Channel),
-    "Party": {Channel.PARTY, Channel.PARTY_LEADER},
-    "Raid": {Channel.RAID, Channel.RAID_LEADER, Channel.RAID_WARNING},
-    "Guild": {Channel.GUILD, Channel.OFFICER},
-    "Say": {Channel.SAY, Channel.YELL},
-    "Whisper": {Channel.WHISPER_FROM, Channel.WHISPER_TO},
-    "Instance": {Channel.INSTANCE, Channel.INSTANCE_LEADER},
-    "Trade": {Channel.TRADE},
-    "General": {Channel.GENERAL},
-    "Services": {Channel.SERVICES},
-    "LookingForGroup": {Channel.LOOKING_FOR_GROUP},
-}
+# Filter tab -> the channels it shows, built from the one declaration the
+# settings checkboxes also come from. Written by hand, it went stale twice.
+_FILTER_CHANNELS: dict[str, set[Channel]] = {"All": set(Channel)}
+for _toggle in CHANNEL_TOGGLES:
+    _FILTER_CHANNELS.setdefault(_toggle.tab, set()).update(Channel[_name] for _name in _toggle.channels)
 
 
 class _TranslateSignals(QWidget):

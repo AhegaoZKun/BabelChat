@@ -20,9 +20,8 @@ from dotenv import load_dotenv
 from lingua import Language
 
 from app import debug_log
-from app.config import CONFIG_FILE, AppConfig, resolve_chatlog_path
+from app.config import CONFIG_FILE, AppConfig, enabled_channels, resolve_chatlog_path
 from app.overlay_gtk import ChatOverlayGtk
-from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_gtk import SettingsWindowGtk
 from app.translator import TranslatorService, any_configured
@@ -47,27 +46,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     chatlog = resolve_chatlog_path(config)
     own_lang = _LANG_CODE_TO_LINGUA.get(config.own_language, Language.ENGLISH)
 
-    enabled_channels: set[Channel] = set()
-    if config.channels_party:
-        enabled_channels |= {Channel.PARTY, Channel.PARTY_LEADER}
-    if config.channels_raid:
-        enabled_channels |= {Channel.RAID, Channel.RAID_LEADER, Channel.RAID_WARNING}
-    if config.channels_guild:
-        enabled_channels |= {Channel.GUILD, Channel.OFFICER}
-    if config.channels_say:
-        enabled_channels |= {Channel.SAY, Channel.YELL}
-    if config.channels_whisper:
-        enabled_channels |= {Channel.WHISPER_FROM, Channel.WHISPER_TO}
-    if config.channels_instance:
-        enabled_channels |= {Channel.INSTANCE, Channel.INSTANCE_LEADER}
-    if config.channels_trade:
-        enabled_channels |= {Channel.TRADE}
-    if config.channels_general:
-        enabled_channels |= {Channel.GENERAL}
-    if config.channels_services:
-        enabled_channels |= {Channel.SERVICES}
-    if config.channels_lfg:
-        enabled_channels |= {Channel.LOOKING_FOR_GROUP}
+    channels = enabled_channels(config)
 
     return PipelineConfig(
         chatlog_path=chatlog,
@@ -75,7 +54,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         translator_priority=getattr(config, "translator_priority", "deepl"),
         target_lang=config.target_language,
         own_language=own_lang,
-        enabled_channels=enabled_channels,
+        enabled_channels=channels,
         skip_own_messages=config.skip_own_messages,
         translation_enabled=config.translation_enabled_default,
     )
