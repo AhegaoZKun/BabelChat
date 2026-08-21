@@ -193,7 +193,7 @@ SPEC = register(
         fields=(
             ProviderField(
                 key="email",
-                label="Email (optional)",
+                label="provider.mymemory.email",
                 placeholder="raises the daily allowance from 5,000 to 50,000 words",
                 secret=False,
                 required=False,
@@ -201,7 +201,7 @@ SPEC = register(
         ),
         build=_build,
         validate=_validate,
-        note="Free, no account needed. Quality is below the others, so it is used as a fallback.",
+        note="provider.mymemory.note",
         keyless=True,
     )
 )

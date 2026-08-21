@@ -158,9 +158,7 @@ class SetupWizard(QDialog):
         layout.addSpacing(4)
 
         explain = QLabel(
-            "These keys are only for full-sentence translation — the in-game dictionary already works for free "
-            "without any of them. Fill in whichever provider you have; if you have none, continue and set one up "
-            "later from Settings."
+            tr("wizard.api.explain")
         )
         explain.setStyleSheet("color: #ccc; font-size: 12px;")
         explain.setWordWrap(True)

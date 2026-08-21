@@ -144,7 +144,7 @@ SPEC = register(
         fields=(
             ProviderField(
                 key="api_key",
-                label="DeepL API key",
+                label="provider.deepl.key",
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx",
                 help_url="https://www.deepl.com/your-account/keys",
                 help_label="Get key",
@@ -152,6 +152,6 @@ SPEC = register(
         ),
         build=_build,
         validate=_validate,
-        note="Free tier: 500K characters a month. Sign-up asks for a card to verify identity and never charges it.",
+        note="provider.deepl.note",
     )
 )

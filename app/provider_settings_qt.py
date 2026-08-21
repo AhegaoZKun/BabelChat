@@ -97,14 +97,14 @@ class _ProviderRow:
         layout.addWidget(header)
 
         if spec.note:
-            note = QLabel(spec.note)
+            note = QLabel(tr(spec.note))
             note.setStyleSheet(_NOTE_STYLE)
             note.setWordWrap(True)
             layout.addWidget(note)
 
         for index, field in enumerate(spec.fields):
             edit = QLineEdit(settings.get(field.key, ""))
-            edit.setPlaceholderText(field.placeholder or field.label)
+            edit.setPlaceholderText(field.placeholder or tr(field.label))
             if field.secret:
                 # A key rendered in the clear ends up in screenshots and support
                 # threads. Visible on demand, hidden by default.

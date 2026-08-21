@@ -52,7 +52,12 @@ class TranslatorBackend(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ProviderField:
-    """One credential input, and enough about it to draw the row."""
+    """One credential input, and enough about it to draw the row.
+
+    `label` and the spec's `note` are i18n KEYS, not text. A provider is
+    user-facing copy as much as it is code, and copy written here in English
+    put English on a Russian screen the moment a provider was added.
+    """
 
     key: str
     label: str

@@ -93,23 +93,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Translator API Key",
         "ES": "Clave API del Traductor",
     },
-    "wizard.api.explain": {
-        "RU": (
-            "BabelChat использует DeepL — один из лучших сервисов "
-            "перевода.\nБесплатный план включает 500 000 символов "
-            "в месяц (это ОЧЕНЬ много чата)."
-        ),
-        "EN": (
-            "BabelChat uses DeepL — one of the best translation "
-            "services available.\nThe free plan includes 500,000 characters "
-            "per month (that's a LOT of chat)."
-        ),
-        "ES": (
-            "BabelChat usa DeepL — uno de los mejores servicios de "
-            "traducción disponibles.\nEl plan gratuito incluye 500.000 caracteres "
-            "al mes (es MUCHO chat)."
-        ),
-    },
     "wizard.api.steps": {
         "RU": (
             "Чтобы получить бесплатный API ключ:\n\n"
@@ -475,6 +458,61 @@ _STRINGS: dict[str, dict[str, str]] = {
         "RU": "Удалено записей: {n}",
         "EN": "Removed {n} entries",
         "ES": "Se eliminaron {n} entradas",
+    },
+    "provider.gigachat.note": {
+        "RU": "Бесплатно для физлиц: 1 млн токенов в год, без карты — достаточно Сбер ID, работает из России без VPN.",
+        "EN": "Free for individuals: 1M tokens a year, no card — a Sber ID is enough, and it works from Russia without a VPN.",
+        "ES": "Gratis para particulares: 1M de tokens al año, sin tarjeta — basta un Sber ID.",
+    },
+    "provider.gigachat.key": {
+        "RU": "Ключ авторизации GigaChat",
+        "EN": "GigaChat authorization key",
+        "ES": "Clave de autorización de GigaChat",
+    },
+    "provider.gigachat.ca": {
+        "RU": "Корневой сертификат НУЦ Минцифры (.pem)",
+        "EN": "Russian root certificate (.pem)",
+        "ES": "Certificado raíz ruso (.pem)",
+    },
+    "provider.mymemory.note": {
+        "RU": "Бесплатно, аккаунт не нужен. Качество ниже остальных, поэтому используется как запасной.",
+        "EN": "Free, no account needed. Quality is below the others, so it is used as a fallback.",
+        "ES": "Gratis, sin cuenta. La calidad es menor, así que se usa como reserva.",
+    },
+    "provider.mymemory.email": {
+        "RU": "E-mail (необязательно)",
+        "EN": "Email (optional)",
+        "ES": "Correo electrónico (opcional)",
+    },
+    "provider.deepl.note": {
+        "RU": "Бесплатный тариф: 500 тыс. символов в месяц. При регистрации просят карту для подтверждения личности, деньги не списывают.",
+        "EN": "Free tier: 500K characters a month. Sign-up asks for a card to verify identity and never charges it.",
+        "ES": "Plan gratuito: 500K caracteres al mes. El registro pide una tarjeta solo para verificar la identidad.",
+    },
+    "provider.deepl.key": {
+        "RU": "Ключ API DeepL",
+        "EN": "DeepL API key",
+        "ES": "Clave de API de DeepL",
+    },
+    "provider.microsoft.note": {
+        "RU": "Бесплатный тариф: 2 млн символов в месяц, карта не нужна — но потребуется аккаунт Azure.",
+        "EN": "Free tier: 2M characters a month, no card required — but you need an Azure account.",
+        "ES": "Plan gratuito: 2M de caracteres al mes, sin tarjeta — pero hace falta una cuenta de Azure.",
+    },
+    "provider.microsoft.key": {
+        "RU": "Ключ API Microsoft Translator",
+        "EN": "Microsoft Translator API key",
+        "ES": "Clave de API de Microsoft Translator",
+    },
+    "provider.microsoft.region": {
+        "RU": "Регион Azure",
+        "EN": "Azure region",
+        "ES": "Región de Azure",
+    },
+    "wizard.api.explain": {
+        "RU": "Ключи нужны только для перевода целыми предложениями — встроенный словарь работает бесплатно и без них. Заполните того провайдера, который у вас есть; если ни одного нет, продолжайте и настройте позже в настройках.",
+        "EN": "These keys are only for full-sentence translation — the in-game dictionary already works for free without any of them. Fill in whichever provider you have; if you have none, continue and set one up later from Settings.",
+        "ES": "Estas claves solo sirven para traducir frases completas — el diccionario integrado ya funciona gratis sin ninguna. Rellena el proveedor que tengas; si no tienes ninguno, continúa y configúralo luego.",
     },
     "settings.api.reveal": {
         "RU": "Показать ключ",

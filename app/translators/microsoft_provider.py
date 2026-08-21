@@ -120,14 +120,14 @@ SPEC = register(
         fields=(
             ProviderField(
                 key="api_key",
-                label="Microsoft Translator API key",
+                label="provider.microsoft.key",
                 placeholder="Microsoft Translator API key",
                 help_url="https://portal.azure.com/",
                 help_label="Azure portal",
             ),
             ProviderField(
                 key="region",
-                label="Azure region",
+                label="provider.microsoft.region",
                 placeholder="e.g. germanywestcentral, eastus, westeurope",
                 secret=False,
                 required=False,
@@ -135,6 +135,6 @@ SPEC = register(
         ),
         build=_build,
         validate=_validate,
-        note="Free tier: 2M characters a month, no card required — but you need an Azure account.",
+        note="provider.microsoft.note",
     )
 )

@@ -328,14 +328,14 @@ SPEC = register(
         fields=(
             ProviderField(
                 key="authorization_key",
-                label="GigaChat authorization key",
+                label="provider.gigachat.key",
                 placeholder="Base64 of client_id:client_secret",
                 help_url="https://developers.sber.ru/studio/workspaces",
                 help_label="Get key",
             ),
             ProviderField(
                 key="ca_bundle",
-                label="Russian root certificate (.pem)",
+                label="provider.gigachat.ca",
                 placeholder="path to russian_trusted_root_ca.pem — only needed if TLS fails",
                 secret=False,
                 required=False,
@@ -343,9 +343,6 @@ SPEC = register(
         ),
         build=_build,
         validate=_validate,
-        note=(
-            "Free for individuals: 1M tokens a year, no card — a Sber ID is enough, "
-            "and it works from Russia without a VPN."
-        ),
+        note="provider.gigachat.note",
     )
 )
