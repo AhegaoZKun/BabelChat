@@ -416,3 +416,41 @@ def test_both_overlays_draw_the_same_filter_tabs():
     # The Qt filter bar lives in overlay_widgets.py since the overlay was split.
     for module in ("overlay_widgets.py", "overlay_gtk.py"):
         assert "FILTER_TABS" in source(module), f"{module} keeps its own list"
+
+
+# ── the table lives one file per language ────────────────────────────────────
+
+
+def test_the_string_table_is_assembled_from_one_file_per_language():
+    """It was a thousand-line literal in the middle of the module that renders
+    it, so a translator had to find their language three lines at a time and a
+    missing key was a hole in the middle of a table rather than a diff."""
+    from app.locales import LANGUAGE_MODULES
+
+    assert set(LANGUAGE_MODULES) == set(LANGUAGES)
+    for language, module in LANGUAGE_MODULES.items():
+        assert module.STRINGS, f"{language} has no strings"
+        assert all(isinstance(text, str) for text in module.STRINGS.values())
+
+
+def test_every_language_file_carries_the_same_keys():
+    """This is what the split buys: which keys a language is missing is a set
+    difference between two files."""
+    from app.locales import LANGUAGE_MODULES
+
+    reference = set(LANGUAGE_MODULES["EN"].STRINGS)
+    for language, module in LANGUAGE_MODULES.items():
+        missing = sorted(reference - set(module.STRINGS))
+        extra = sorted(set(module.STRINGS) - reference)
+        assert missing == [], f"{language} is missing: {missing}"
+        assert extra == [], f"{language} has keys English does not: {extra}"
+
+
+def test_i18n_holds_the_mechanism_and_not_the_translations():
+    """The point of the move. If the table drifts back into this module the
+    file grows past the size cap again and the locale directory becomes a
+    second copy."""
+    text = source("i18n.py")
+
+    assert "from app import locales" in text
+    assert text.count('": "') < 5, "translations are being written into i18n.py again"

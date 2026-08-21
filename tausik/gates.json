@@ -4,8 +4,7 @@
     "_reason_binary": "addon/BabelChat/img/ holds binary assets and the gate counts newline bytes, so a TGA registers as several hundred 'lines' of nothing. The current icon happens to fall under the cap, but the next asset will not, and a directory rule is honest about what the directory is for.",
     "_reason_libs": "Libs/ is vendored third-party code — LibBabble ships one generated table per locale and is not ours to split. Naming the files individually rather than exempting Libs/ wholesale keeps the cap on any first-party Lua that lands in that tree.",
     "_reason_data": "addon/BabelChat/Data/*.lua ARE first-party: they are the inherited Pirson dictionaries, one table per category, in the format the engine indexes. They are data, not logic — splitting Social.lua at line 500 puts half a category in another file for no gain, and the engine already reads them through one map. Exempted knowingly, and only these four; a new file in Data/ is not covered.",
-    "_reason_i18n": "app/i18n.py is a string table — 170-odd keys x 3 languages and about thirty lines of mechanism. Splitting the data into app/locales/<lang>.py is the actual fix and is tracked as the i18n-split-locales task; exempting it here keeps the cap meaningful for the modules where line count still measures complexity, instead of inviting the table to be chopped in half at an arbitrary key.",
-    "_not_exempt": "app/phrasebook.py (512) is over the cap and deliberately NOT listed: it is a data table twelve lines over, and splitting it would be worse than leaving it. Everything else in app/ and addon/ is under the cap and expected to stay there.",
+    "_not_exempt": "app/phrasebook.py (512) is over the cap and deliberately NOT listed: it is a data table twelve lines over, and splitting it would be worse than leaving it. app/i18n.py and app/overlay.py came off this list once they were actually split — 1263 to 46 and 1221 to 473.",
     "exempt_dirs": [
       "addon/BabelChat/img/"
     ],
@@ -27,7 +26,6 @@
       "addon/BabelChat/Data/Clases.lua",
       "addon/BabelChat/Data/Combate.lua",
       "addon/BabelChat/Data/Grupos.lua",
-      "app/i18n.py",
       "app/overlay_gtk.py"
     ],
     "_reason_overlay": "app/overlay_gtk.py (1032) is over the cap and still exempt: splitting it is the same job done for the Qt overlay, and it cannot be verified here because gi is not installed on Windows or on CI — a blind refactor of the Linux frontend right before a release is worse than the file being long. Tracked as overlay-split. app/overlay.py came off this list: it is 473 lines now, down from 1221."
