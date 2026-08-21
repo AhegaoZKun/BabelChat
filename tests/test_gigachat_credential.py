@@ -137,3 +137,36 @@ def test_the_provider_points_at_step_by_step_instructions():
     I click" unanswered, and that is where people gave up."""
     assert SPEC.guide.startswith("https://")
     assert "gigachat" in SPEC.guide.lower()
+
+
+def test_the_guide_exists_in_both_languages_and_the_link_points_at_it():
+    """A dead link in the one place a stuck user clicks is worse than no link."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    english = root / "docs" / "user" / "gigachat.md"
+    russian = root / "docs" / "user" / "gigachat_ru.md"
+
+    assert english.exists(), "the English guide the settings screen links to is missing"
+    assert russian.exists(), "the Russian guide is missing"
+    assert SPEC.guide.endswith("docs/user/gigachat.md"), SPEC.guide
+
+    for path in (english, russian):
+        text = path.read_text(encoding="utf-8")
+        assert "GIGACHAT_API_PERS" in text, f"{path.name} does not say which tier to pick"
+        assert "Client Secret" in text, f"{path.name} does not name the second field"
+        assert "developers.sber.ru/studio" in text, f"{path.name} does not say where to go"
+
+    assert "gigachat_ru.md" in english.read_text(encoding="utf-8"), "no link to the Russian version"
+    assert "gigachat.md" in russian.read_text(encoding="utf-8"), "no link to the English version"
+
+
+def test_the_guide_does_not_tell_the_user_to_find_the_base64_key():
+    """It is the field that was removed, and the portal still shows one — the
+    guide has to say to ignore it, not to copy it."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for name in ("gigachat.md", "gigachat_ru.md"):
+        text = (root / "docs" / "user" / name).read_text(encoding="utf-8")
+        assert "do not need it" in text or "не нужен" in text, f"{name} does not warn about the authorization key"

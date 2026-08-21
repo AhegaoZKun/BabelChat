@@ -132,6 +132,10 @@ class SettingsWindowGtk:
         self._provider_entries: dict[str, dict[str, object]] = {}
         for spec in all_providers():
             values = saved.get(spec.id, {})
+            if spec.guide:
+                guide = Gtk.LinkButton(uri=spec.guide, label=f"{spec.display_name}: {tr('provider.guide')}")
+                guide.set_halign(Gtk.Align.START)
+                root.append(guide)
             self._provider_entries[spec.id] = {
                 pfield.key: self._entry_row(
                     root,

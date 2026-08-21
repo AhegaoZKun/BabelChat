@@ -49,7 +49,7 @@ one:
 
 | Service | What it asks for | Free allowance |
 |---|---|---|
-| **GigaChat** *(default)* | a Sber ID — no card, no VPN, works from Russia | 1M tokens / year |
+| **GigaChat** *(default)* | a Sber ID — no card, no VPN, works from Russia ([how to get one](https://github.com/Yumash/BabelChat/blob/main/docs/user/gigachat.md)) | 1M tokens / year |
 | **MyMemory** | nothing at all | 5,000 words / day (50,000 with an email) |
 | **DeepL** | a card to verify identity — never charged on Free | 500K characters / month |
 | **Microsoft Translator** | an Azure account | 2M characters / month |
@@ -192,7 +192,7 @@ BabelChat дописывает серым, на той же строке:
 
 | Сервис | Что просит | Бесплатно |
 |---|---|---|
-| **GigaChat** *(по умолчанию)* | Sber ID — без карты, без VPN, работает из России | 1 млн токенов в год |
+| **GigaChat** *(по умолчанию)* | Sber ID — без карты, без VPN, работает из России ([как получить](https://github.com/Yumash/BabelChat/blob/main/docs/user/gigachat_ru.md)) | 1 млн токенов в год |
 | **MyMemory** | ничего | 5 000 слов в день (50 000 с указанным e-mail) |
 | **DeepL** | карту для подтверждения личности — на Free не списывает | 500 тыс. символов в месяц |
 | **Microsoft Translator** | аккаунт Azure | 2 млн символов в месяц |
