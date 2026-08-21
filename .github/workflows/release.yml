@@ -209,34 +209,48 @@ jobs:
           draft: false
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
 
-  # ── CurseForge Upload ──────────────────────────────────────
-  # Uncomment after creating project on CurseForge and adding secrets:
-  #   CF_API_KEY: CurseForge API token (Authors > API Tokens)
+  # ── Addon: CurseForge and Wago ─────────────────────────────
   #
-  # curseforge:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: ${{ !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.event.inputs.tag || github.ref }}
+  # BigWigsMods/packager is the standard tool for WoW addons. It reads
+  # ## Interface, ## X-Curse-Project-ID and ## X-Wago-ID straight out of the
+  # TOC, so the game versions and the project ids live in exactly one place —
+  # the file that has to be correct anyway for the addon to load at all. The job
+  # this replaced carried its own copy of the game version and was two patches
+  # stale before anyone ran it.
   #
-  #     - name: Download addon artifact
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: release-package
-  #         path: release/
+  # Repository secrets, both optional:
+  #   CF_API_TOKEN    CurseForge → Authors → API Tokens
+  #   WAGO_API_TOKEN  wago.io → account settings → API keys
   #
-  #     - name: Upload to CurseForge
-  #       uses: itsmeow/curseforge-upload@v3
-  #       with:
-  #         token: ${{ secrets.CF_API_KEY }}
-  #         project_id: YOUR_PROJECT_ID_HERE
-  #         game_endpoint: wow
-  #         file_path: release/BabelChat-Addon.zip
-  #         display_name: "BabelChat ${{ github.ref_name }}"
-  #         game_versions: "Retail,12.0.5"
-  #         release_type: release
-  #         changelog: "See https://github.com/Yumash/BabelChat/releases"
-  #         changelog_type: text
+  # With neither set the packager runs with -d: it builds the zip and proves the
+  # addon packages cleanly, and uploads nothing. A store whose id is missing
+  # from the TOC is skipped the same way, so this is safe to run before either
+  # project exists.
+  #
+  # GITHUB_API_TOKEN is deliberately not passed: the `release` job above already
+  # creates the GitHub release, and handing the packager a token would have it
+  # create a second one.
+  #
+  # See docs/publishing.md.
+  publish-addon:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # The packager builds a changelog from the commits since the previous
+          # tag, and can do neither from a shallow clone.
+          fetch-depth: 0
+
+      - name: Publish to CurseForge and Wago
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        with:
+          args: >-
+            ${{ (secrets.CF_API_TOKEN == '' && secrets.WAGO_API_TOKEN == '') && '-d' || '' }}
+            -t addon/BabelChat
+            -r ${{ github.workspace }}/.release

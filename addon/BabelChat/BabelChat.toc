@@ -14,6 +14,11 @@
 ## Category-ruRU: Чат
 ## Category-esES: Chat
 
+# Project ids, filled in after the projects exist. The release workflow reads
+# them from here, so this is the only place they are written down.
+# ## X-Curse-Project-ID: <id from the CurseForge project page>
+# ## X-Wago-ID: <id from the Wago Addons project page>
+
 ## SavedVariables: BabelChatDB
 ## OptionalDeps: LibStub, CallbackHandler, LibDataBroker-1.1, LibDBIcon-1.0
 

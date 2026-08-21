@@ -86,3 +86,15 @@ babelchat_scanner_*/target/
 .frai/
 .claude-lib/
 
+# Store API tokens, kept as files so they never pass through a terminal or a
+# chat log on the way to `gh secret set`. Ignored before they exist on purpose:
+# this repository is public and `git add -A` is a habit.
+.cf
+.curseforge
+.wago
+*.token
+.secrets/
+# Anything at the repository root that reads as a credential file.
+.*token*
+.*secret*
+.*api-key*
