@@ -154,6 +154,7 @@ class AppConfig:
             try:
                 data = json.loads(try_path.read_text(encoding="utf-8"))
                 _migrate_provider_keys(data, try_path)
+                _migrate_split_channels(data)
                 defaults = asdict(cls())
                 # Ignore unknown keys (e.g. fields removed in newer versions)
                 # instead of crashing cls(**...) with a TypeError.
@@ -166,6 +167,48 @@ class AppConfig:
                 continue
         logger.warning("No valid config found, using defaults")
         return cls()
+
+
+#: Every channel the user can switch on or off, in the order both settings
+#: screens draw them, paired with the string-table key for its label.
+#:
+#: It lives here rather than in a frontend because it drifted: Yell had a row on
+#: Linux and none on Windows, and Custom and Emote had rows on Windows and none
+#: on Linux. A setting the app applies but no screen offers is worse than no
+#: setting at all — the user cannot see it, change it, or report it.
+CHANNEL_TOGGLES: tuple[tuple[str, str], ...] = (
+    ("channels_party", "settings.ch.party"),
+    ("channels_raid", "settings.ch.raid"),
+    ("channels_guild", "settings.ch.guild"),
+    ("channels_say", "settings.ch.say"),
+    ("channels_yell", "settings.ch.yell"),
+    ("channels_whisper", "settings.ch.whisper"),
+    ("channels_instance", "settings.ch.instance"),
+    ("channels_trade", "settings.ch.trade"),
+    ("channels_general", "settings.ch.general"),
+    ("channels_services", "settings.ch.services"),
+    ("channels_lfg", "settings.ch.lfg"),
+    ("channels_custom", "settings.ch.custom"),
+    ("channels_emote", "settings.ch.emote"),
+)
+
+
+def _migrate_split_channels(data: dict) -> None:
+    """Carry a setting across when one channel becomes two.
+
+    Emotes used to be delivered as Say — the reader mapped EMOTE onto it — so
+    anyone with Say on was having emotes translated without ever being asked.
+    Giving emotes their own toggle is right, but shipping it off by default
+    would take that away silently on upgrade: nothing breaks, a kind of message
+    simply stops appearing, which is the hardest sort of change to notice or
+    report.
+
+    So a config that predates the toggle inherits whatever Say was set to. A
+    config that has the key keeps its own answer, and a fresh install still gets
+    the documented default.
+    """
+    if "channels_emote" not in data and "channels_say" in data:
+        data["channels_emote"] = bool(data["channels_say"])
 
 
 # Config written before providers became generic: one flat field per provider

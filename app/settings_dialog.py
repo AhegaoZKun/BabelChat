@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 
 from app import debug_log
 from app.about_tab_qt import build_about_tab
-from app.config import AppConfig, detect_wow_path
+from app.config import CHANNEL_TOGGLES, AppConfig, detect_wow_path
 from app.i18n import UI_LANGUAGES, tr
 from app.provider_settings_qt import ProviderSettingsGroup
 
@@ -217,50 +217,16 @@ class SettingsDialog(QDialog):
         lang_layout.addRow(tr("settings.lang.target"), self._target_lang)
         layout.addWidget(lang_group)
 
-        # Channels — 3-column grid
+        # Channels — 3-column grid, drawn from the shared declaration so it
+        # cannot drift from the Linux dialog the way it did.
         ch_group = QGroupBox(tr("settings.channels_group"))
         ch_grid = QGridLayout(ch_group)
-        self._ch_party = QCheckBox(tr("settings.ch.party"))
-        self._ch_party.setChecked(self._config.channels_party)
-        self._ch_raid = QCheckBox(tr("settings.ch.raid"))
-        self._ch_raid.setChecked(self._config.channels_raid)
-        self._ch_guild = QCheckBox(tr("settings.ch.guild"))
-        self._ch_guild.setChecked(self._config.channels_guild)
-        self._ch_say = QCheckBox(tr("settings.ch.say"))
-        self._ch_say.setChecked(self._config.channels_say)
-        self._ch_whisper = QCheckBox(tr("settings.ch.whisper"))
-        self._ch_whisper.setChecked(self._config.channels_whisper)
-        self._ch_instance = QCheckBox(tr("settings.ch.instance"))
-        self._ch_instance.setChecked(self._config.channels_instance)
-        self._ch_trade = QCheckBox(tr("settings.ch.trade"))
-        self._ch_trade.setChecked(self._config.channels_trade)
-        self._ch_general = QCheckBox(tr("settings.ch.general"))
-        self._ch_general.setChecked(self._config.channels_general)
-        self._ch_services = QCheckBox(tr("settings.ch.services"))
-        self._ch_services.setChecked(self._config.channels_services)
-        self._ch_lfg = QCheckBox(tr("settings.ch.lfg"))
-        self._ch_lfg.setChecked(self._config.channels_lfg)
-        ch_grid.addWidget(self._ch_party, 0, 0)
-        ch_grid.addWidget(self._ch_raid, 0, 1)
-        ch_grid.addWidget(self._ch_guild, 0, 2)
-        ch_grid.addWidget(self._ch_say, 1, 0)
-        ch_grid.addWidget(self._ch_whisper, 1, 1)
-        ch_grid.addWidget(self._ch_instance, 1, 2)
-        ch_grid.addWidget(self._ch_trade, 2, 0)
-        ch_grid.addWidget(self._ch_general, 2, 1)
-        ch_grid.addWidget(self._ch_services, 2, 2)
-        ch_grid.addWidget(self._ch_lfg, 3, 0)
-
-        # Channels the classifier can now tell apart. Both off by default: a
-        # player-made channel is usually private, and emotes were previously
-        # indistinguishable from speech.
-        self._ch_custom = QCheckBox(tr("settings.ch.custom"))
-        self._ch_custom.setChecked(self._config.channels_custom)
-        ch_grid.addWidget(self._ch_custom, 3, 1)
-
-        self._ch_emote = QCheckBox(tr("settings.ch.emote"))
-        self._ch_emote.setChecked(self._config.channels_emote)
-        ch_grid.addWidget(self._ch_emote, 3, 2)
+        self._channel_boxes: dict[str, QCheckBox] = {}
+        for index, (attribute, label_key) in enumerate(CHANNEL_TOGGLES):
+            box = QCheckBox(tr(label_key))
+            box.setChecked(getattr(self._config, attribute))
+            ch_grid.addWidget(box, index // 3, index % 3)
+            self._channel_boxes[attribute] = box
         layout.addWidget(ch_group)
 
         layout.addStretch()
@@ -442,18 +408,8 @@ class SettingsDialog(QDialog):
         self._config.ui_language = self._ui_lang.currentData()
         self._config.own_language = self._own_lang.currentData()
         self._config.target_language = self._target_lang.currentData()
-        self._config.channels_party = self._ch_party.isChecked()
-        self._config.channels_raid = self._ch_raid.isChecked()
-        self._config.channels_guild = self._ch_guild.isChecked()
-        self._config.channels_say = self._ch_say.isChecked()
-        self._config.channels_whisper = self._ch_whisper.isChecked()
-        self._config.channels_instance = self._ch_instance.isChecked()
-        self._config.channels_trade = self._ch_trade.isChecked()
-        self._config.channels_general = self._ch_general.isChecked()
-        self._config.channels_services = self._ch_services.isChecked()
-        self._config.channels_lfg = self._ch_lfg.isChecked()
-        self._config.channels_custom = self._ch_custom.isChecked()
-        self._config.channels_emote = self._ch_emote.isChecked()
+        for attribute, box in self._channel_boxes.items():
+            setattr(self._config, attribute, box.isChecked())
         self._config.overlay_opacity = self._opacity_slider.value()
         self._config.overlay_font_size = self._font_size.value()
         self._config.translation_enabled_default = self._translate_default.isChecked()

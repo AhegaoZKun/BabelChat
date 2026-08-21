@@ -19,7 +19,8 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
 
-from app.config import AppConfig  # noqa: E402
+from app.config import CHANNEL_TOGGLES, AppConfig  # noqa: E402
+from app.i18n import tr  # noqa: E402
 from app.overlay_theme import (  # noqa: E402
     PRESET_LABELS,
     PRESET_ORDER,
@@ -29,21 +30,6 @@ from app.overlay_theme import (  # noqa: E402
     resolve_theme,
 )
 from app.translators import all_providers  # noqa: E402
-
-# (label, attribute) pairs for the channel checkboxes.
-_CHANNELS: list[tuple[str, str]] = [
-    ("Say", "channels_say"),
-    ("Yell", "channels_yell"),
-    ("Party", "channels_party"),
-    ("Raid", "channels_raid"),
-    ("Guild", "channels_guild"),
-    ("Whisper", "channels_whisper"),
-    ("Instance", "channels_instance"),
-    ("Trade", "channels_trade"),
-    ("General", "channels_general"),
-    ("Services", "channels_services"),
-    ("LFG", "channels_lfg"),
-]
 
 _LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
 
@@ -119,8 +105,8 @@ class SettingsWindowGtk:
         grid = Gtk.Grid()
         grid.set_row_spacing(4)
         grid.set_column_spacing(16)
-        for i, (label, attr) in enumerate(_CHANNELS):
-            cb = Gtk.CheckButton(label=label)
+        for i, (attr, label_key) in enumerate(CHANNEL_TOGGLES):
+            cb = Gtk.CheckButton(label=tr(label_key))
             cb.set_active(bool(getattr(self._config, attr)))
             self._checks[attr] = cb
             grid.attach(cb, i % 2, i // 2, 1, 1)
