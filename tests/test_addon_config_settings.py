@@ -490,3 +490,113 @@ def test_the_rename_runs_before_the_defaults_are_filled_in():
     assert settings.showTrade is False
     assert settings.showSocial is True
     assert settings.showMazz is None, "the old key should be gone, not kept alongside"
+
+
+# ── labels have to fit the column they sit in ────────────────────────────────
+
+#: The category grid is three columns 190px apart (Config.lua), a checkbox eats
+#: about 26px of that, and the label is drawn in GameFontHighlightSmall. What is
+#: left holds roughly 26 characters. This is a budget, not a measurement — the
+#: harness has no font metrics — but it is calibrated against the label that
+#: actually overflowed: "Эндгейм: М+, вылазки, экипировка (22)" at 37, which ran
+#: straight through the checkbox in the next column.
+CATEGORY_LABEL_BUDGET = 26
+
+
+def category_labels(locale: str) -> dict[str, str]:
+    """Every category label as the options panel will render it, with its count."""
+    harness = AddonHarness()
+    lua = harness.lua
+    lua.globals().GetLocale = lambda: locale
+    harness.load("Locales.lua")
+    table = harness.addon_table.L
+    return {
+        str(key): str(table[key])
+        for key in ("CAT_DUNGEONS", "CAT_SOCIAL", "CAT_CLASSES", "CAT_ROLES", "CAT_STATS",
+                    "CAT_PROFESSIONS", "CAT_COMBAT", "CAT_TRADE", "CAT_GROUPS", "CAT_GUILD",
+                    "CAT_STATUS", "CAT_SLANG", "CAT_ENDGAME", "CAT_ZONES", "CAT_SETS")
+        if table[key] is not None
+    }
+
+
+@pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])
+def test_no_category_label_runs_into_the_next_column(locale):
+    """The Endgame label read "Эндгейм: М+, вылазки, экипировка (22)" and
+    overlapped the checkbox beside it. A label is a name; what the category
+    covers belongs in the tooltip, which already existed and was duplicating it.
+    """
+    # Four more characters for the " (NN)" the panel appends.
+    too_long = {
+        key: (text, len(text) + 5)
+        for key, text in category_labels(locale).items()
+        if len(text) + 5 > CATEGORY_LABEL_BUDGET
+    }
+
+    assert too_long == {}, f"{locale}: these will overlap the next column: {too_long}"
+
+
+@pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])
+def test_every_category_has_a_tooltip_that_says_more_than_its_label(locale):
+    """Shortening the labels is only safe if the explanation is somewhere. It is
+    the tooltip's whole job, and a tooltip that merely repeats the label is not
+    doing it."""
+    harness = AddonHarness()
+    harness.lua.globals().GetLocale = lambda: locale
+    harness.load("Locales.lua")
+    table = harness.addon_table.L
+
+    lazy = []
+    for key in category_labels(locale):
+        tooltip = table["TT_" + key]
+        if tooltip is None or len(str(tooltip)) <= len(str(table[key])):
+            lazy.append(key)
+
+    assert lazy == [], f"{locale}: no useful tooltip for {lazy}"
+
+
+# ── the About section ────────────────────────────────────────────────────────
+
+
+def link_boxes(harness) -> dict[str, str]:
+    """The addresses the panel offers, by the EditBox that holds each."""
+    return {
+        frame.name: str(frame.text)
+        for frame in built_frames(harness)
+        if frame.name and str(frame.name).startswith("WCT_Link")
+    }
+
+
+def test_the_panel_offers_the_three_places_the_addon_lives(panel):
+    """A player who wants to report something, rate it, or check for an update
+    has nowhere to look otherwise — a WoW addon cannot open a browser, so the
+    address has to be in front of them to copy."""
+    addresses = set(link_boxes(panel).values())
+
+    assert any("github.com/Yumash/BabelChat" in url for url in addresses), addresses
+    assert any("curseforge.com" in url for url in addresses), addresses
+    assert any("wago.io" in url for url in addresses), addresses
+
+
+def test_every_link_is_a_full_address(panel):
+    """A truncated or relative address is worse than none: it looks copyable and
+    goes nowhere."""
+    bad = {name: url for name, url in link_boxes(panel).items() if not url.startswith("https://")}
+
+    assert bad == {}, f"not a usable address: {bad}"
+
+
+@pytest.mark.parametrize("locale", ["enUS", "ruRU", "esES"])
+def test_the_about_section_credits_both_the_authors_and_the_glossary(locale):
+    """The glossary is Pirson's under MIT. Crediting it only in a file nobody
+    opens is not crediting it."""
+    harness = AddonHarness()
+    harness.lua.globals().GetLocale = lambda: locale
+    harness.load("Locales.lua")
+    table = harness.addon_table.L
+
+    authors = str(table["ABOUT_AUTHORS"])
+    credit = str(table["ABOUT_DICT_CREDIT"])
+
+    assert "AhegaoZKun" in authors, authors
+    assert "Pirson" in credit, credit
+    assert "MIT" in credit, credit

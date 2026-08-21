@@ -474,10 +474,25 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "Free for individuals: 1M tokens a year, no card — a Sber ID is enough, and it works from Russia without a VPN.",
         "ES": "Gratis para particulares: 1M de tokens al año, sin tarjeta — basta un Sber ID.",
     },
-    "provider.gigachat.key": {
-        "RU": "Ключ авторизации GigaChat",
-        "EN": "GigaChat authorization key",
-        "ES": "Clave de autorización de GigaChat",
+    "provider.gigachat.client_id": {
+        "RU": "Client ID",
+        "EN": "Client ID",
+        "ES": "Client ID",
+    },
+    "provider.gigachat.client_id_hint": {
+        "RU": "из Studio Sber — длинная строка с дефисами",
+        "EN": "from Studio Sber — a long string with dashes",
+        "ES": "de Studio Sber — una cadena larga con guiones",
+    },
+    "provider.gigachat.client_secret": {
+        "RU": "Client Secret",
+        "EN": "Client Secret",
+        "ES": "Client Secret",
+    },
+    "provider.gigachat.client_secret_hint": {
+        "RU": "там же, показывается один раз при создании",
+        "EN": "same page, shown once when you create the project",
+        "ES": "misma página, se muestra una sola vez al crear el proyecto",
     },
     "provider.gigachat.ca": {
         "RU": "Корневой сертификат НУЦ Минцифры (.pem)",
@@ -524,15 +539,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "EN": "✗ Could not copy the addon: {detail}. Check that WoW is closed and the folder is writable.",
         "ES": "✗ No se pudo copiar el complemento: {detail}. Comprueba que WoW esté cerrado y la carpeta sea escribible.",
     },
+    "provider.guide": {
+        "RU": "Пошаговая инструкция",
+        "EN": "Step-by-step guide",
+        "ES": "Guía paso a paso",
+    },
     "provider.get_key": {
         "RU": "Получить ключ",
         "EN": "Get key",
         "ES": "Obtener clave",
-    },
-    "provider.gigachat.key_hint": {
-        "RU": "Base64 от client_id:client_secret",
-        "EN": "Base64 of client_id:client_secret",
-        "ES": "Base64 de client_id:client_secret",
     },
     "provider.gigachat.ca_hint": {
         "RU": "путь к russian_trusted_root_ca.pem — нужен, только если TLS не проходит",

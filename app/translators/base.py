@@ -115,6 +115,10 @@ class ProviderSpec:
     note: str = ""
     #: Free of charge and needs no account at all.
     keyless: bool = False
+    #: Step-by-step instructions for getting a credential, shown as a link
+    #: beside the provider. A "get key" link drops the user on a portal; this is
+    #: for the ones where knowing which page to open is the hard part.
+    guide: str = ""
 
     def note_text(self) -> str:
         return _text(self.note)

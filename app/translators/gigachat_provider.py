@@ -19,6 +19,7 @@ the user:
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 import uuid
@@ -110,6 +111,43 @@ def _extract_content(payload: object) -> str | None:
     if not isinstance(content, str) or not content.strip():
         return None
     return content.strip()
+
+
+def authorization_key(settings: dict[str, str]) -> str:
+    """The Basic-auth value GigaChat's OAuth endpoint expects.
+
+    Sber's portal shows a Client ID and a Client Secret, and separately an
+    "authorization key" that is just base64 of `id:secret`. Asking a player for
+    the base64 form meant asking them to know what base64 is, and the field that
+    did was the one people got stuck on.
+
+    So the two obvious values are what the app asks for, and it does the
+    encoding. A config saved before this still carries the encoded form, and
+    that keeps working.
+    """
+    client_id = (settings.get("client_id") or "").strip()
+    client_secret = (settings.get("client_secret") or "").strip()
+    if client_id and client_secret:
+        return base64.b64encode(f"{client_id}:{client_secret}".encode()).decode("ascii")
+    return (settings.get("authorization_key") or "").strip()
+
+
+def split_authorization_key(encoded: str) -> tuple[str, str]:
+    """The Client ID and Secret inside an authorization key, if it holds them.
+
+    Returns ("", "") for anything that does not decode to `id:secret` — a
+    truncated paste, a key from somewhere else, or plain nonsense. The caller
+    keeps the original in that case rather than throwing away a credential it
+    merely failed to recognise.
+    """
+    try:
+        decoded = base64.b64decode(encoded.strip(), validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return "", ""
+    client_id, separator, client_secret = decoded.partition(":")
+    if not separator or not client_id.strip() or not client_secret.strip():
+        return "", ""
+    return client_id.strip(), client_secret.strip()
 
 
 class GigaChatBackend:
@@ -310,14 +348,14 @@ class GigaChatBackend:
 
 def _build(settings: dict[str, str]) -> GigaChatBackend:
     return GigaChatBackend(
-        authorization_key=settings["authorization_key"],
+        authorization_key=authorization_key(settings),
         scope=settings.get("scope", ""),
         ca_bundle=settings.get("ca_bundle", ""),
     )
 
 
 def _validate(settings: dict[str, str]) -> tuple[bool, str]:
-    if not settings.get("authorization_key", "").strip():
+    if not authorization_key(settings):
         return False, FAILURE.NO_KEY
     try:
         return _build(settings).validate()
@@ -331,11 +369,16 @@ SPEC = register(
         display_name="GigaChat",
         fields=(
             ProviderField(
-                key="authorization_key",
-                label="provider.gigachat.key",
-                placeholder="provider.gigachat.key_hint",
+                key="client_id",
+                label="provider.gigachat.client_id",
+                placeholder="provider.gigachat.client_id_hint",
                 help_url="https://developers.sber.ru/studio/workspaces",
                 help_label="provider.get_key",
+            ),
+            ProviderField(
+                key="client_secret",
+                label="provider.gigachat.client_secret",
+                placeholder="provider.gigachat.client_secret_hint",
             ),
             ProviderField(
                 key="ca_bundle",
@@ -348,5 +391,6 @@ SPEC = register(
         build=_build,
         validate=_validate,
         note="provider.gigachat.note",
+        guide="https://github.com/Yumash/BabelChat/blob/main/docs/user/gigachat.md",
     )
 )

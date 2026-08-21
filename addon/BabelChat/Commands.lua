@@ -5,6 +5,7 @@
 -- Split out of Core.lua, which exists to wire the addon together at load and
 -- had grown past the point where that was still what it looked like.
 local ADDON_NAME, addonTable = ...
+local L = addonTable.L
 
 local function Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff9482c9BabelChat|r: " .. msg)
@@ -78,15 +79,26 @@ end
 -- ==========================================
 function addonTable.RunTest()
     local testMsg = "LFM ICC HC 25m Need Tank and Healer"
-    local translated, changed = addonTable.TranslateChat(testMsg)
+    -- Forced: the point of the test is to show what the dictionary knows, and
+    -- reporting "no match" because the companion happens to be running names
+    -- the wrong cause. If the gloss is suppressed, say so separately.
+    local translated, changed = addonTable.TranslateChat(testMsg, true)
 
     Print("|cffffff00" .. L["SLASH_TEST_ORIGINAL"] .. "|cffffffff" .. testMsg .. "|r")
-    if changed then
-        Print("|cffffff00" .. L["SLASH_TEST_RESULT"] .. "|cffffffff" .. translated .. "|r")
-    else
-        local db = BabelChatDB
-        local errorStr = (not db.dict.enabled) and L["SLASH_TEST_ERROR"] or L["TEST_NO_MATCH"]
-        Print("|cffff0000" .. errorStr .. "|r")
+
+    local db = BabelChatDB
+    if not db.dict.enabled then
+        Print("|cffff0000" .. L["SLASH_TEST_ERROR"] .. "|r")
+        return
+    end
+    if not changed then
+        Print("|cffff0000" .. L["TEST_NO_MATCH"] .. "|r")
+        return
+    end
+
+    Print("|cffffff00" .. L["SLASH_TEST_RESULT"] .. "|cffffffff" .. translated .. "|r")
+    if addonTable.ShouldSuppressGloss() then
+        Print("|cffaaaaaa" .. L["TEST_SUPPRESSED"] .. "|r")
     end
 end
 

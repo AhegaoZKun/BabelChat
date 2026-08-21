@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -53,6 +54,7 @@ class _UsageBar(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 0)
+        layout.setSpacing(2)
 
         header = QHBoxLayout()
         title = QLabel(tr("settings.api.usage"))
@@ -66,7 +68,19 @@ class _UsageBar(QWidget):
 
         self._bar = QProgressBar()
         self._bar.setRange(0, 100)
+        self._bar.setFixedHeight(14)
+        self._bar.setTextVisible(False)
         layout.addWidget(self._bar)
+
+        # A quota bar and its caption are not compressible: when the dialog was
+        # short of vertical space the layout took the difference out of them,
+        # handing this widget 26px against a 41px hint and leaving a 9px line of
+        # 11px text with its bottom half cut off. Putting the tabs behind scroll
+        # areas is what actually removed the pressure — this is here so a tab
+        # that ever stops scrolling squeezes something else instead.
+        for label in (title, self._detail):
+            label.setMinimumHeight(label.fontMetrics().height())
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.hide()
 
     def show_detail(self, detail: str) -> bool:
@@ -101,6 +115,15 @@ class _ProviderRow:
             note.setStyleSheet(_NOTE_STYLE)
             note.setWordWrap(True)
             layout.addWidget(note)
+
+        if spec.guide:
+            guide = QLabel(
+                f'<a href="{spec.guide}" style="color: #FFD200; font-size: 11px;">'
+                f"{tr('provider.guide')}</a>"
+            )
+            guide.setOpenExternalLinks(True)
+            guide.setStyleSheet("font-size: 11px;")
+            layout.addWidget(guide)
 
         for index, field in enumerate(spec.fields):
             edit = QLineEdit(settings.get(field.key, ""))

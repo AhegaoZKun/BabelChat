@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -68,6 +69,23 @@ LANGUAGES = {
 
 # WoW-inspired dark theme stylesheet
 from app.hotkey_edit import HotkeyEdit  # noqa: E402  (re-export)
+
+
+def _scrollable(content: QWidget) -> QScrollArea:
+    """Put a tab behind a vertical scroll bar.
+
+    Without one the dialog could not be made shorter than the tallest tab —
+    1020px once there were four providers to configure — so on any screen under
+    about 1100px the Save button sat below the bottom edge with no way to reach
+    it. It also meant the layout took the shortfall out of whatever would give,
+    which is how the quota caption ended up 9px tall with 11px text in it.
+    """
+    area = QScrollArea()
+    area.setWidget(content)
+    area.setWidgetResizable(True)
+    area.setFrameShape(QScrollArea.Shape.NoFrame)
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    return area
 
 
 def _create_dialog_icon() -> QIcon:
@@ -133,10 +151,10 @@ class SettingsDialog(QDialog):
 
         # Tab widget
         tabs = QTabWidget()
-        tabs.addTab(self._create_general_tab(), tr("settings.tab.general"))
-        tabs.addTab(self._create_overlay_tab(), tr("settings.tab.overlay"))
-        tabs.addTab(self._create_hotkeys_tab(), tr("settings.tab.hotkeys"))
-        tabs.addTab(self._create_about_tab(), tr("settings.tab.about"))
+        tabs.addTab(_scrollable(self._create_general_tab()), tr("settings.tab.general"))
+        tabs.addTab(_scrollable(self._create_overlay_tab()), tr("settings.tab.overlay"))
+        tabs.addTab(_scrollable(self._create_hotkeys_tab()), tr("settings.tab.hotkeys"))
+        tabs.addTab(_scrollable(self._create_about_tab()), tr("settings.tab.about"))
         layout.addWidget(tabs)
 
         # Buttons

@@ -13,7 +13,7 @@ local SECTION_GAP = 25
 
 -- Height of the scrolling content. Generous on purpose: too tall only means
 -- a little empty space at the bottom, too short silently clips a section.
-local CONTENT_HEIGHT = 640
+local CONTENT_HEIGHT = 810
 
 local function CountEntries(dict)
     if type(dict) ~= "table" then return 0 end
@@ -342,6 +342,59 @@ function addonTable.CreateConfigUI()
         end
     end)
     AddTooltip(compCB, L["TT_COMP_ENABLE"])
+
+    -- ════════════════════════════════════
+    -- SECTION 6: ABOUT
+    -- ════════════════════════════════════
+    yOffset = yOffset - SECTION_GAP
+    local aboutHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    aboutHeader:SetPoint("TOPLEFT", 16, yOffset)
+    aboutHeader:SetText("|cffd597ff" .. L["ABOUT_HEADER"] .. "|r")
+
+    yOffset = yOffset - 22
+    local authors = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    authors:SetPoint("TOPLEFT", 16, yOffset)
+    authors:SetText(L["ABOUT_AUTHORS"])
+
+    yOffset = yOffset - 18
+    local dictCredit = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    dictCredit:SetPoint("TOPLEFT", 16, yOffset)
+    dictCredit:SetText(L["ABOUT_DICT_CREDIT"])
+
+    -- A WoW addon cannot open a browser, and it cannot put text on the
+    -- clipboard either. An EditBox the player can click and press Ctrl+C in is
+    -- the whole of what the API allows, so that is what each link is.
+    local LINKS = {
+        { label = "GitHub", url = "https://github.com/Yumash/BabelChat" },
+        { label = "CurseForge", url = "https://www.curseforge.com/wow/addons/babelchat" },
+        { label = "Wago", url = "https://addons.wago.io/addons/babelchat" },
+    }
+    for index, link in ipairs(LINKS) do
+        yOffset = yOffset - 24
+        local caption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        caption:SetPoint("TOPLEFT", 16, yOffset - 4)
+        caption:SetText(link.label .. ":")
+        caption:SetWidth(80)
+        caption:SetJustifyH("LEFT")
+
+        local box = CreateFrame("EditBox", "WCT_Link" .. index, panel, "InputBoxTemplate")
+        box:SetPoint("TOPLEFT", 100, yOffset)
+        box:SetSize(400, 20)
+        box:SetAutoFocus(false)
+        box:SetText(link.url)
+        box:SetCursorPosition(0)
+        -- Read-only in effect: any edit snaps back, so a stray keystroke cannot
+        -- turn the address into something that no longer goes anywhere.
+        box:SetScript("OnTextChanged", function(self, userInput)
+            if userInput then
+                self:SetText(link.url)
+                self:SetCursorPosition(0)
+            end
+        end)
+        box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        AddTooltip(box, L["TT_ABOUT_LINK"])
+    end
 
     -- ════════════════════════════════════
     -- REGISTER PANEL

@@ -355,12 +355,16 @@ end
 
 -- Returns (displayText, changed). `changed` is what the chat filter uses to
 -- decide whether to rewrite the line.
-function addonTable.TranslateChat(text)
+-- `force` skips the "stay quiet while the companion is running" rule. Only
+-- /babel test passes it: a test that answers "no dictionary match" because the
+-- addon is deliberately silent is telling the player the wrong thing, and the
+-- one moment they are looking for an answer is the worst moment to be coy.
+function addonTable.TranslateChat(text, force)
     local db = BabelChatDB
     if type(text) ~= "string" or not db or not db.dict or not db.dict.enabled then
         return text, false
     end
-    if addonTable.ShouldSuppressGloss() then
+    if not force and addonTable.ShouldSuppressGloss() then
         return text, false
     end
 
