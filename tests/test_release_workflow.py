@@ -162,3 +162,77 @@ def test_there_is_exactly_one_store_description():
     ]
 
     assert descriptions == ["store-description.md"], f"more than one store page: {descriptions}"
+
+
+# ── main only ────────────────────────────────────────────────────────────────
+
+
+def test_publishing_refuses_a_tag_that_is_not_on_main(workflow):
+    """A tag can be created on any commit, including one never merged.
+    Publishing that puts a build in front of players that no review saw, and
+    neither store lets you unpublish a file once uploaded."""
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    guard = next((s for s in steps if "main" in str(s.get("name", "")).lower()), None)
+
+    assert guard is not None, "nothing checks which branch the tag is on"
+
+    # Non-comment lines only: a substring check passes on a shell script that
+    # merely mentions the command it no longer runs.
+    executable = [line for line in guard["run"].splitlines() if not line.lstrip().startswith("#")]
+    script = chr(10).join(executable)
+
+    assert "merge-base --is-ancestor" in script, script
+    assert "exit 1" in script, "the check does not fail the job"
+    assert "if true" not in script, "the check has been short-circuited"
+
+    order = [s.get("name") or s.get("uses") for s in steps]
+    assert order.index(guard["name"]) < len(order) - 1, "the guard must run before the upload"
+
+
+def test_the_branch_check_does_not_rely_on_base_ref(workflow):
+    """`github.event.base_ref` reports the branch the tag was pushed alongside,
+    which is whatever the pusher had checked out — not where the commit lives."""
+    guard = next(
+        s for s in workflow["jobs"]["publish-addon"]["steps"] if "main" in str(s.get("name", "")).lower()
+    )
+
+    assert "base_ref" not in guard["run"], "the guard executes base_ref"
+
+    # It may be named in a comment — explaining why it is the wrong answer is
+    # how the next person avoids reaching for it — but not in anything that runs.
+    executable = [
+        line
+        for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
+        if "base_ref" in line and not line.lstrip().startswith("#")
+    ]
+    assert executable == [], f"base_ref is used, not just mentioned: {executable}"
+
+
+def test_the_curseforge_project_id_is_in_the_toc_and_only_there():
+    """It is read from the TOC, so a second copy anywhere else is a copy that
+    can disagree."""
+    toc = TOC.read_text(encoding="utf-8")
+    project_ids = re.findall(r"^## X-Curse-Project-ID:\s*(\d+)\s*$", toc, re.M)
+
+    assert project_ids == ["1491616"], f"expected one project id in the TOC, found {project_ids}"
+    assert "1491616" not in WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_the_wago_project_id_is_in_the_toc_and_only_there():
+    toc = TOC.read_text(encoding="utf-8")
+    wago_ids = re.findall(r"^## X-Wago-ID:\s*(\S+)\s*$", toc, re.M)
+
+    assert wago_ids == ["96d2BEGO"], f"expected one Wago id in the TOC, found {wago_ids}"
+    assert "96d2BEGO" not in WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_both_store_ids_are_uncommented():
+    """A `# ## X-Wago-ID:` line looks filled in at a glance and is invisible to
+    the packager, which reads directives, not comments."""
+    for directive in ("X-Curse-Project-ID", "X-Wago-ID"):
+        live = [
+            line
+            for line in TOC.read_text(encoding="utf-8").splitlines()
+            if directive in line and line.startswith("## ")
+        ]
+        assert len(live) == 1, f"{directive} is not a live directive: {live}"
