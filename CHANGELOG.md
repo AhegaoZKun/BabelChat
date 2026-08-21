@@ -1,5 +1,45 @@
 # Changelog / История изменений / Registro de cambios
 
+## [3.4.0] — 2026-08-21
+
+### Added / Добавлено / Añadido
+
+- **GigaChat as the default translation provider** — free for individuals (1M tokens a year), no card, a Sber ID is enough, and it works from Russia without a VPN. This is why the release exists: DeepL's free tier asks for a card to verify identity and Microsoft needs an Azure account, and neither is reachable for a large part of the audience.
+- **MyMemory as a keyless fallback** — needs no account at all, so a new player gets working translation on first launch before configuring anything, and an existing user keeps a fallback when their provider hits quota. It is available whether or not the config mentions it.
+- **Providers declare themselves** — adding one used to mean editing `translator.py`, `config.py`, both settings dialogs, both setup wizards and both entry points; missing one produced a backend that worked but could not be configured. A provider is now a single `ProviderSpec`, and both frontends render whatever the registry holds.
+- **Two channels the app could not previously tell apart** — player-made channels and emotes each get their own toggle, colour, prefix and overlay filter tab.
+- **Midnight 12.1.0 compatibility** — TOC interface versions, a brand icon, and the addon renamed to BabelChat throughout.
+
+### Fixed / Исправлено / Corregido
+
+- **The in-game gloss was the headline complaint, and it was six separate defects.** The same arrow glyph meant both "annotation follows" and "translates to"; a term repeated once per occurrence; entries followed the dictionary's hash order rather than the sentence's; alternatives printed verbatim ("Спасибо/спс"); a newline doubled the height of every glossed message and broke copy-chat; and the addon and the overlay both answered the same message in different words. The gloss is now `term = meaning` pairs on the same line, in message order, one per term, capped at three, and it stays quiet while the companion app is running.
+- **The gloss was written in Spanish.** `targetLocale` defaulted to `esES` — inherited from the addon this dictionary came from — and the auto-detection meant to correct it compared against `enUS`, so it never fired. The language now comes from the WoW client, and a saved config still carrying the old default is corrected unless the client is actually Spanish. The companion had the same inheritance: `target_language` defaulted to `ES` while the interface and the user's own language both defaulted to `RU`.
+- **Russian punctuation stopped the dictionary matching.** Word boundaries were decided one byte at a time and every byte above 127 counted as a letter, so guillemets, the em dash, the ellipsis and the non-breaking space each glued themselves to the word beside them. Lua's `string.lower` is ASCII-only, so a sentence opening with "Спс" never met the key "спс".
+- **Punctuation between two terms lost both of them** — `dps/heal`, `gg,wp` and `brb/afk` are the ordinary shape of an LFG line and none of them glossed.
+- **Channels were classified by name, so on a Russian client the Trade toggle did nothing** and the General toggle controlled Trade. Classification now uses `zoneChannelID`, which is the same number on every locale. A player-made channel reports id 0 and is classified as Custom rather than being passed off as General.
+- **The first-run wizard could not save a provider.** Entering its final page raised, and the only code path that writes the credentials sits behind that page — so on a fresh install a provider could not be configured through the wizard at all.
+- **Other players' chat was written to disk by default**, and message text was quoted in the application log at INFO. The capture trace is now opt-in, off by default, and the checkbox says what the file contains.
+- **The native scanner was loaded by bare filename**, which sends Windows through its standard search order — the working directory and every entry in PATH included. Every candidate is now an absolute path, and the build no longer requests administrator rights: `ReadProcessMemory` against a same-user process never needed them, and standing elevation turned an ordinary DLL-planting bug into a privilege escalation.
+- **Secret chat values and hostile message text could break capture.** Under chat messaging lockdown, instance chat arguments raise on ordinary string operations; a single unguarded one took the chat filter down for the rest of the session. Message text is written by other players and could forge the buffer's own end marker.
+- **Emotes and yells stopped being translated on upgrade.** Both used to arrive through the Say toggle; giving them their own switch would have taken them away in silence, so an existing config inherits its Say setting for both. Player-made channels inherit from General for the same reason.
+- **Three channel switches were decoration.** Yell had a checkbox on both platforms that nothing read, next to a second box that already covered it. Custom and Emote were saved by the Linux settings window and dropped by the Linux entry point.
+- **The settings window was half in English** for every Russian-speaking user, and the Linux one rendered raw string-table keys where field labels belong. Language names are now written in each language itself.
+- **Section headings overlapped the controls beneath them** in the in-game options panel, and the category names were the Spanish ones the dictionary came from.
+
+### Changed / Изменено / Cambiado
+
+- The addon's slash commands, self test and welcome frame moved to `Commands.lua`; `Core.lua` is back to wiring the addon together.
+- The channel toggles are declared once and read by both settings windows, both entry points and the overlay's filter tabs. They had been five hand-written copies and had drifted in every direction.
+- Three libraries the addon loaded but never called were removed.
+
+### Tests / Тесты / Pruebas
+
+- **168 → 535.** The addon's Lua is exercised under a real Lua 5.1 interpreter through `lupa` — the same version WoW runs — rather than being re-implemented in Python.
+- **The test harness was quietly making every Cyrillic assertion meaningless.** Lua's `string.lower` and its `%w`/`%s` classes read the process C locale, and under `Russian_Russia.1252` two distinct Cyrillic letters fold to the same bytes while the trail byte of "Р" matches `%s`. WoW runs under the C locale; the harness now pins it.
+- **A set of tests could not fail and have been rewritten**, each confirmed by reintroducing the defect it names. The settings panel is now built with a recording `CreateFrame` instead of being matched against its own source text, and the dictionary is tested against the data that actually ships on lines players type.
+- The TOC's `SavedVariables` line and its file load order are pinned, and every addon file is syntax-checked.
+
+
 ## [3.3.0] — 2026-07-25
 
 ### Added / Добавлено / Añadido

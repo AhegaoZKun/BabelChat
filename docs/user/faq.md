@@ -2,8 +2,12 @@
 
 ## General
 
-### Why does BabelChat need Administrator privileges?
-To read WoW's process memory via `ReadProcessMemory`. This is a Windows API that requires elevated privileges.
+### Does BabelChat need Administrator privileges?
+No. `ReadProcessMemory` against a process owned by the same user works without
+them, and BabelChat used to ask for them anyway. It no longer does: standing
+elevation turns an ordinary library-planting bug into a full compromise, so the
+build dropped the request. If you have a shortcut set to "run as administrator"
+from an older version, clear it.
 
 ### Is this safe? Will I get banned?
 BabelChat only **reads** memory — it never writes, injects, or automates anything. Warden (WoW's anti-cheat) does not flag read-only memory access.
@@ -12,10 +16,29 @@ BabelChat only **reads** memory — it never writes, injects, or automates anyth
 We tried. WoW buffers `WoWChatLog.txt` with a ~4KB write buffer and flushes unpredictably — delays range from 1 to 5+ minutes, messages arrive in random-order bursts. For a real-time translator, that's useless. Our addon writes to a Lua string in memory, and the companion reads it every 250ms — sub-second latency. This approach is unique: WeakAuras Companion reads SavedVariables from disk (needs `/reload`), WarcraftLogs tails the combat log (not available for chat).
 
 ### Why does translation take 0.5-2 seconds?
-The original message appears **instantly**. The translation delay is the round-trip to DeepL's servers (your text → DeepL neural network → translation back). Common phrases (gg, ty, brb, hello) translate instantly from the built-in phrasebook — no API call needed.
+The original message appears **instantly**. The delay is the round trip to
+whichever provider you configured. Common phrases (gg, ty, brb, hello) and
+glossary terms resolve instantly from data that ships with the app — no network
+call at all.
+
+### Which provider should I use?
+Whichever you can actually sign up for. **GigaChat** is the default because it
+is free for individuals, needs only a Sber ID rather than a card, and works from
+Russia without a VPN. **MyMemory** needs no account whatsoever and is always
+available as a fallback, so translation works before you configure anything.
+DeepL gives the best quality but asks for a card to verify identity; Microsoft
+Translator is free but needs an Azure account.
 
 ### How many messages can I translate for free?
-DeepL Free gives 500,000 characters/month — approximately 10,000 chat messages. For most players this is more than enough. DeepL paid plans offer unlimited translation.
+Depends on the provider: GigaChat gives 1M tokens a year, DeepL 500,000
+characters a month (roughly 10,000 messages), Microsoft 2M characters a month,
+MyMemory 5,000 words a day — 50,000 if you enter an email. If one runs out, the
+next configured provider is tried automatically.
+
+### Can I use more than one provider at once?
+Yes, and it is the point of the "Preferred" setting. The preferred one is tried
+first; if it fails or hits its quota, the others are tried in turn rather than
+the message being dropped.
 
 ## Overlay Issues
 
@@ -23,7 +46,9 @@ DeepL Free gives 500,000 characters/month — approximately 10,000 chat messages
 1. Check that BabelChat addon is enabled in WoW (character select → AddOns)
 2. Type `/babel` in WoW chat — you should see a help message
 3. Check that the companion app shows "WoW: Connected" in the overlay title bar
-4. Verify you're running BabelChat.exe **as Administrator**
+4. If WoW itself is running as administrator, run BabelChat the same way —
+   a normal-privilege process cannot read an elevated one. Neither needs
+   elevation on its own.
 
 ### The overlay covers important parts of my screen
 - **Drag** the title bar to move it
@@ -40,10 +65,19 @@ This is by design — the overlay is click-through so you can play normally. To 
 Check Settings → General → "Your Language". Make sure it's set correctly. BabelChat auto-detects language, but the "your language" setting tells it which to skip.
 
 ### Some short messages aren't translated
-Messages like "ok", "lol", "kk" are in the skip list — they're universal and don't need translation. Abbreviations like "gg", "ty" are translated via the phrasebook instead of DeepL.
+Messages like "ok", "lol", "kk" are in the skip list — they're universal and don't need translation. Abbreviations like "gg", "ty" come from the phrasebook instead of going to a translation provider.
 
 ### Translation quality is bad for gaming terms
-The built-in glossary handles common terms (dps, lfm, wts). If DeepL mistranslates a gaming-specific phrase, it's because the neural network doesn't know WoW context. BabelChat sends a context hint to DeepL, but complex jargon may still be imperfect.
+The built-in glossary handles common terms (dps, lfm, wts) without a network
+call. When a provider mistranslates gaming jargon, it is because the model has
+no WoW context; BabelChat sends a context hint with each request, but complex
+jargon may still come back imperfect.
+
+The addon also glosses terms directly in the chat frame — `wts bis ring 500k`
+gets `wts = продаю · bis = лучшее в слоте` appended in grey on the same line.
+That works with no companion app and no key at all. It stays quiet while the
+companion is running, so the same message isn't answered twice in different
+words — tick "always show the gloss" in `/babel config` if you want both.
 
 ## Connection Issues
 

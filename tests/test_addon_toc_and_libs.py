@@ -234,24 +234,89 @@ def test_english_clients_get_populated_item_set_names(locale):
 # ── documentation that claims a number ───────────────────────────────────────
 
 
-def test_the_readme_term_count_is_the_number_of_terms_there_are():
-    """It said 314 while the data files held 383. A number in a README is a
-    claim, and a stale one is the kind a contributor trusts and repeats."""
-    import re
-    from pathlib import Path
+ROOT = Path(__file__).resolve().parent.parent
 
-    root = Path(__file__).resolve().parent.parent
-    actual = sum(
+#: Every file that describes the project to somebody who did not write it.
+DOCS = (
+    "README.md",
+    "README_ru.md",
+    "CHANGELOG.md",
+    "docs/tech/addon.md",
+    "docs/tech/architecture.md",
+    "docs/tech/dictionary.md",
+    "docs/tech/memory-reader.md",
+    "docs/tech/pipeline.md",
+    "docs/user/quickstart.md",
+    "docs/user/quickstart_ru.md",
+    "docs/user/configuration.md",
+    "docs/user/configuration_ru.md",
+    "docs/user/faq.md",
+    "docs/user/faq_ru.md",
+)
+
+
+def shipped_term_count() -> int:
+    return sum(
         len(re.findall(r'^\s*\["?[^\]]+"?\]\s*=\s*\{', path.read_text(encoding="utf-8"), re.M))
-        for path in (root / "addon" / "BabelChat" / "Data").glob("*.lua")
+        for path in (ROOT / "addon" / "BabelChat" / "Data").glob("*.lua")
     )
 
-    for name in ("README.md", "README_ru.md"):
-        text = (root / name).read_text(encoding="utf-8")
-        counted = r"(\d{3}) (?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)"
-        claimed = {int(n) for n in re.findall(counted, text)}
-        assert claimed, f"{name} no longer states a term count — update this test with it"
-        assert claimed == {actual}, f"{name} claims {sorted(claimed)}, the data files hold {actual}"
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_document_states_a_term_count_that_is_not_the_term_count(name):
+    """The README said 314 while the data files held 383. A number in a document
+    is a claim, and a stale one is the kind a contributor trusts and repeats.
+
+    Every document is checked, not just the two READMEs: the count appeared in
+    three files and only one of them was ever corrected by hand.
+    """
+    text = (ROOT / name).read_text(encoding="utf-8")
+    counted = r"(\d{3})[  ](?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)"
+
+    claimed = {int(n) for n in re.findall(counted, text)}
+
+    assert claimed <= {shipped_term_count()}, (
+        f"{name} claims {sorted(claimed)}, the data files hold {shipped_term_count()}"
+    )
+
+
+def test_at_least_one_document_still_states_the_term_count():
+    """The check above passes vacuously on a document that states no number.
+    Somewhere the count has to be advertised, or the test guards nothing."""
+    counted = r"(\d{3})[  ](?:gaming terms|terms|игровых терминов|игровых термина|термина|терминов)"
+    stating = [name for name in DOCS if re.search(counted, (ROOT / name).read_text(encoding="utf-8"))]
+
+    assert stating, "no document states the term count any more — this test now guards nothing"
+
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_document_tells_the_user_to_run_as_administrator(name):
+    """The build stopped asking for elevation: ReadProcessMemory against a
+    process owned by the same user never needed it, and standing elevation turns
+    an ordinary library-planting bug into a full compromise.
+
+    Documentation that still tells people to elevate is worse than stale — it
+    talks them into granting a privilege the app does not use.
+    """
+    text = (ROOT / name).read_text(encoding="utf-8")
+    telling = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(r"(?:Run|Right-click).*as administrator|Запуск от имени администратора", line)
+    ]
+
+    assert telling == [], f"{name} still tells the user to elevate: {telling}"
+
+
+@pytest.mark.parametrize("name", DOCS)
+def test_no_document_describes_credentials_as_one_flat_field_per_provider(name):
+    """`deepl_api_key` at the top level of config.json is the shape from before
+    providers declared themselves. It is still migrated on load, so naming it as
+    the current shape sends a hand-editing user to a field the app rewrites."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    stale = re.findall(r'"(deepl_api_key|microsoft_api_key|microsoft_region)"\s*:', text)
+
+    assert stale == [], f"{name} documents the pre-registry config shape: {stale}"
 
 
 # ── directives the addon does not work without ───────────────────────────────
