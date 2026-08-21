@@ -33,6 +33,7 @@ local BabbleIndex = {}
 local ipairs, pairs, type = ipairs, pairs, type
 local string_format, string_gsub, string_lower = string.format, string.gsub, string.lower
 local string_sub, string_len = string.sub, string.len
+local string_byte, string_char = string.byte, string.char
 local table_insert, table_sort, table_concat = table.insert, table.sort, table.concat
 
 -- How many pairs to show before collapsing the rest into a count. Four glossed
@@ -63,19 +64,81 @@ local function FirstWord(phrase)
     return phrase:match("^[^%s]+") or phrase
 end
 
--- A byte is part of a word if a match may not start or end next to it. Lua
--- patterns are byte-based and %w is ASCII-only, so Cyrillic bytes (>= 128) are
--- treated as word characters explicitly — otherwise "ты" would count as a
--- boundary and every Russian word would match inside its neighbours.
-local function IsWordByte(byte)
-    if not byte then return false end
-    if byte >= 128 then return true end
-    local char = string.char(byte)
-    return char:match("[%w']") ~= nil
+-- Lua has no case folding beyond ASCII, so a sentence that opens with "Спс"
+-- misses the key "спс" and the message the player wanted glossed comes back
+-- untouched. For a Russian-speaking audience that is the first word of most
+-- messages.
+--
+-- Cyrillic capitals are U+0410-U+042F, which UTF-8 writes as lead byte 208
+-- followed by 144-175, with E as 208,129. Lower case is the same two bytes
+-- wide, so folding by hand keeps every byte position in the message valid.
+local CYR_LEAD_UPPER = string_char(208)
+local CYR_LEAD_LOWER = string_char(209)
+local CYR_UPPER = CYR_LEAD_UPPER .. "([" .. string_char(128) .. "-" .. string_char(175) .. "])"
+
+local function Lower(text)
+    return (string_gsub(string_lower(text), CYR_UPPER, function(trail)
+        local code = string_byte(trail)
+        if code == 129 then                      -- E -> e
+            return CYR_LEAD_LOWER .. string_char(145)
+        elseif code >= 144 and code <= 159 then  -- A-P, still under lead 208
+            return CYR_LEAD_UPPER .. string_char(code + 32)
+        elseif code >= 160 and code <= 175 then  -- R-YA, which crosses into 209
+            return CYR_LEAD_LOWER .. string_char(code - 32)
+        end
+        return CYR_LEAD_UPPER .. trail
+    end))
+end
+
+-- Spaces Lua does not know about. Players paste from Discord, from the armoury
+-- and from guild sites, and what comes back is often a non-breaking space
+-- (bytes 194,160) or one of the U+2000 family (226,128,128-138 and 226,128,175)
+-- rather than a plain one. %s matches none of them, so the whole message
+-- arrives as one unsplittable token and nothing in it is ever glossed.
+--
+-- Each is replaced with the same number of plain spaces, so the tokeniser sees
+-- the gap while every byte position into the original message stays valid.
+local NBSP = string_char(194) .. string_char(160)
+local WIDE_SPACE = string_char(226) .. string_char(128) .. "([" .. string_char(128) .. "-" .. string_char(138) .. string_char(175) .. "])"
+
+local function Splittable(text)
+    local out = string_gsub(text, NBSP, "  ")
+    return (string_gsub(out, WIDE_SPACE, "   "))
+end
+
+-- Multi-byte characters that are punctuation rather than letters, by lead byte.
+-- 0xC2 opens U+0080-U+00BF: the non-breaking space, « », the section sign.
+-- 0xE2 opens U+2000-U+2FFF: the em dash, curly quotes, the ellipsis, bullets.
+-- Every other lead byte above 127 opens a letter as far as chat is concerned.
+local NON_WORD_LEAD = { [194] = true, [226] = true }
+
+-- The byte position where the character covering `pos` begins. Continuation
+-- bytes are 0x80-0xBF, so walking back over them lands on the lead byte.
+local function LeadByte(text, pos)
+    local byte = string_byte(text, pos)
+    while byte and byte >= 128 and byte < 192 and pos > 1 do
+        pos = pos - 1
+        byte = string_byte(text, pos)
+    end
+    return byte
+end
+
+-- Whether the character at `pos` is part of a word, and so whether a match may
+-- begin or end beside it. Classifying by single byte treated every byte above
+-- 127 as a letter, which made "«спс»" and "спс — 10g" unmatchable: the
+-- guillemets and the em dash counted as part of the word.
+local function IsWordCharAt(text, pos)
+    if pos < 1 then return false end
+    local lead = LeadByte(text, pos)
+    if not lead then return false end
+    if lead < 128 then
+        return string_char(lead):match("[%w']") ~= nil
+    end
+    return not NON_WORD_LEAD[lead]
 end
 
 local function HasWordBoundaries(text, startPos, endPos)
-    return not IsWordByte(text:byte(startPos - 1)) and not IsWordByte(text:byte(endPos + 1))
+    return not IsWordCharAt(text, startPos - 1) and not IsWordCharAt(text, endPos + 1)
 end
 
 -- ==========================================
@@ -110,7 +173,7 @@ function addonTable.RebuildMasterDict()
     for _, entry in ipairs(map) do
         if entry.dict and db.dict.settings[entry.key] then
             for term, byLocale in pairs(entry.dict) do
-                local lowerTerm = string_lower(term)
+                local lowerTerm = Lower(term)
                 local translation = FirstAlternative(byLocale[target] or byLocale["enUS"] or term)
 
                 if lowerTerm:find(" ", 1, true) then
@@ -139,7 +202,7 @@ function addonTable.RebuildMasterDict()
                 -- Skip entries that translate to themselves: a partially
                 -- localised table would otherwise emit "Elwynn = Elwynn".
                 if #english > 3 and localised ~= english then
-                    local lowerEnglish = string_lower(english)
+                    local lowerEnglish = Lower(english)
                     local head = FirstWord(lowerEnglish)
                     BabbleIndex[head] = BabbleIndex[head] or {}
                     table_insert(BabbleIndex[head], { lowerEnglish, localised })
@@ -204,7 +267,7 @@ end
 -- MATCH COLLECTION
 -- ==========================================
 local function CollectMatches(text)
-    local lower = string_lower(text)
+    local lower = Lower(text)
     local protected = FindProtectedRanges(text)
     local matches = {}
     local taken = {}
@@ -217,53 +280,52 @@ local function CollectMatches(text)
         table_insert(taken, { startPos, endPos })
         -- One entry per distinct term: "ty ty ty" is one thing worth saying,
         -- not three.
-        local key = string_lower(term)
+        local key = Lower(term)
         if seenTerms[key] then return end
         seenTerms[key] = true
         table_insert(matches, { pos = startPos, term = term, translation = translation })
     end
 
+    -- Longest entry in a bucket that the message actually continues with.
+    local function claimLongest(bucket, atPos)
+        if not bucket then return end
+        for _, entry in ipairs(bucket) do
+            local endPos = atPos + #entry[1] - 1
+            if string_sub(lower, atPos, endPos) == entry[1] then
+                claim(atPos, endPos, string_sub(text, atPos, endPos), entry[2])
+                return
+            end
+        end
+    end
+
     -- One pass over the message's words. Every source is consulted at the
     -- position where a word actually starts, which is what makes the result
     -- boundary-safe and ordered without a second sort over the dictionary.
-    for startPos, word in text:gmatch("()([^%s|]+)") do
-        local lowerWord = string_lower(word)
-
-        local phrases = PhraseIndex[lowerWord]
-        if phrases then
-            for _, phrase in ipairs(phrases) do
-                local candidate = string_sub(lower, startPos, startPos + #phrase[1] - 1)
-                if candidate == phrase[1] then
-                    claim(startPos, startPos + #phrase[1] - 1, string_sub(text, startPos, startPos + #phrase[1] - 1), phrase[2])
-                    break
-                end
-            end
-        end
-
-        local babble = BabbleIndex[lowerWord]
-        if babble then
-            for _, entry in ipairs(babble) do
-                local candidate = string_sub(lower, startPos, startPos + #entry[1] - 1)
-                if candidate == entry[1] then
-                    claim(startPos, startPos + #entry[1] - 1, string_sub(text, startPos, startPos + #entry[1] - 1), entry[2])
-                    break
-                end
-            end
-        end
-
-        -- Tokens are split on whitespace, so a word carries whatever punctuation
-        -- sits against it: "ty," is one token and misses the dictionary. Trim
-        -- the non-word bytes off both ends and move the position with them.
+    for startPos, word in Splittable(text):gmatch("()([^%s|]+)") do
+        -- A token carries whatever punctuation sits against it, so "ty," and
+        -- "«спс»" and "—raid finder" are each a single token and none of them
+        -- reaches the dictionary as written. Trim the non-word characters off
+        -- both ends and move the position with them.
         local trimStart, trimEnd = startPos, startPos + #word - 1
-        while trimStart <= trimEnd and not IsWordByte(text:byte(trimStart)) do
+        while trimStart <= trimEnd and not IsWordCharAt(text, trimStart) do
             trimStart = trimStart + 1
         end
-        while trimEnd >= trimStart and not IsWordByte(text:byte(trimEnd)) do
+        while trimEnd >= trimStart and not IsWordCharAt(text, trimEnd) do
             trimEnd = trimEnd - 1
         end
+
         if trimEnd >= trimStart then
             local bare = string_sub(text, trimStart, trimEnd)
-            local single = MasterDict[string_lower(bare)]
+            local bareLower = Lower(bare)
+
+            -- Phrases are consulted from the trimmed position too. Looking them
+            -- up on the raw token meant "«raid finder»" missed the phrase and
+            -- fell through to the single word, glossing "raid" — a shorter
+            -- answer, and the wrong one.
+            claimLongest(PhraseIndex[bareLower], trimStart)
+            claimLongest(BabbleIndex[bareLower], trimStart)
+
+            local single = MasterDict[bareLower]
             if single then
                 claim(trimStart, trimEnd, bare, single)
             end

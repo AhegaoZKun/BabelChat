@@ -8,30 +8,48 @@ rather than wait for it.
 
 Fidelity, stated plainly so nobody over-trusts a green test:
 
-* `SecretValue` models a secret chat argument by the one property the addon
-  actually relies on — `string.len` raises on it while concatenation succeeds.
-  A real secret also raises on comparison and on boolean tests; plain Lua has
-  no way to make `==` raise, so a guard that compares a secret would pass here
-  and fail in game. Read secret tests as "the probe works", not "no unguarded
-  operation exists anywhere".
+* The secret stand-in is a **table**, and a real secret reports as a string.
+  Plain Lua cannot produce a value that answers `type()` with "string" and then
+  raises on `string.len`, so the stand-in cannot model a secret's defining
+  property. What the secret tests actually exercise is the addon's `type` check
+  — the same branch a number or a boolean takes. The `pcall(string.len, …)`
+  probe behind it is not covered here and cannot be; it is verified in game.
+  Do not read a green secret test as "a secret cannot reach the buffer".
 * Only the globals listed in `_install_wow_globals` exist. Anything else the
   addon reaches for surfaces as a nil-index error, which is the intended
   outcome: the harness should fail loudly rather than paper over a new
-  dependency on game state.
+  dependency on game state. Files that need more than that — `LibStub`,
+  `CreateFrame` — stub it themselves, per test file.
+* `NUM_CHAT_WINDOWS` is 0 and `LoggingChat` is always false, so the legacy
+  chat-frame polling path never runs here. `C_Timer.NewTicker` ignores its
+  interval: `fire_tickers()` runs every live ticker once, so a test proves that
+  a ticker's body works, never that it fires at the right rate.
+* The process C locale is pinned to "C" at import (see below). Without it
+  `string.lower` and `%w`/`%s` behave differently from WoW for every byte above
+  127, which silently changes what a Cyrillic test proves.
 """
 
 from __future__ import annotations
 
+import locale
 from pathlib import Path
 
 from lupa import lua51
 
+# Lua's string.lower and its %w/%s classes call the C library's tolower and
+# isalpha, which read the process locale. Something in the test environment —
+# PyQt6, or lupa itself — sets LC_CTYPE from Windows, and under
+# Russian_Russia.1252 the results are wrong in ways that matter here: two
+# distinct Cyrillic letters lower-case to the same bytes, and byte 0xA0, the
+# trail byte of "Р", matches %s so the tokeniser splits a word mid-character.
+# WoW runs under the C locale. Pin it, or every Cyrillic assertion in the suite
+# is measuring this machine rather than the game.
+locale.setlocale(locale.LC_CTYPE, "C")
+
 ADDON_DIR = Path(__file__).resolve().parent.parent / "addon" / "BabelChat"
 
-# Lua source for a stand-in secret value. `string.len` raises on it (it is not a
-# string), while `..` succeeds through __concat — the same asymmetry the real
-# chat-messaging-lockdown secrets have, and the asymmetry the addon's probe
-# depends on.
+# Stand-in for a chat-messaging-lockdown secret. It is a table, so it exercises
+# the addon's `type` check and nothing beyond it — see the fidelity notes above.
 _SECRET_FACTORY = """
 return function()
     return setmetatable({}, {

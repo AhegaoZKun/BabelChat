@@ -43,18 +43,37 @@ def build(dictionary: dict[str, str], *, babble: dict[str, str] | None = None, *
     for key, value in db_overrides.items():
         lua.globals().BabelChatDB.dict[key] = value
 
-    if babble:
-        table = lua.eval("{}")
-        for english, localised in babble.items():
-            table[english] = localised
-        lua.execute("LibStub = function() return nil end")
-        harness.addon_table.InitLibBabble()
-        # Feed the index directly: LibBabble itself is exercised elsewhere.
-        harness.addon_table.RebuildMasterDict()
-        harness._babble = table  # noqa: SLF001
-    else:
-        harness.addon_table.RebuildMasterDict()
+    _install_libbabble(harness, babble or {})
+    harness.addon_table.InitLibBabble()
+    harness.addon_table.RebuildMasterDict()
     return harness
+
+
+def _install_libbabble(harness, zones: dict[str, str]) -> None:
+    """A LibStub that answers the way the real one does.
+
+    The engine asks LibStub for the library, asks the library for its unstrict
+    lookup table, and indexes that. Stubbing LibStub to return nil — which the
+    fixture used to do — leaves the index empty, so every babble test passed by
+    exercising nothing at all.
+    """
+    lua = harness.lua
+    table = lua.eval("{}")
+    for english, localised in zones.items():
+        table[english] = localised
+    harness.lua.globals()._babble_zones = table
+    lua.execute(
+        """
+        local library = {
+            GetUnstrictLookupTable = function() return _babble_zones end,
+        }
+        LibStub = function(name, silent)
+            if name == "LibBabble-SubZone-3.0" then return library end
+            if silent then return nil end
+            return nil
+        end
+        """
+    )
 
 
 def gloss(harness, text: str) -> tuple[str, bool]:
@@ -276,3 +295,134 @@ def test_the_mode_defaults_to_auto_when_the_saved_config_predates_it():
     _text, changed = gloss(h, "ty")
 
     assert changed is False, "an older config must not start double-printing"
+
+
+# ── the punctuation a Russian message is actually written with ───────────────
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "«спс» за помощь",
+        "спс — очень выручил",
+        "спс… побежал",
+        "спс\u00a0за инвайт",  # a non-breaking space, which Word and Discord insert
+        "(спс)",
+        "спс!",
+        "…спс",
+    ],
+)
+def test_a_term_wrapped_in_russian_punctuation_is_still_matched(message):
+    """Word boundaries were decided one byte at a time, and every byte above 127
+    counted as a letter. Guillemets, the em dash, the ellipsis and the
+    non-breaking space are all multi-byte, so each of them glued itself to the
+    word and the term stopped matching — on exactly the punctuation a Russian
+    player types."""
+    h = build({"спс": "thanks"})
+
+    _text, changed = gloss(h, message)
+
+    assert changed is True, f"nothing matched in {message!r}"
+
+
+def test_a_capitalised_russian_term_matches_its_lower_case_key():
+    """Lua's string.lower is ASCII-only, so "Спс" never met the key "спс" — and
+    a message starts with a capital letter."""
+    h = build({"спс": "thanks"})
+
+    _text, changed = gloss(h, "Спс за помощь")
+
+    assert changed is True
+
+
+@pytest.mark.parametrize("word", ["Ёлка", "Ярость", "Отряд"])
+def test_the_whole_cyrillic_alphabet_folds(word):
+    """Р-Я cross into a different UTF-8 lead byte and Ё sits outside the block
+    altogether, so a fold that only handles А-П works for half the alphabet."""
+    h = build({word.lower(): "TRANSLATED"})
+
+    _text, changed = gloss(h, f"{word} тут")
+
+    assert changed is True
+
+
+def test_punctuation_does_not_make_a_term_match_inside_a_word():
+    """Trimming must not go so far that boundaries stop being checked."""
+    h = build({"да": "yes"})
+
+    _text, changed = gloss(h, "«надо» подождать")
+
+    assert changed is False
+
+
+def test_a_phrase_wrapped_in_punctuation_is_not_downgraded_to_its_first_word():
+    """Phrases were looked up on the raw token, so "«raid finder»" missed the
+    phrase and fell through to the single word — glossing "raid", which is a
+    shorter answer and the wrong one."""
+    h = build({"raid": "рейд", "raid finder": "поиск рейда"})
+
+    text, _ = gloss(h, "«raid finder» сейчас")
+
+    assert "raid finder = поиск рейда" in text
+    assert "raid = рейд" not in text
+
+
+# ── zone and item-set names from LibBabble ───────────────────────────────────
+
+
+def test_a_zone_name_is_glossed_from_the_babble_table():
+    """LibBabble is where every localised zone and item-set name comes from, and
+    it had no coverage at all: the fixture stubbed LibStub to return nil, so the
+    index the tests appeared to exercise was always empty."""
+    h = build({}, babble={"Elwynn Forest": "Элвиннский лес"})
+
+    text, changed = gloss(h, "meet me in Elwynn Forest")
+
+    assert changed is True
+    assert "Elwynn Forest = Элвиннский лес" in text
+
+
+def test_a_babble_entry_that_translates_to_itself_is_not_shown():
+    """A partially localised table returns English for the entries nobody got
+    to, and "Elwynn Forest = Elwynn Forest" is noise in a chat line."""
+    h = build({}, babble={"Stormwind City": "Stormwind City"})
+
+    _text, changed = gloss(h, "heading to Stormwind City")
+
+    assert changed is False
+
+
+def test_a_very_short_babble_entry_is_not_indexed():
+    """Two- and three-letter zone names collide with ordinary words far more
+    often than they help."""
+    h = build({}, babble={"Orb": "Сфера"})
+
+    _text, changed = gloss(h, "grab the Orb")
+
+    assert changed is False
+
+
+def test_the_longest_babble_name_wins_at_the_same_position():
+    h = build({}, babble={"Elwynn Forest": "Элвиннский лес", "Elwynn Forest Mine": "Шахта Элвиннского леса"})
+
+    text, _ = gloss(h, "at Elwynn Forest Mine")
+
+    assert "Элвиннского леса" in text
+    assert text.count(" = ") == 1
+
+
+def test_a_babble_name_is_still_matched_on_a_word_boundary():
+    h = build({}, babble={"Elwynn Forest": "Элвиннский лес"})
+
+    _text, changed = gloss(h, "NotElwynn Forest")
+
+    assert changed is False
+
+
+def test_the_dictionary_and_the_babble_table_can_both_speak():
+    h = build({"ty": "спасибо"}, babble={"Elwynn Forest": "Элвиннский лес"})
+
+    text, _ = gloss(h, "ty for the run to Elwynn Forest")
+
+    assert "ty = спасибо" in text
+    assert "Elwynn Forest = Элвиннский лес" in text
