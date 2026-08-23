@@ -7,11 +7,7 @@ Real-time chat translation with a smart overlay — companion app + WoW addon
 
 [Русская версия](https://github.com/Yumash/BabelChat/blob/main/README_ru.md) | [Versión en español](https://github.com/Yumash/BabelChat/blob/main/README_es.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
-
-**Get the addon:** [![CurseForge](https://img.shields.io/curseforge/dt/1491616?style=for-the-badge&logo=curseforge&logoColor=white&label=CurseForge&color=F16436)](https://www.curseforge.com/wow/addons/babelchat) [![Wago](https://img.shields.io/badge/Wago-Addons-C1272D?style=for-the-badge&logo=wago&logoColor=white)](https://addons.wago.io/addons/96d2BEGO)
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Dictionary)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20Card-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases) [![CurseForge](https://img.shields.io/curseforge/dt/1491616?logo=curseforge&logoColor=white&label=CurseForge&color=F16436)](https://www.curseforge.com/wow/addons/babelchat) [![Wago](https://img.shields.io/badge/Wago-Addons-C1272D?logo=wago&logoColor=white)](https://addons.wago.io/addons/96d2BEGO)
 
 ---
 
@@ -304,7 +300,7 @@ This project is a collaboration between three authors:
 
 | Component                                                                | Author              | Support                                                 |
 | ------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------- |
-| **WoW Glossary** — 436 terms in 14 languages, in-game dictionary idea    | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
+| **Glossary origins** — 314 of the 436 terms, and the idea of glossing chat in-game | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
 | **Companion App** — overlay, translation providers, memory reader, streaming | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/)               |
 
 ## Documentation

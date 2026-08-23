@@ -7,11 +7,7 @@
 
 [English version](https://github.com/Yumash/BabelChat/blob/main/README.md) | [Versión en español](https://github.com/Yumash/BabelChat/blob/main/README_es.md)
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
-
-**Скачать аддон:** [![CurseForge](https://img.shields.io/curseforge/dt/1491616?style=for-the-badge&logo=curseforge&logoColor=white&label=CurseForge&color=F16436)](https://www.curseforge.com/wow/addons/babelchat) [![Wago](https://img.shields.io/badge/Wago-Addons-C1272D?style=for-the-badge&logo=wago&logoColor=white)](https://addons.wago.io/addons/96d2BEGO)
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Словарь)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20Card-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases) [![CurseForge](https://img.shields.io/curseforge/dt/1491616?logo=curseforge&logoColor=white&label=CurseForge&color=F16436)](https://www.curseforge.com/wow/addons/babelchat) [![Wago](https://img.shields.io/badge/Wago-Addons-C1272D?logo=wago&logoColor=white)](https://addons.wago.io/addons/96d2BEGO)
 
 ---
 
@@ -305,7 +301,7 @@ pyinstaller build-linux.spec    # Linux бинарник
 
 | Компонент                                                                  | Автор               | Поддержать                                              |
 | -------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------- |
-| **Словарь WoW** — 436 терминов на 14 языках, идея внутриигрового перевода  | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
+| **Начало словаря** — 314 терминов из 436 и сама идея подсказки в чате  | **Pirson**          | [Buy Me a Coffee](https://buymeacoffee.com/franciscorb) |
 | **Приложение-компаньон** — оверлей, провайдеры перевода, чтение памяти, стриминг | **Andrey Yumashev** | [Donate](https://yumatech.ru/donate/)             |
 
 ## Документация
