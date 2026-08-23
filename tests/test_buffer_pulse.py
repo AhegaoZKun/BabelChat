@@ -116,11 +116,17 @@ def test_the_pulse_survives_a_reload():
 
 # ── and the scanner ranks by it ──────────────────────────────────────────────
 
-SCANNER = pathlib.Path(__file__).resolve().parent.parent / "babelchat_scanner_win" / "src" / "lib.rs"
+SCANNER = pathlib.Path(__file__).resolve().parent.parent / "babelchat_scanner_win" / "src"
 
 
 def scanner_source() -> str:
-    return SCANNER.read_text(encoding="utf-8")
+    """The whole crate, not one file of it.
+
+    The scanner outgrew a single module and was split along its seams — the
+    process it reads, the markers it reads for, the search, and the table slot.
+    A check that read only lib.rs would quietly stop covering four fifths of
+    what it is about."""
+    return chr(10).join(path.read_text(encoding="utf-8") for path in sorted(SCANNER.glob("*.rs")))
 
 
 def test_the_scanner_reads_the_pulse():
