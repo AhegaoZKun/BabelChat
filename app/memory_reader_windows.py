@@ -74,6 +74,9 @@ class WoWAddonBufReader:
         #: reader from a refused one.
         self._problem: str = ""
         self._first_miss_at: float = 0.0
+        #: Has the addon's buffer ever been found in this process? An empty
+        #: scan means something different before and after that.
+        self._buffer_ever_seen: bool = False
         self._last_seq = 0
         self._player_name: str = ""
         self._delivered_payloads: set[str] = set()
@@ -148,6 +151,7 @@ class WoWAddonBufReader:
         self._problem = ""
         self._consecutive_misses = 0
         self._first_miss_at = 0.0
+        self._buffer_ever_seen = False
         logger.info("Attached to WoW PID %d", pid)
 
     def _detach(self) -> None:
@@ -180,14 +184,20 @@ class WoWAddonBufReader:
 
         if content is None:
             self._consecutive_misses += 1
-            # Attached, allowed to read, and still nothing there. That means the
-            # addon is not writing its buffer — disabled, not installed, or not
-            # loaded for this character — and no amount of waiting fixes it. Say
-            # so rather than looking busy.
+            # Only when the buffer has NEVER been seen since attaching. The
+            # scanner returns the same None for "no buffer in this process" and
+            # for "nothing in it newer than what you already have", so counting
+            # every quiet minute as a fault made the app accuse the addon during
+            # any lull in chat — which it did, on the first run, while the addon
+            # was working and had already handed over the player's name.
             now = time.monotonic()
             if self._first_miss_at == 0.0:
                 self._first_miss_at = now
-            elif not self._problem and now - self._first_miss_at > _SILENCE_BEFORE_COMPLAINT:
+            elif (
+                not self._problem
+                and not self._buffer_ever_seen
+                and now - self._first_miss_at > _SILENCE_BEFORE_COMPLAINT
+            ):
                 self._problem = NO_BUFFER
                 logger.warning(
                     "No addon buffer in WoW's memory after %.0fs — is the addon enabled for this character?",
@@ -198,6 +208,7 @@ class WoWAddonBufReader:
         self._consecutive_misses = 0
         self._first_miss_at = 0.0
         self._problem = ""
+        self._buffer_ever_seen = True
         self._deliver_new_messages(content)
 
     def _deliver_new_messages(self, content: str) -> None:

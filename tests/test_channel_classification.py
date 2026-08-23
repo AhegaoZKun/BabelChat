@@ -131,13 +131,24 @@ def test_an_emote_is_no_longer_indistinguishable_from_speech():
 # ── the toggles that follow from it ──────────────────────────────────────────
 
 
-def test_the_new_channels_are_off_by_default():
-    """A player-made channel is usually private; sending it to a translation
-    service is a decision, not a default."""
+def test_a_player_made_channel_is_on_and_an_emote_is_not():
+    """This used to say both were off, on the grounds that a player-made
+    channel is private and sending it to a translation service should be a
+    decision. That argument does not survive contact with the rest of the
+    defaults: whispers and guild chat are on, and they are far more private
+    than a channel anyone can /join.
+
+    What actually happens is the failure a tester hit — join a channel, type in
+    it, get nothing, with the reason in a debug log nobody has switched on. You
+    only end up in one of these by asking to, and it is usually the guild's alt
+    channel or a group of friends.
+
+    Emotes stay off: nobody joins those, they arrive whether you want them or
+    not, and "Player looks around" is not worth an API call."""
     from app.config import AppConfig
 
     config = AppConfig()
-    assert config.channels_custom is False
+    assert config.channels_custom is True
     assert config.channels_emote is False
 
 
@@ -152,14 +163,17 @@ def test_enabling_a_channel_puts_it_in_the_pipeline_set():
     assert Channel.EMOTE in enabled
 
 
-def test_leaving_them_off_keeps_them_out_of_the_pipeline_set():
+def test_leaving_a_channel_off_keeps_it_out_of_the_pipeline_set():
+    """The toggle and the set the pipeline filters against are built
+    separately, so one can be right while the other is not."""
     from app.config import AppConfig
     from app.main import _build_pipeline_config
 
     enabled = _build_pipeline_config(AppConfig(wow_path="")).enabled_channels
 
-    assert Channel.CUSTOM not in enabled
     assert Channel.EMOTE not in enabled
+    assert Channel.TRADE not in enabled
+    assert Channel.CUSTOM in enabled, "a channel you joined on purpose is not spam"
 
 
 # ── zero is an answer, not a shrug ───────────────────────────────────────────

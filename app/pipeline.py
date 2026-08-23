@@ -142,6 +142,9 @@ class TranslationPipeline:
         self._msg_id_counter = itertools.count(1)
 
         # Memory reader (optional, real-time delivery)
+        #: Channels already named as switched off, so the notice appears once
+        #: rather than on every message.
+        self._reported_off_channels: set = set()
         self._memory_watcher = None
         if config.use_memory_reader and HAS_MEMORY_READER:
             self._memory_watcher = MemoryChatWatcher(self._on_new_line)
@@ -261,7 +264,16 @@ class TranslationPipeline:
 
         # Filter by channel
         if msg.channel not in cfg.enabled_channels:
-            logger.debug("Channel %s not enabled", msg.channel)
+            # Once per channel, at a level the user will actually see. A tester
+            # joined a channel, typed in it, and got nothing — the reason was
+            # here, at DEBUG, behind a console that is off by default. The
+            # channel name carries no message text, so this is safe to log.
+            if msg.channel not in self._reported_off_channels:
+                self._reported_off_channels.add(msg.channel)
+                logger.warning(
+                    "Channel %s is switched off in Settings -> Channels, so its messages are not translated",
+                    msg.channel.value,
+                )
             return
 
         # Only now, past the channel filter, and at DEBUG. This line carries the

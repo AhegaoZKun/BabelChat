@@ -106,7 +106,7 @@ class AppConfig:
     channels_lfg: bool = False
     # Player-made channels. Off by default: they are usually private, and
     # sending them to a translation service is a decision, not a default.
-    channels_custom: bool = False
+    channels_custom: bool = True  # see _migrate_split_channels: you join these on purpose
     channels_emote: bool = False
 
     # Translation
@@ -296,13 +296,20 @@ def _migrate_split_channels(data: dict) -> None:
     # actually experienced was "Say is on, therefore yells are translated".
     if "channels_yell" not in data and "channels_say" in data:
         data["channels_yell"] = bool(data["channels_say"])
-    # A public channel the reader did not recognise used to be reported as
-    # General, so anyone with General on was reading their player-made channels
-    # through it. Classifying them separately is right — a private channel is
-    # not the game's General channel — but it must not take them away in
-    # silence, so the answer carries over the same way.
-    if "channels_custom" not in data and "channels_general" in data:
-        data["channels_custom"] = bool(data["channels_general"])
+    # A player-made channel now has a switch of its own, and it is on. Trade and
+    # General are off because you are in them whether you like it or not and
+    # they are firehoses; a channel you typed /join for is the opposite — you
+    # asked to be there, and it is usually the guild's alt channel or a group of
+    # friends, which is exactly the chat worth translating.
+    #
+    # This deliberately does NOT inherit General, which is what it did first.
+    # Inheriting was defensible — an unrecognised channel used to be reported as
+    # General, so General's setting had been governing these messages — but the
+    # result was that joining a channel and typing in it produced nothing at
+    # all, with the reason buried in a debug log. Being wrong in the direction
+    # of a translation nobody wanted beats being wrong in the direction of
+    # silence.
+    data.setdefault("channels_custom", True)
 
 
 # Config written before providers became generic: one flat field per provider
