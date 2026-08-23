@@ -253,6 +253,14 @@ class FAILURE:
     QUOTA = "quota_exceeded"
     RETRIES = "max_retries_exceeded"
     NO_KEY = "no_key"
+    #: The provider answered, and declined. Not a failure of the request — a
+    #: refusal to carry it out, which is a different thing to tell the user and
+    #: the only failure worth promoting past a later one in the chain.
+    #:
+    #: It lives here rather than beside the provider that produces it because
+    #: two modules need to agree on the exact string, and two literals that must
+    #: match are two literals that will eventually not.
+    REFUSED = "provider_refused"
 
 
 def failed(

@@ -27,7 +27,7 @@ from app.overlay_widgets import (
 from app.parser import Channel
 from app.pipeline import TranslatedMessage
 from app.translator import TranslatorService
-from app.translators.gigachat_provider import REFUSED
+from app.translators.base import FAILURE
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ class ChatOverlay(ReplyPanelMixin, FramelessDragResizeMixin, QWidget):
             # alternative was worse: GigaChat's refusal is a paragraph about
             # itself, and passing it through put that paragraph where the
             # translation goes.
-            if self._translation_enabled and msg.translation and msg.translation.error == REFUSED:
+            if self._translation_enabled and msg.translation and msg.translation.error == FAILURE.REFUSED:
                 note_fmt = QTextCharFormat()
                 note_fmt.setForeground(QColor("#888888"))
                 cursor.setCharFormat(note_fmt)

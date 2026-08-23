@@ -336,3 +336,21 @@ def test_an_ordinary_failure_is_still_the_last_one():
     result = chain_of(("quota", Quota()), ("network", Network())).translate("hello", "RU")
 
     assert result.error == FAILURE.RETRIES
+
+
+def test_the_refusal_code_has_exactly_one_definition():
+    """It was spelled out in two modules that both have to agree, which is the
+    same shape as the addon-and-scanner anchor pair — two literals that must
+    match are two literals that will eventually not."""
+    import pathlib
+
+    from app.translators.base import FAILURE
+
+    assert REFUSED == FAILURE.REFUSED
+
+    translators = pathlib.Path(__file__).resolve().parent.parent / "app" / "translators"
+    literal = 0
+    for path in translators.glob("*.py"):
+        literal += path.read_text(encoding="utf-8").count('"provider_refused"')
+
+    assert literal == 1, f'"provider_refused" is written out {literal} times; it should be defined once'

@@ -15,10 +15,6 @@ from app.translators.base import (
 
 logger = logging.getLogger(__name__)
 
-# Imported here rather than at the top of the module: the providers import this
-# one, so naming it up there would close the circle.
-REFUSED = "provider_refused"
-
 
 
 class TranslatorService:
@@ -108,7 +104,7 @@ class TranslatorService:
             # keyless fallback is always last in the chain, so its network error
             # would be what the user is shown, and "the translator declined this
             # message" would be unreachable however often it happened.
-            if result.error == REFUSED and refusal is None:
+            if result.error == FAILURE.REFUSED and refusal is None:
                 refusal = result
             # The provider id, not the error text: a provider can put the
             # request URL in there, and for a GET-based one that URL carries

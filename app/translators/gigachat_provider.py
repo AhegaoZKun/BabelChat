@@ -63,8 +63,9 @@ BAD_RESPONSE = "bad_response"
 CREDENTIAL_SHAPE = "credential_shape"
 SCOPE_REJECTED = "scope_rejected"
 CREDENTIAL_MISSING = "credential_missing"
-#: The model answered, but with a refusal rather than a translation.
-REFUSED = "provider_refused"
+#: The model answered, but with a refusal rather than a translation. Defined in
+#: `base` so the chain and the provider cannot disagree about the spelling.
+REFUSED = FAILURE.REFUSED
 
 #: What GigaChat says when it will not translate something. It answers 200 with
 #: a paragraph about itself, and that paragraph went into the overlay as if it
