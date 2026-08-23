@@ -1,2 +1,12 @@
-custom: ['https://yumatech.ru/donate/']
-custom: ['https://pay.cloudtips.ru/p/ea5537e6']
+# One `custom:` key, both addresses in its list. Written as two `custom:` lines
+# it is a duplicate YAML key: the parser keeps the last one, and the first
+# address silently disappears from the button.
+#
+# The Open Collective entry that used to be here named a collective with no
+# donation set up. A funding link that leads nowhere costs more than no link.
+#
+# Pirson's Buy Me a Coffee is deliberately absent: he wrote the dictionary this
+# addon grew from, and he keeps his credit and his link in every README, in the
+# in-game About panel and in the app — but this file is the funding of *this*
+# repository, and GitHub renders it as one button on it.
+custom: ['https://yumatech.ru/donate/', 'https://pay.cloudtips.ru/p/ea5537e6']

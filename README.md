@@ -9,7 +9,7 @@ Real-time chat translation with a smart overlay — companion app + WoW addon
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yumash/BabelChat/blob/main/LICENSE) [![Python](https://img.shields.io/badge/Python-3.12+-yellow.svg)](https://python.org) [![Release](https://img.shields.io/github/v/release/Yumash/BabelChat?include_prereleases)](https://github.com/Yumash/BabelChat/releases)
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Dictionary)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20OpenCollective-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
+[![Buy Me a Coffee](https://img.shields.io/badge/Pirson_(Dictionary)-Buy_Me_a_Coffee-yellow?style=for-the-badge&logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/franciscorb) [![Donate](https://img.shields.io/badge/Donate-USDT%20%7C%20Card-blue?style=for-the-badge&logo=tether&logoColor=white)](https://yumatech.ru/donate/)
 
 ---
 
