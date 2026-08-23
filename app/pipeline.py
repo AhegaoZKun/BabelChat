@@ -91,10 +91,9 @@ class PipelineConfig:
     """Pipeline configuration."""
 
     chatlog_path: Path = Path("WoWChatLog.txt")
-    deepl_api_key: str = ""
-    microsoft_api_key: str = ""
-    microsoft_region: str = ""
-    translator_priority: str = "deepl"
+    # Provider credentials keyed by provider id — see app.translators.
+    providers: dict[str, dict[str, str]] = field(default_factory=dict)
+    translator_priority: str = "gigachat"
     target_lang: str = "EN"
     own_language: Language = Language.ENGLISH
     own_character: str = ""
@@ -129,9 +128,7 @@ class TranslationPipeline:
         self._cache.cleanup()  # remove expired entries on startup
         self._detector = ChatLanguageDetector(own_language=config.own_language)
         self._translator = TranslatorService(
-            api_key=config.deepl_api_key,
-            microsoft_api_key=config.microsoft_api_key,
-            microsoft_region=config.microsoft_region,
+            providers=config.providers,
             priority=config.translator_priority,
         )
         self._watcher = ChatLogWatcher(config.chatlog_path, self._on_new_line)
@@ -145,6 +142,9 @@ class TranslationPipeline:
         self._msg_id_counter = itertools.count(1)
 
         # Memory reader (optional, real-time delivery)
+        #: Channels already named as switched off, so the notice appears once
+        #: rather than on every message.
+        self._reported_off_channels: set = set()
         self._memory_watcher = None
         if config.use_memory_reader and HAS_MEMORY_READER:
             self._memory_watcher = MemoryChatWatcher(self._on_new_line)
@@ -212,6 +212,16 @@ class TranslationPipeline:
         self._watcher.start()
         logger.info("Pipeline started (file watcher only)")
 
+    def clear_cache(self) -> int:
+        """Forget every cached translation, in SQLite and in memory.
+
+        Exposed here because the pipeline owns the live cache. A caller that
+        opens its own TranslationCache clears whichever database the DEFAULT
+        path points at — not necessarily this one — and leaves this instance's
+        in-memory LRU serving the very messages the user asked to be forgotten.
+        """
+        return self._cache.clear()
+
     def stop(self) -> None:
         """Stop the pipeline."""
         if self._memory_watcher:
@@ -232,16 +242,15 @@ class TranslationPipeline:
             dict_translated: If True, the addon's dictionary already translated
                 this message inline in chat.
         """
-        logger.debug("New line: %s", line[:120])
+        # Length, not content: this runs before parsing and therefore before
+        # the channel filter, so quoting the line here would put a whisper in
+        # the log of a user who had unticked Whispers. The opt-in capture
+        # trace is where the full text belongs.
+        logger.debug("New line (%d chars)", len(line))
         msg = parse_line(line)
         if msg is None:
-            logger.info("Parse returned None for: %s", line[:150])
+            logger.debug("Parse returned None for: %s", line[:150])
             return
-
-        logger.info(
-            "Parsed: [%s] %s: %s (dict=%s)",
-            msg.channel.value, msg.author, msg.text[:_LOG_PREVIEW], dict_translated,
-        )
 
         # Snapshot config for consistent reads within this method.
         # Reference assignment is atomic under CPython's GIL, so this is safe
@@ -255,8 +264,26 @@ class TranslationPipeline:
 
         # Filter by channel
         if msg.channel not in cfg.enabled_channels:
-            logger.debug("Channel %s not enabled", msg.channel)
+            # Once per channel, at a level the user will actually see. A tester
+            # joined a channel, typed in it, and got nothing — the reason was
+            # here, at DEBUG, behind a console that is off by default. The
+            # channel name carries no message text, so this is safe to log.
+            if msg.channel not in self._reported_off_channels:
+                self._reported_off_channels.add(msg.channel)
+                logger.warning(
+                    "Channel %s is switched off in Settings -> Channels, so its messages are not translated",
+                    msg.channel.value,
+                )
             return
+
+        # Only now, past the channel filter, and at DEBUG. This line carries the
+        # author and the message text, and it used to run BEFORE the filter at
+        # INFO — the default level — so a user who had unticked Whispers still
+        # got other people's whispers written to their log file.
+        logger.debug(
+            "Parsed: [%s] %s: %s (dict=%s)",
+            msg.channel.value, msg.author, msg.text[:_LOG_PREVIEW], dict_translated,
+        )
 
         # NPC filter: NPC names contain spaces (e.g. "High King Anduin"),
         # player names never do. Only applies to Say/Yell channels.
@@ -273,7 +300,7 @@ class TranslationPipeline:
             and own_char
             and msg.author == own_char
         ):
-            logger.info("Skip own message (no translate): %s", msg.text[:_LOG_PREVIEW])
+            logger.debug("Skip own message (no translate): %s", msg.text[:_LOG_PREVIEW])
             self._on_message(TranslatedMessage(original=msg, translation=None))
             return
 
@@ -286,7 +313,7 @@ class TranslationPipeline:
         # Addon dict adds inline translations like "speed(Скорость)" which are
         # redundant when companion app does full DeepL translation.
         if dict_translated:
-            logger.info("Dict message ignored, using DeepL: %s", msg.text[:_LOG_PREVIEW])
+            logger.debug("Dict message ignored, translating instead: %s", msg.text[:_LOG_PREVIEW])
 
         # Clean and validate text
         cleaned_text = clean_message_text(msg.text)
@@ -313,25 +340,25 @@ class TranslationPipeline:
         detected = self._detector.detect(cleaned_text)
         if detected is None:
             # Own language or skip-phrase — emit without translation
-            logger.info("Skip (own lang / skip-phrase): %r", cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Skip (own lang / skip-phrase): %r", cleaned_text[:_LOG_PREVIEW])
             self._on_message(TranslatedMessage(original=msg, translation=None))
             return
 
         # UNKNOWN = lingua couldn't determine, let DeepL auto-detect
         if detected == ChatLanguageDetector.UNKNOWN:
             source_lang = ""
-            logger.info("Translating (auto-detect)→%s: %r", target_lang, cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Translating (auto-detect)→%s: %r", target_lang, cleaned_text[:_LOG_PREVIEW])
         else:
             source_lang = _LINGUA_TO_DEEPL.get(detected, "")
             if not source_lang:
                 # Lingua detected a language not in DeepL map — let DeepL
                 # auto-detect instead of skipping.
-                logger.info(
+                logger.debug(
                     "Translating (auto-detect, lingua=%s)→%s: %r",
                     detected, target_lang, cleaned_text[:_LOG_PREVIEW],
                 )
             else:
-                logger.info(
+                logger.debug(
                     "Translating %s→%s: %r",
                     source_lang, target_lang, cleaned_text[:_LOG_PREVIEW],
                 )
@@ -368,13 +395,13 @@ class TranslationPipeline:
         # Expand gaming slang to plain English so DeepL can understand
         expanded = expand_slang(text_to_translate)
         if expanded != text_to_translate:
-            logger.info("Slang expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], expanded[:_LOG_PREVIEW])
+            logger.debug("Slang expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], expanded[:_LOG_PREVIEW])
             text_to_translate = expanded
 
         # Expand WoW-specific terms (context-gated: 2+ gaming terms required)
         wow_expanded = expand_wow_terms(text_to_translate)
         if wow_expanded != text_to_translate:
-            logger.info("WoW terms expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], wow_expanded[:_LOG_PREVIEW])
+            logger.debug("WoW terms expanded: %r → %r", text_to_translate[:_LOG_PREVIEW], wow_expanded[:_LOG_PREVIEW])
             text_to_translate = wow_expanded
 
         # --- STREAMING: emit original immediately, then update with translation ---
@@ -386,19 +413,20 @@ class TranslationPipeline:
 
         # Translate via API (this blocks — called from watchdog thread)
         src_display = source_lang or "auto"
-        logger.info("Calling DeepL: %s→%s %r", src_display, target_lang, text_to_translate[:_LOG_PREVIEW])
+        # Provider name, not "DeepL": the chain has four backends now.
+        logger.debug("Translating %s→%s: %r", src_display, target_lang, text_to_translate[:_LOG_PREVIEW])
         result = self._translator.translate(
             text_to_translate, target_lang=target_lang,
             source_lang=source_lang or None,
             context=_DEEPL_CONTEXT,
         )
         translated_preview = result.translated[:_LOG_PREVIEW] if result.translated else ""
-        logger.info("DeepL result: success=%s, translated=%r", result.success, translated_preview)
+        logger.debug("Result from %s: success=%s, translated=%r", result.backend, result.success, translated_preview)
 
         # If DeepL auto-detected own language, skip (e.g. "zerg" detected as RU)
         own_deepl = _LINGUA_TO_DEEPL.get(cfg.own_language, "")
         if result.success and not source_lang and result.source_lang == own_deepl:
-            logger.info("DeepL detected own lang (%s), skipping: %r", own_deepl, cleaned_text[:_LOG_PREVIEW])
+            logger.debug("Translator detected own lang (%s), skipping: %r", own_deepl, cleaned_text[:_LOG_PREVIEW])
             return  # original already emitted above
 
         # Restore preserved tokens in translated text

@@ -8,6 +8,9 @@ a = Analysis(
     datas=[
         ("assets/icon.ico", "assets"),
         ("assets/icon.png", "assets"),
+        # GigaChat is served behind a root certifi does not carry, so
+        # without this the default provider cannot connect at all.
+        ("assets/certs", "assets/certs"),
         ("addon/BabelChat", "addon/BabelChat"),
     ],
     hiddenimports=[
@@ -83,5 +86,11 @@ exe = EXE(
     argv_emulation=False,
     icon="assets/icon.ico",
     onefile=True,
-    uac_admin=True,
+    # Reading another process owned by the same user needs PROCESS_VM_READ and
+    # PROCESS_QUERY_INFORMATION, which Windows grants from the target's own
+    # DACL. The scanner asks for exactly those. Elevation was only ever needed
+    # by the pymem fallback's PROCESS_ALL_ACCESS open, which no longer happens —
+    # and standing administrator rights turned an ordinary DLL-planting bug into
+    # a privilege escalation.
+    uac_admin=False,
 )

@@ -1,8 +1,75 @@
-# Changelog / История изменений / Registro de cambios
+# Changelog
+
+*[По-русски](CHANGELOG_ru.md)*
+
+All notable changes to BabelChat, newest first. Versions follow
+[semantic versioning](https://semver.org/); the addon and the companion app
+ship under the same number.
+
+---
+
+## [3.4.0] — 2026-08-21
+
+### Added
+
+- **GigaChat as the default translation provider** — free for individuals (1M tokens a year), no card, a Sber ID is enough, and it works from Russia without a VPN. This is why the release exists: DeepL's free tier asks for a card to verify identity and Microsoft needs an Azure account, and neither is reachable for a large part of the audience.
+- **MyMemory as a keyless fallback** — needs no account at all, so a new player gets working translation on first launch before configuring anything, and an existing user keeps a fallback when their provider hits quota. It is available whether or not the config mentions it.
+- **The Russian root certificate ships with the app.** `requests` does not read the Windows certificate store, so GigaChat could not be reached on a machine where every browser reaches it happily. The certificate is used for that one provider's session and nothing else.
+- **Providers declare themselves** — adding one used to mean editing `translator.py`, `config.py`, both settings dialogs, both setup wizards and both entry points; missing one produced a backend that worked but could not be configured. A provider is now a single `ProviderSpec`, and both frontends render whatever the registry holds.
+- **Two channels the app could not previously tell apart** — player-made channels and emotes each get their own toggle and their own overlay filter tab, and on the Windows overlay their own colour and prefix. The GTK overlay still draws both in Say's colour and without a badge.
+- **Midnight 12.1.0 compatibility** — TOC interface versions, a brand icon, and the addon renamed to BabelChat throughout.
+
+### Changed
+
+- The addon's slash commands, self test and welcome frame moved to `Commands.lua`; `Core.lua` is back to wiring the addon together.
+- The channel toggles are declared once and read by both settings windows, both entry points and the overlay's filter tabs. They had been five hand-written copies and had drifted in every direction.
+- Three libraries the addon loaded but never called were removed.
+
+### Fixed
+
+- **The overlay collapses downwards.** It shrank towards its top-left, so one parked along the bottom of the screen jumped into the middle of it when minimised — the opposite of what minimising it is for. The bottom edge now stays where it is, in both directions, and the window is kept on the screen.
+- **It says why chat goes quiet during a keystone run.** While a mythic key is live the game hands chat text to addons as a secret value: it reports as a string and raises on every operation, so nothing can read it, forward it or translate it. That is Blizzard's limit and there is no way around it — but the overlay simply stopping, with no word about why, was ours. The addon reports being refused and the indicator explains it, including that raids and ordinary dungeons are unaffected and that it lifts by itself.
+- **The companion took a gigabyte of memory and twelve seconds to start.** The language detector was built from all seventy-five languages lingua ships, twice — 862 MB and 5.8 seconds each, measured. It is built from the twenty the app can act on now: every language it translates between, plus the Cyrillic neighbours it has to recognise in order to correct them. 517 MB and under three seconds. A language outside the list is not lost — lingua says it does not know, and an unrecognised message goes to the translation service to auto-detect, which is what it is best at.
+- **The companion stopped hunting for the addon's buffer and started being handed it.** The buffer is a Lua string, so every rebuild allocates a new one somewhere else — fourteen consecutive rebuilds landed in fourteen different regions, twenty gigabytes apart, never once reusing one. Every version of this scanner has therefore paid a sweep of the heap per rebuild, and the arithmetic was brutal: the previous release burned 48% of one core and still delivered five messages a minute before going deaf. The addon now parks a constant in its saved table. A constant can be searched for at leisure, because it does not move while you look, and a Lua table's storage does not move at all while the table does not rehash — which the addon prevents by declaring every key at load. The slot holding the buffer's pointer sits beside that constant, so reading eight bytes gives the current string. Measured after: 0.10% of one core, zero sweeps, messages in the poll they were sent in.
+- **The buffer carries a pulse** — a counter that ticks on every rebuild, said or unsaid. Without it a copy the addon will never write to again is indistinguishable from a quiet chat, which is what the reader kept settling on. It is also how a table left behind by a reload is spotted, in six seconds rather than three minutes.
+- **The Windows scan threads run at idle priority**, as the Linux ones have since the day they were written. Nobody noticed the difference while the scan was believed to be rare.
+- **Messages arrived minutes late, all at once, and then stopped.** The native scanner caches the address it found the buffer at. When Lua's garbage collector moves the buffer, the bytes left behind still parse — same markers, same last sequence — so the fast path read that ghost and never rescanned, because an idle chat looks exactly the same from there. Measured on a live session: four guild messages sent between 15:24:45 and 15:25:05 reached the app together at 15:29:06. A cached address that has produced nothing for ten seconds is now verified by a scan, and the reader separately checks whether it has run ahead of the buffer, which it could not recover from before: the sequence filter lives inside the scanner, so a buffer behind our position was invisible.
+- **A refusal is no longer shown as a translation.** GigaChat answers 200 with a paragraph about what it will not discuss, and that paragraph went into the overlay where the translation belongs. It is recognised now — by wording and by length together, so a genuine translation mentioning language models is not caught — reported as a failure so the next provider gets a turn, and if none succeeds the line says so in four words.
+- **Belarusian is treated as Russian**, alongside Bulgarian and Ukrainian. lingua reads short Russian words as Belarusian, and one of them was sent to a translation service, which then refused it.
+- **The colour escape The War Within added is stripped.** `|cnIQ4:` — colour by name rather than by hex — is what a keystone link carries, and the overlay showed it verbatim in front of the link text.
+- **A player-made channel is translated by default now.** Its toggle inherited General's, and General is off — so joining a channel, typing in it and getting nothing was the documented behaviour. The reasoning for keeping it off was that these channels are private; whispers and guild chat are more private still and have always been on, so that argument does not hold. Trade and General stay off: you are in those whether you like it or not.
+- **A channel that is switched off says so.** The reason a message vanished was logged at DEBUG, behind a console that is off by default. It is a warning now, once per channel, naming the channel and not the message.
+- **The reader stopped accusing a working addon.** Both scanners return the same answer for "no buffer here" and "nothing newer than you already have", so any quiet minute looked like a broken addon — including the minute after it had handed over the player's name. The complaint is only raised when the buffer has never been found since attaching.
+- **The in-game gloss was the headline complaint, and it was six separate defects.** The same arrow glyph meant both "annotation follows" and "translates to"; a term repeated once per occurrence; entries followed the dictionary's hash order rather than the sentence's; alternatives printed verbatim ("Спасибо/спс"); a newline doubled the height of every glossed message and broke copy-chat; and the addon and the overlay both answered the same message in different words. The gloss is now `term = meaning` pairs on the same line, in message order, one per term, capped at three, and it stays quiet while the companion app is running.
+- **The gloss was written in Spanish.** `targetLocale` defaulted to `esES` — inherited from the addon this dictionary came from — and the auto-detection meant to correct it compared against `enUS`, so it never fired. The language now comes from the WoW client, and a saved config still carrying the old default is corrected unless the client is actually Spanish. The companion had the same inheritance: `target_language` defaulted to `ES` while the interface and the user's own language both defaulted to `RU`.
+- **Russian punctuation stopped the dictionary matching.** Word boundaries were decided one byte at a time and every byte above 127 counted as a letter, so guillemets, the em dash, the ellipsis and the non-breaking space each glued themselves to the word beside them. Lua's `string.lower` is ASCII-only, so a sentence opening with "Спс" never met the key "спс".
+- **Punctuation between two terms lost both of them** — `dps/heal`, `gg,wp` and `brb/afk` are the ordinary shape of an LFG line and none of them glossed.
+- **Channels were classified by name, so on a Russian client the Trade toggle did nothing** and the General toggle controlled Trade. Classification now uses `zoneChannelID`, which is the same number on every locale. A player-made channel reports id 0 and is classified as Custom rather than being passed off as General.
+- **A GigaChat key was refused with a bare `http_400`.** The project page shows three values, and the "authorization key" is the longest and the most key-looking of them, so it landed in the field marked *secret* — where the app encoded it a second time and sent a header the server could not read. The key is now accepted in either field, and the two quite different causes of a 400 are told apart: a credential the server cannot decode, and a project on the corporate tariff. A key that is merely wrong answers 401, not 400.
+- **The first-run wizard could not save a provider.** Entering its final page raised, and the only code path that writes the credentials sits behind that page — so on a fresh install a provider could not be configured through the wizard at all.
+- **Other players' chat was written to disk by default**, and message text was quoted in the application log at INFO. The capture trace is now opt-in, off by default, and the checkbox says what the file contains.
+- **The native scanner was loaded by bare filename**, which sends Windows through its standard search order — the working directory and every entry in PATH included. Every candidate is now an absolute path, and the build no longer requests administrator rights: `ReadProcessMemory` against a same-user process never needed them, and standing elevation turned an ordinary DLL-planting bug into a privilege escalation.
+- **Secret chat values and hostile message text could break capture.** Under chat messaging lockdown, instance chat arguments raise on ordinary string operations; a single unguarded one took the chat filter down for the rest of the session. Message text is written by other players and could forge the buffer's own end marker.
+- **Emotes and yells stopped being translated on upgrade.** Both used to arrive through the Say toggle; giving them their own switch would have taken them away in silence, so an existing config inherits its Say setting for both. Player-made channels were given the same treatment at first and it turned out to be wrong; see above.
+- **Three channel switches were decoration.** Yell had a checkbox on both platforms that nothing read, next to a second box that already covered it. Custom and Emote were saved by the Linux settings window and dropped by the Linux entry point.
+- **The settings window was half in English** for every Russian-speaking user, and the Linux one rendered raw string-table keys where field labels belong. Language names are now written in each language itself.
+- **Section headings overlapped the controls beneath them** in the in-game options panel, and the category names were the Spanish ones the dictionary came from.
+- **CI had been red on every run, and not because of the code.** The native scanner is a build artefact that nothing in the workflow built, two test dependencies were never declared so 29 tests silently turned into skips there, and the test-count floor was taken from a developer machine that collected fifty more tests than CI could.
+- **Starting the app could terminate an unrelated program.** Only one copy should run, so startup killed whatever process the lock file named — and the lock file named a bare PID, which the operating system hands back out to something else once the process it belonged to is gone. On a machine that had been rebooted since the last run, that number could be anything: a browser, a game, the editor the user was working in. The lock now records when the process started as well, and nothing is terminated unless both match.
+
+### Tests
+
+- **168 → 873.** The addon's Lua is exercised under a real Lua 5.1 interpreter through `lupa` — the same version WoW runs — rather than being re-implemented in Python.
+- **The test harness was quietly making every Cyrillic assertion meaningless.** Lua's `string.lower` and its `%w`/`%s` classes read the process C locale, and under `Russian_Russia.1252` two distinct Cyrillic letters fold to the same bytes while the trail byte of "Р" matches `%s`. WoW runs under the C locale; the harness now pins it.
+- **A set of tests could not fail and have been rewritten**, each confirmed by reintroducing the defect it names. The settings panel is now built with a recording `CreateFrame` instead of being matched against its own source text, and the dictionary is tested against the data that actually ships on lines players type.
+- **A dependency guard now stops a test from being silently switched off.** Every module behind `pytest.importorskip` has to be installed and named in `requirements.txt`, or listed with the reason it cannot be.
+- The TOC's `SavedVariables` line and its file load order are pinned, and every addon file is syntax-checked.
+
+---
 
 ## [3.3.0] — 2026-07-25
 
-### Added / Добавлено / Añadido
+### Added
 
 - **Native GTK4 overlay for Linux (Wayland)** — the Linux frontend is rebuilt in GTK4 + gtk4-layer-shell, rendering as a true layer-shell surface that stays above fullscreen WoW without XWayland workarounds. Windows continues to use the PyQt6 frontend unchanged (see `ARCHITECTURE_FRONTENDS.md`).
   - Per-channel chat filtering, streaming messages with channel badges
@@ -11,539 +78,425 @@
   - Settings window with live apply — no restart needed
   - First-run setup wizard (GTK)
 - **Linux packages: AppImage, `.deb` and `.rpm`** — the release now builds all three on `ubuntu-24.04` and attaches them to the GitHub Release. Each artefact is verified by installing it into a clean `debian:13` / `ubuntu:24.04` / `fedora:41` container and confirming it links and reaches GTK init — not by the fact that it built.
-- **Automatic backend fallback** — if your priority backend (DeepL or Microsoft) fails or hits quota, the other configured backend is tried automatically instead of dropping the message
-- **New chat channels** — Trade, General, and Services are now captured, filterable, and translated end-to-end (addon + app)
-- `packaging/` with `babelchat.desktop` and a fish build script (`build-linux.fish`) that produces a self-contained Linux AppImage (Rust scanner → PyInstaller → linuxdeploy + GTK bundling)
+- **Automatic backend fallback** — if your priority backend (DeepL or Microsoft) fails or hits quota, the other configured backend is tried automatically instead of dropping the message.
+- **New chat channels** — Trade, General and Services are now captured, filterable and translated end to end (addon + app).
+- `packaging/` with `babelchat.desktop` and a fish build script (`build-linux.fish`) that produces a self-contained Linux AppImage (Rust scanner → PyInstaller → linuxdeploy + GTK bundling).
 
-### Fixed / Исправлено / Corregido
+### Changed
 
-- **Linux build didn't run off a clean machine** — three defects that only surfaced without the GTK4 dev packages installed, so a developer's box never showed them:
-  - the GTK4 core typelibs (`Gtk-4.0`, `Gdk-4.0`, `Graphene-1.0`, `Gsk-4.0`) were never bundled — the app died with `Namespace Gtk not available`
-  - the bundled `libgtk4-layer-shell` was staged under a name the loader never tried, and its `LD_LIBRARY_PATH` was set in an AppRun hook linuxdeploy doesn't source — the AppImage couldn't load layer-shell
-  - `overlay_gtk` crashed at import when gtk4-layer-shell was absent instead of falling back to X11/plain, contradicting its own fallback path
-- **Windows: high CPU while chat idle** — losing the buffer address during idle no longer triggers continuous full memory scans; scans are now rate-limited with a tri-state fast path in both Rust scanners
-- Settings save no longer resets the translation toggle state
+- Merged upstream 3.2.0: Endgame/Midnight dictionary category, `discord.gg` link fix, dictionary engine pre-indexing, release workflow and lint fixes.
+- Removed the unused `lang_selector.py` / `reply_widget.py` modules — reply-language selection lives inline in both overlays.
+- `ruff check app/` is fully clean, including the new GTK modules.
 
-### Changed / Изменено / Cambiado
+### Fixed
 
-- Merged upstream 3.2.0: Endgame/Midnight dictionary category, discord.gg link fix, dictionary engine pre-indexing, release workflow and lint fixes
-- Removed the unused `lang_selector.py` / `reply_widget.py` modules — reply-language selection lives inline in both overlays
-- `ruff check app/` is fully clean, including the new GTK modules
+- **The Linux build did not run off a clean machine** — three defects that only surfaced without the GTK4 dev packages installed, so a developer's box never showed them:
+  - the GTK4 core typelibs (`Gtk-4.0`, `Gdk-4.0`, `Graphene-1.0`, `Gsk-4.0`) were never bundled, and the app died with `Namespace Gtk not available`;
+  - the bundled `libgtk4-layer-shell` was staged under a name the loader never tried, and its `LD_LIBRARY_PATH` was set in an AppRun hook linuxdeploy does not source, so the AppImage could not load layer-shell;
+  - `overlay_gtk` crashed at import when gtk4-layer-shell was absent instead of falling back to X11/plain, contradicting its own fallback path.
+- **Windows: high CPU while chat was idle** — losing the buffer address during idle no longer triggers continuous full memory scans; scans are rate-limited with a tri-state fast path in both Rust scanners.
+- Saving settings no longer resets the translation toggle.
 
-### Tests / Тесты / Pruebas
+### Tests
 
-- Restored 124 unit tests covering the translation core (parser, pipeline, cache, glossary, phrasebook, dedup) that a snapshot import had silently deleted, taking coverage of `app/` from 2% back to 18%
-- CI now fails when the test suite shrinks — a test-count floor guards against the same silent loss recurring
-
-
-## [3.2.0] — 2026-06-15
-
-### Added / Добавлено / Añadido
-
-- **Endgame & Midnight dictionary category** — 22 current terms across all 14 client languages (delves, Bountiful, Brann, Mythic+/keystone/affixes, gear tracks Champion/Hero/Myth, Gilded/Runed crests, Warband, catalyst, spark, renown, Raider.IO, KSM, Manaforge Omega, Undermine). The in-game dictionary now keeps up with The War Within / Midnight chat.
-- **Dictionary engine**: LibBabble zone/item-set lookups are pre-indexed at rebuild time instead of re-scanned on every chat line; single-word matching now resolves the correct token position when a word repeats in a message.
-- **Clearer onboarding** (from CurseForge feedback) — the first-run welcome now states the dictionary works instantly and free with no app required; the companion setup explains that DeepL's free tier asks for a credit card to verify (never charges) while Microsoft Translator needs no card. CurseForge description rewritten with a Quick Start.
-
-### Fixed / Исправлено / Corregido
-
-- **Discord invite links no longer mistranslated** — schemeless links like `discord.gg/xyz` were reaching DeepL, which read `.gg` as the gaming abbreviation and rendered it as "good game" / "хорошая игра". URL tokenization now also protects known link/invite domains (`discord.gg`, `t.me`, `bit.ly`, …) and any `domain.tld/path`.
-
-### Performance / Производительность / Rendimiento
-
-**Linux memory scanner rewritten in Rust** — the single biggest performance improvement since Linux support was added.
-
-- **Rust scanner library** (`libbabelchat_scanner.so`) replaces the pure-Python `/proc/<pid>/mem` scanner
-- Uses `process_vm_readv` instead of `/proc/<pid>/mem` — a dedicated cross-process memory syscall that does not go through the VFS layer, requires no file descriptor, and does not pause the target process. Eliminates the WoW frame-time stutters caused by the old approach
-- **Address cache** — steady-state polling (every 250ms) is now a single `process_vm_readv` call at the cached address, costing ~microseconds and near-zero CPU
-- Full parallel heap scan (Rayon, 2 threads) only runs on cache miss, which happens approximately every 14s when Lua GC relocates the buffer
-- Scanner threads run at `SCHED_IDLE` — the lowest Linux scheduling class, below `nice +19`. WoW, the compositor, and all other processes take absolute scheduling priority over the scanner
-- **Initial scan time**: 10–13s → ~2.5s
-- **GC relocation detection**: 14–17s gaps → ~2s
-- **End-to-end overlay latency**: many seconds → ~1s (floor is DeepL API round-trip)
-- **Game stutters**: eliminated
-
-**Addon flush interval** reduced from 1.5s → 0.25s — messages are written to memory within one poll cycle of arriving, cutting the addon-side contribution to latency from up to 1.5s to ~250ms.
-
-**Python scanner overhaul** (retained as fallback if `.so` not found):
-- Persistent `/proc/<pid>/mem` fd — eliminates `open`/`close` syscall overhead on every read
-- Regions scanned smallest-first — active Lua strings live in smaller allocations; buffer found faster
-- Early exit on first valid marker — no longer scans all remaining regions after finding a hit
-- Ghost buffer blacklisting — stale old copies that cause seq resets are immediately blacklisted
-- All rescan paths pass `min_seq` — only buffers newer than already-delivered messages are accepted
-- Rescan interval no longer backs off exponentially when no newer buffer is found
-- Background scanner thread correctly validates seq before committing a new address
-
-### Added / Добавлено / Añadido
-- `babelchat_scanner/` — Rust crate producing `libbabelchat_scanner.so` for Linux
-- `build-linux.spec` — bundles `libbabelchat_scanner.so` into the Linux binary via PyInstaller
-
-### Changed / Изменено / Cambiado
-- `memory_reader_linux.py` — now a thin Python wrapper around the Rust scanner; falls back to pure-Python on missing `.so`
-- Linux architecture diagram in README updated to reflect Rust scanner
-- Limitations section updated: 5–10s relocation delay note removed (no longer applicable)
+- Restored 124 unit tests covering the translation core (parser, pipeline, cache, glossary, phrasebook, dedup) that a snapshot import had silently deleted, taking coverage of `app/` from 2% back to 18%.
+- CI now fails when the test suite shrinks — a test-count floor guards against the same silent loss recurring.
 
 ---
 
-— **Rust-сканер памяти для Linux** — `libbabelchat_scanner.so` заменяет чистый Python-сканер
-— Использует `process_vm_readv` вместо `/proc/<pid>/mem` — без VFS, без дескриптора файла, без паузы целевого процесса. Устраняет фризы WoW
-— Кэш адреса — опрос в устойчивом состоянии стоит ~микросекунд; полное сканирование только при промахе кэша (~раз в 14с)
-— Потоки сканера работают в режиме `SCHED_IDLE` — WoW никогда не вытесняется сканером
-— Интервал сброса аддона: 1.5с → 0.25с
+## [3.2.0] — 2026-06-15
 
-— **Escáner de memoria en Rust para Linux** — `libbabelchat_scanner.so` reemplaza el escáner Python puro
-— Usa `process_vm_readv` en lugar de `/proc/<pid>/mem` — sin VFS, sin descriptor de archivo, sin pausar el proceso objetivo. Elimina los stutters de WoW
-— Caché de dirección — el sondeo en estado estable cuesta ~microsegundos; escaneo completo solo en fallo de caché (~cada 14s)
-— Hilos del escáner corren en modo `SCHED_IDLE` — WoW nunca es desalojado por el escáner
-— Intervalo de flush del addon: 1.5s → 0.25s
+### Added
 
-# Changelog / История изменений / Registro de cambios
+- **Endgame & Midnight dictionary category** — 22 current terms across all 14 client languages (delves, Bountiful, Brann, Mythic+/keystone/affixes, gear tracks Champion/Hero/Myth, Gilded/Runed crests, Warband, catalyst, spark, renown, Raider.IO, KSM, Manaforge Omega, Undermine). The in-game dictionary now keeps up with The War Within / Midnight chat.
+- **Dictionary engine**: LibBabble zone/item-set lookups are pre-indexed at rebuild time instead of re-scanned on every chat line; single-word matching now resolves the correct token position when a word repeats in a message.
+- **Clearer onboarding** (from CurseForge feedback) — the first-run welcome now states the dictionary works instantly and free with no app required; the companion setup explains that DeepL's free tier asks for a credit card to verify (never charges) while Microsoft Translator needs no card. The CurseForge description was rewritten with a Quick Start.
+- `babelchat_scanner/` — a Rust crate producing `libbabelchat_scanner.so` for Linux.
+- `build-linux.spec` — bundles `libbabelchat_scanner.so` into the Linux binary via PyInstaller.
+
+### Changed
+
+- `memory_reader_linux.py` is now a thin Python wrapper around the Rust scanner, falling back to pure Python when the `.so` is missing.
+- The Linux architecture diagram in the README reflects the Rust scanner.
+- The limitations section no longer mentions the 5–10s relocation delay; it no longer applies.
+
+### Fixed
+
+- **Discord invite links are no longer mistranslated** — schemeless links like `discord.gg/xyz` reached DeepL, which read `.gg` as the gaming abbreviation and rendered it as "good game". URL tokenization now also protects known link and invite domains (`discord.gg`, `t.me`, `bit.ly`, …) and any `domain.tld/path`.
+
+### Performance
+
+**The Linux memory scanner was rewritten in Rust** — the single biggest performance improvement since Linux support was added.
+
+- The Rust scanner library (`libbabelchat_scanner.so`) replaces the pure-Python `/proc/<pid>/mem` scanner.
+- It uses `process_vm_readv` rather than `/proc/<pid>/mem` — a dedicated cross-process memory syscall that does not go through the VFS layer, needs no file descriptor and does not pause the target process. This eliminates the WoW frame-time stutters the old approach caused.
+- **Address cache** — steady-state polling (every 250ms) is a single `process_vm_readv` call at the cached address, costing microseconds and near-zero CPU.
+- A full parallel heap scan (Rayon, 2 threads) runs only on a cache miss, which happens roughly every 14s when the Lua GC relocates the buffer.
+- Scanner threads run at `SCHED_IDLE` — the lowest Linux scheduling class, below `nice +19`. WoW, the compositor and every other process take absolute priority over the scanner.
+- Initial scan time: 10–13s → ~2.5s.
+- GC relocation detection: 14–17s gaps → ~2s.
+- End-to-end overlay latency: many seconds → ~1s (the floor is the DeepL API round trip).
+- Game stutters: eliminated.
+
+The addon's flush interval dropped from 1.5s to 0.25s — messages reach memory within one poll cycle of arriving, cutting the addon's share of the latency from up to 1.5s to about 250ms.
+
+The Python scanner, retained as a fallback when the `.so` is absent, was overhauled alongside it:
+
+- a persistent `/proc/<pid>/mem` file descriptor, removing an `open`/`close` pair from every read;
+- regions scanned smallest first — active Lua strings live in smaller allocations, so the buffer is found sooner;
+- an early exit on the first valid marker rather than scanning every remaining region;
+- ghost buffer blacklisting — stale copies that cause seq resets are blacklisted immediately;
+- every rescan path passes `min_seq`, so only buffers newer than the already-delivered messages are accepted;
+- the rescan interval no longer backs off exponentially when no newer buffer is found;
+- the background scanner thread validates seq before committing a new address.
+
+---
 
 ## [3.1.2] — 2026-05-31
 
-### Added / Добавлено / Añadido
-- **Linux/Proton support** — companion app now runs on Linux (CachyOS, Arch, Ubuntu and other distros) with WoW running under Proton/Wine (Tested under CachyOS)
-- Linux memory reader (`memory_reader_linux.py`) — reads WoW process memory via `/proc/<pid>/mem` and `os.pread()` with full 64-bit address support (Wine/Proton allocates above 4GB)
-- Linux hotkeys (`hotkeys_linux.py`) — global hotkeys via `pynput` with graceful fallback on pure Wayland
-- Platform dispatcher modules — `memory_reader.py` and `hotkeys.py` now auto-select the correct implementation based on `sys.platform`
-- `config.py`: Linux WoW path detection (`~/.steam/`, `/run/media/`) alongside Windows registry detection
-- `main.py`, `overlay.py`: all Windows-only calls (`ctypes.windll`, `X11BypassWindowManagerHint`) guarded by `sys.platform` checks
-- `overlay.py`: `X11BypassWindowManagerHint` flag on Linux for always-on-top and free `move()` via XWayland
-- `requirements.txt`: `pymem` is now Windows-only; `pynput` added for Linux
-- `build.spec`: excludes Linux modules from Windows `.exe` build
+### Added
 
-### Notes / Примечания / Notas
-- Linux requires `ptrace_scope=0`: `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`
-- Run with `QT_QPA_PLATFORM=xcb` for overlay always-on-top and dragging on Wayland
-- Enable companion in WoW once: `/run BabelChatDB.companion = {enabled = true}`
-- Message latency on Linux is ~5–10s higher than Windows due to Lua GC buffer relocation; this is a known limitation of the `/proc/mem` approach
+- **Linux/Proton support** — the companion app runs on Linux (CachyOS, Arch, Ubuntu and others) with WoW under Proton/Wine. Tested on CachyOS.
+- A Linux memory reader (`memory_reader_linux.py`) reading WoW process memory through `/proc/<pid>/mem` and `os.pread()`, with full 64-bit address support — Wine and Proton allocate above 4GB.
+- Linux hotkeys (`hotkeys_linux.py`) — global hotkeys through `pynput`, degrading gracefully on pure Wayland.
+- Platform dispatchers — `memory_reader.py` and `hotkeys.py` select the right implementation from `sys.platform`.
+- `config.py`: Linux WoW path detection (`~/.steam/`, `/run/media/`) alongside the Windows registry lookup.
+- `main.py` and `overlay.py`: every Windows-only call (`ctypes.windll`, `X11BypassWindowManagerHint`) is guarded by a `sys.platform` check.
+- `overlay.py`: the `X11BypassWindowManagerHint` flag on Linux, for always-on-top and a free `move()` through XWayland.
+- `requirements.txt`: `pymem` is Windows-only; `pynput` added for Linux.
+- `build.spec`: Linux modules are excluded from the Windows `.exe` build.
 
-— **Поддержка Linux/Proton** — приложение-компаньон теперь работает на Linux (CachyOS, Arch, Ubuntu и др.) с WoW под Proton/Wine через Steam
-— Linux memory reader — читает память WoW через `/proc/<pid>/mem` и `os.pread()` с полной поддержкой 64-bit адресов
-— Linux hotkeys — глобальные клавиши через `pynput` с автозаменой при чистом Wayland
-— Диспетчеры платформ — `memory_reader.py` и `hotkeys.py` автоматически выбирают реализацию по `sys.platform`
-— Требуется `ptrace_scope=0`; запуск с `QT_QPA_PLATFORM=xcb`; один раз в WoW: `/run BabelChatDB.companion = {enabled = true}`
+### Notes
 
-— **Soporte Linux/Proton** — la app acompañante ahora funciona en Linux (CachyOS, Arch, Ubuntu, etc.) con WoW bajo Proton/Wine via Steam
-— Linux memory reader — lee memoria de WoW via `/proc/<pid>/mem` y `os.pread()` con soporte completo de direcciones de 64 bits
-— Linux hotkeys — teclas globales via `pynput` con fallback automático en Wayland puro
-— Módulos despachadores de plataforma — `memory_reader.py` y `hotkeys.py` seleccionan automáticamente la implementación según `sys.platform`
-— Requiere `ptrace_scope=0`; ejecutar con `QT_QPA_PLATFORM=xcb`; una vez en WoW: `/run BabelChatDB.companion = {enabled = true}`
+- Linux needs `ptrace_scope=0`: `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`.
+- Run with `QT_QPA_PLATFORM=xcb` for an always-on-top, draggable overlay on Wayland.
+- Enable the companion in WoW once: `/run BabelChatDB.companion = {enabled = true}`.
+- Message latency on Linux is 5–10s higher than on Windows because of Lua GC buffer relocation — a known limitation of the `/proc/mem` approach.
+
+---
 
 ## [3.1.1] — 2026-03-25
 
-### Changed / Изменено / Cambiado
-- **Code cleanup:** removed 235 lines of dead pointer-chasing code from memory reader
-- Extracted `DeduplicationBuffer` into standalone class with safety cap (10k entries)
-- Replaced 40+ magic numbers with named constants across pipeline, overlay, memory reader
-- Unified 5 duplicate scan-accept blocks into `_accept_marker()` helper
-- Named regex groups in parser (`m.group('text')` instead of `m.group(4)`)
-- Fixed race condition: `itertools.count()` for thread-safe message IDs
-- Narrowed exception handlers (`RuntimeError | OSError` instead of bare `Exception`)
-- Removed dead `dict_text` parameter, duplicate regex, unused variables
-- Made `RE_WOW_LINK` public (was private `_RE_WOW_LINK` imported cross-module with `noqa`)
+### Changed
 
-— **Чистка кода:** удалено 235 строк мёртвого pointer-chasing кода из memory reader
-— Дедупликация вынесена в отдельный класс с лимитом 10k записей
-— 40+ магических чисел заменены именованными константами
-— 5 дублей scan-accept объединены в `_accept_marker()`
-— Именованные группы в regex парсера
-— Потокобезопасные ID через `itertools.count()`
-— Сужены обработчики исключений, удалены мёртвые параметры и дубли
+- **Code cleanup:** 235 lines of dead pointer-chasing code removed from the memory reader.
+- `DeduplicationBuffer` extracted into a class of its own, with a 10,000-entry safety cap.
+- Over 40 magic numbers replaced by named constants across the pipeline, the overlay and the memory reader.
+- Five duplicated scan-accept blocks unified into an `_accept_marker()` helper.
+- Named regex groups in the parser (`m.group('text')` rather than `m.group(4)`).
+- A race fixed: `itertools.count()` for thread-safe message ids.
+- Exception handlers narrowed (`RuntimeError | OSError` rather than a bare `Exception`).
+- Dead `dict_text` parameter, a duplicate regex and unused variables removed.
+- `RE_WOW_LINK` made public — it had been private and imported across modules behind a `noqa`.
 
-— **Limpieza de código:** eliminadas 235 líneas de código muerto de pointer-chasing
-— Deduplicación extraída en clase independiente con límite de 10k entradas
-— 40+ números mágicos reemplazados con constantes nombradas
-— 5 bloques duplicados scan-accept unificados en `_accept_marker()`
-— Grupos regex nombrados en el parser
-— IDs thread-safe via `itertools.count()`
-— Manejadores de excepciones restringidos, parámetros y duplicados eliminados
+---
 
 ## [3.0.1] — 2026-03-20
 
-### Fixed / Исправлено / Corregido
-- **CRITICAL:** Race condition in dedup — `_recent_messages` accessed from multiple threads without lock, now protected by `threading.Lock`
-- **CRITICAL:** Overlay memory leak — `_messages` list and QTextEdit grew without bound over long sessions, now capped at 500/1500
-- Config torn reads — pipeline thread could see mix of old and new config values, now uses snapshot
-- Translator crash on network errors — only `DeepLException` was caught, added `except Exception` fallback
-- SQLite cache never cleaned up — `cleanup()` called on pipeline start to remove expired entries
-- Config load silently reset to defaults — now logs warning on corrupt/missing config
-- Dedup timestamps used `time.time()` (affected by NTP) — switched to `time.monotonic()`
-- Empty payload from addon buffer caused wasted work — now skipped early
+### Added
 
-— **КРИТИЧНО:** Гонка в дедупликации — `_recent_messages` без блокировки из нескольких потоков, добавлен `threading.Lock`
-— **КРИТИЧНО:** Утечка памяти в оверлее — список сообщений и QTextEdit росли бесконечно, ограничены 500/1500
-— Разрыв чтения конфига — pipeline мог видеть смесь старых и новых значений, теперь snapshot
-— Краш переводчика при сетевых ошибках — ловился только `DeepLException`, добавлен общий обработчик
-— Кэш SQLite никогда не чистился — `cleanup()` вызывается при старте
-— Config молча сбрасывался при повреждении — теперь логирует предупреждение
-— Dedup использовал `time.time()` (чувствителен к NTP) — заменён на `time.monotonic()`
-— Пустой payload из буфера создавал лишнюю работу — пропускается
+- Renamed the project: ChatTranslatorHelper → **BabelChat**. A new identity, and no CurseForge conflict.
+- A slang dictionary category — 33 new terms: ez, copium, bricked, pumping, carry, wipe, lust, pug, soak, kite, gank, glad…
+- The `/babel` slash command, replacing `/wt`.
+- CurseForge packaging: `.pkgmeta`, an addon README, a BBCode description and a separate `BabelChat-Addon.zip` in releases.
+- Automatic database migration from the old ChatTranslatorHelper on first load.
+- Technical documentation (`docs/tech/`) and a user guide (`docs/user/`).
 
-— **CRÍTICO:** Condición de carrera en dedup — `_recent_messages` sin bloqueo desde múltiples hilos, protegido con `threading.Lock`
-— **CRÍTICO:** Fuga de memoria en overlay — lista de mensajes y QTextEdit crecían sin límite, limitados a 500/1500
-— Lecturas rotas de config — pipeline podía ver mezcla de valores viejos y nuevos, ahora usa snapshot
-— Crash del traductor por errores de red — solo se capturaba `DeepLException`, añadido fallback general
-— Caché SQLite nunca se limpiaba — `cleanup()` se ejecuta al iniciar
-— Config se reiniciaba silenciosamente — ahora registra advertencia
-— Dedup usaba `time.time()` (afectado por NTP) — cambiado a `time.monotonic()`
-— Payload vacío del buffer causaba trabajo innecesario — ahora se omite
+### Fixed
 
-### Added / Добавлено / Añadido
-- Renamed project: ChatTranslatorHelper → **BabelChat** (new identity, no CurseForge conflict)
-- Slang dictionary category — 33 new terms: ez, copium, bricked, pumping, carry, wipe, lust, pug, soak, kite, gank, glad...
-- Slash command `/babel` (replaces `/wt`)
-- CurseForge packaging: `.pkgmeta`, addon README, BBCode description, separate `BabelChat-Addon.zip` in releases
-- DB migration from old ChatTranslatorHelper (automatic on first load)
-- Technical documentation (`docs/tech/`) and user guide (`docs/user/`)
+- **Critical:** a race in deduplication — `_recent_messages` was reached from several threads with no lock, and is now protected by a `threading.Lock`.
+- **Critical:** an overlay memory leak — the `_messages` list and the QTextEdit grew without bound over a long session, and are now capped at 500 and 1500.
+- Torn config reads — the pipeline thread could see a mixture of old and new values, and now works from a snapshot.
+- A translator crash on network errors — only `DeepLException` was caught; a general fallback was added.
+- The SQLite cache was never cleaned up — `cleanup()` now runs when the pipeline starts, removing expired entries.
+- A corrupt or missing config was silently replaced by the defaults; it now logs a warning.
+- Dedup timestamps used `time.time()`, which NTP can move; they use `time.monotonic()` now.
+- An empty payload from the addon buffer caused wasted work and is skipped early.
 
-— Переименование: ChatTranslatorHelper → **BabelChat** (новая идентичность, нет конфликта на CurseForge)
-— Категория сленга — 33 новых термина: ez, copium, bricked, pumping, carry, wipe, lust, pug, soak, kite, gank, glad...
-— Слеш-команда `/babel` (вместо `/wt`)
-— Пакетирование CurseForge: `.pkgmeta`, README аддона, BBCode описание, отдельный `BabelChat-Addon.zip`
-— Миграция БД из ChatTranslatorHelper (автоматически при первом запуске)
-— Техническая документация (`docs/tech/`) и руководство пользователя (`docs/user/`)
-
-— Renombrado: ChatTranslatorHelper → **BabelChat** (nueva identidad, sin conflicto en CurseForge)
-— Categoría de jerga — 33 nuevos términos: ez, copium, bricked, pumping, carry, wipe, lust, pug, soak, kite, gank, glad...
-— Comando `/babel` (reemplaza `/wt`)
-— Empaquetado CurseForge: `.pkgmeta`, README del addon, descripción BBCode, `BabelChat-Addon.zip` separado
-— Migración de BD desde ChatTranslatorHelper (automática al primer inicio)
-— Documentación técnica (`docs/tech/`) y guía de usuario (`docs/user/`)
+---
 
 ## [3.0.0] — 2026-03-20
 
-### Added / Добавлено / Añadido
-- Streaming translation — original message appears in overlay instantly, translation arrives 0.5-2s later (progressive rendering)
-- Thread-safe translation cache with explicit `threading.Lock` (was relying on GIL)
-- Atomic config save — write to temp file + `os.replace()`, backup `.bak`, auto-recovery from corrupt JSON
-- Seq freshness tracking — detects frozen (zombie) buffers via 3-poll seq history, auto-triggers rescan
-- Blacklist TTL (60s) — zombie addresses expire and get re-scanned after GC reclaims memory
-- DictEngine v2: clean annotation line `→ term1, term2` below original (no more inline color spam)
-- Hyperlink-aware dictionary matching — skips `|H...|h` and `|cff...|r` blocks in WoW chat
-- Overlap guard — prevents double-matching of dictionary terms
-- 28 new tests (105 → 133): pipeline E2E (8), parser robustness (20)
+### Added
 
-— Стриминг перевода — оригинал появляется в оверлее мгновенно, перевод подгружается через 0.5-2с (progressive rendering)
-— Потокобезопасный кэш переводов с `threading.Lock` (раньше держался на GIL)
-— Атомарное сохранение конфига — запись в temp файл + `os.replace()`, бэкап `.bak`, авто-восстановление из повреждённого JSON
-— Отслеживание свежести seq — обнаруживает замороженные (зомби) буферы через историю 3 опросов, автоматический пересканирование
-— TTL чёрного списка (60с) — зомби-адреса истекают и пересканируются после освобождения GC
-— DictEngine v2: чистая аннотация `→ term1, term2` под оригиналом (без inline-спама цветами)
-— Hyperlink-aware словарный поиск — пропускает блоки `|H...|h` и `|cff...|r` в WoW чате
-— Защита от пересечений — предотвращает двойной перевод словарных терминов
-— 28 новых тестов (105 → 133): pipeline E2E (8), парсер robustness (20)
+- Streaming translation — the original message appears in the overlay at once and the translation arrives 0.5–2s later.
+- A thread-safe translation cache with an explicit `threading.Lock`; it had been relying on the GIL.
+- Atomic config saving — a temporary file plus `os.replace()`, a `.bak` backup and automatic recovery from corrupt JSON.
+- Seq freshness tracking — a frozen (zombie) buffer is detected from a three-poll seq history and triggers a rescan.
+- A 60-second blacklist TTL — zombie addresses expire and are scanned again once the GC has reclaimed the memory.
+- DictEngine v2: a clean annotation line below the original rather than inline colour spam.
+- Hyperlink-aware dictionary matching — `|H...|h` and `|cff...|r` blocks are skipped.
+- An overlap guard, preventing a dictionary term from being matched twice.
+- 28 new tests (105 → 133): pipeline end-to-end (8) and parser robustness (20).
 
-— Traducción streaming — el mensaje original aparece instantáneamente en el overlay, la traducción llega 0.5-2s después (renderizado progresivo)
-— Caché de traducción thread-safe con `threading.Lock` (antes dependía del GIL)
-— Guardado atómico de config — escritura en archivo temp + `os.replace()`, backup `.bak`, auto-recuperación de JSON corrupto
-— Seguimiento de frescura seq — detecta buffers congelados (zombie) via historial de 3 sondeos, re-escaneo automático
-— TTL de lista negra (60s) — direcciones zombie expiran y se re-escanean después de que el GC libere memoria
-— DictEngine v2: línea de anotación limpia `→ term1, term2` debajo del original (sin spam de colores inline)
-— Coincidencia de diccionario consciente de hyperlinks — omite bloques `|H...|h` y `|cff...|r` en el chat de WoW
-— Protección contra solapamientos — previene doble traducción de términos del diccionario
-— 28 nuevos tests (105 → 133): pipeline E2E (8), parser robustez (20)
+### Changed
 
-### Changed / Изменено / Cambiado
-- DICT buffer separator changed from `|` to `\t` — fixes parsing when WoW color codes contain pipes
-- Pipeline: `translation_enabled` check moved before text processing (skip early)
-- Parser `parse_addon_line` updated for v2.1 format (RAW/DICT kind field)
+- The DICT buffer separator changed from a pipe to a tab, which fixes parsing when WoW colour codes contain pipes.
+- The pipeline checks `translation_enabled` before processing the text, so a disabled translation exits early.
+- `parse_addon_line` handles the v2.1 format with its RAW/DICT kind field.
 
-— Разделитель DICT-буфера изменён с `|` на `\t` — исправляет парсинг когда WoW color codes содержат pipes
-— Pipeline: проверка `translation_enabled` перенесена до обработки текста (ранний выход)
-— Парсер `parse_addon_line` обновлён для формата v2.1 (поле KIND: RAW/DICT)
+### Fixed
 
-— Separador de buffer DICT cambiado de `|` a `\t` — corrige el parsing cuando los códigos de color WoW contienen pipes
-— Pipeline: verificación `translation_enabled` movida antes del procesamiento de texto (salida temprana)
-— Parser `parse_addon_line` actualizado para formato v2.1 (campo KIND: RAW/DICT)
+- SQLite ran with `check_same_thread=False` and no lock; it is protected by a `threading.Lock` now.
+- Config corruption on a crash — atomic writes prevent a partial file.
+- DICT messages carrying WoW colour codes broke the parser through the pipe in `|cffXXXXXX...|r`.
+- DictEngine matched inside WoW hyperlinks (`|Hitem:...|h[Name]|h|r`).
+- Overlapping DictEngine matches produced duplicated translations.
 
-### Fixed / Исправлено / Corregido
-- SQLite `check_same_thread=False` without locking — now protected by `threading.Lock`
-- Config corruption on crash — atomic write prevents partial file writes
-- DICT messages with WoW color codes breaking parser (pipe in `|cffXXXXXX...|r`)
-- DictEngine matching inside WoW hyperlinks (`|Hitem:...|h[Name]|h|r`)
-- DictEngine overlapping matches producing duplicate translations
-
-— SQLite `check_same_thread=False` без блокировки — теперь защищён `threading.Lock`
-— Порча конфига при крэше — атомарная запись предотвращает частичную запись файла
-— DICT-сообщения с WoW color codes ломали парсер (pipe в `|cffXXXXXX...|r`)
-— DictEngine находил совпадения внутри WoW гиперссылок (`|Hitem:...|h[Name]|h|r`)
-— Пересекающиеся совпадения DictEngine создавали двойные переводы
-
-— SQLite `check_same_thread=False` sin bloqueo — ahora protegido por `threading.Lock`
-— Corrupción de config al crashear — escritura atómica previene escrituras parciales
-— Mensajes DICT con códigos de color WoW rompían el parser (pipe en `|cffXXXXXX...|r`)
-— DictEngine encontraba coincidencias dentro de hyperlinks WoW (`|Hitem:...|h[Name]|h|r`)
-— Coincidencias solapadas de DictEngine creaban traducciones duplicadas
+---
 
 ## [2.2.2] — 2026-03-19
 
-### Added / Добавлено / Añadido
-- Parallel heap scan: 8-thread parallel ReadProcessMemory via ThreadPoolExecutor — scans 4000+ memory regions concurrently
-- "Don't translate own messages" option in Settings → Overlay with auto-detected player name from addon META
-- Spanish UI translations (153 strings) — full overlay and settings localization
-- "Why Python?" section in README (EN/RU/ES) explaining architecture choice
-- NPC message filter in chat history (names with spaces in Say/Yell channels)
-- WoW color code stripping (|cXXXXXXXX...|r) from addon dictionary translations
+### Added
 
-— Параллельное сканирование кучи: 8 потоков ReadProcessMemory через ThreadPoolExecutor — 4000+ регионов памяти одновременно
-— Опция «Не переводить свои сообщения» в Настройки → Оверлей с автоопределением имени игрока из META аддона
-— Испанский перевод интерфейса (153 строки) — полная локализация оверлея и настроек
-— Раздел «Почему Python?» в README (EN/RU/ES)
-— Фильтр NPC-сообщений в истории чата (имена с пробелами в каналах Say/Yell)
-— Удаление цветовых кодов WoW (|cXXXXXXXX...|r) из словарных переводов аддона
+- A parallel heap scan: eight-thread `ReadProcessMemory` through a `ThreadPoolExecutor`, covering 4000+ memory regions at once.
+- A "don't translate my own messages" option in Settings → Overlay, with the player name detected from the addon's META.
+- Spanish interface translations — 153 strings, covering the overlay and the settings in full.
+- A "Why Python?" section in the README, explaining the architecture choice.
+- An NPC message filter in the chat history — names with spaces in the Say and Yell channels.
+- WoW colour codes stripped from the addon's dictionary translations.
 
-— Escaneo paralelo del heap: 8 hilos ReadProcessMemory via ThreadPoolExecutor — 4000+ regiones de memoria simultáneamente
-— Opción "No traducir mis mensajes" en Ajustes → Overlay con detección automática del nombre del jugador desde META del addon
-— Traducciones de la interfaz al español (153 cadenas) — localización completa del overlay y ajustes
-— Sección "¿Por qué Python?" en README (EN/RU/ES)
-— Filtro de mensajes NPC en el historial de chat (nombres con espacios en canales Say/Yell)
-— Eliminación de códigos de color WoW (|cXXXXXXXX...|r) de las traducciones del diccionario del addon
+### Changed
 
-### Changed / Изменено / Cambiado
-- DICT translation bypass — addon dictionary disabled for companion, all messages go through DeepL for consistent quality
-- Dedup TTL increased from 30s to 60s — prevents duplicate messages from zombie Lua buffer copies
-- Smart rescan threshold reduced from 3s to 1.5s — faster detection of buffer moves
-- Rescan intervals reduced [2, 3, 5, 10]s (was [2, 5, 10, 30]s)
-- Quick-to-full rescan threshold: 2 misses (was 5)
+- The DICT translation bypass — the addon dictionary is disabled while the companion runs, and every message goes through DeepL for consistent quality.
+- The dedup TTL rose from 30s to 60s, preventing duplicates from zombie copies of the Lua buffer.
+- The smart rescan threshold dropped from 3s to 1.5s, detecting a moved buffer sooner.
+- Rescan intervals shortened to [2, 3, 5, 10]s from [2, 5, 10, 30]s.
+- The quick-to-full rescan threshold dropped to two misses from five.
 
-— Обход DICT-перевода — словарь аддона отключён для companion, все сообщения идут через DeepL для стабильного качества
-— TTL дедупликации увеличен с 30с до 60с — предотвращает дубли от зомби-копий Lua-буфера
-— Порог умного пересканирования снижен с 3с до 1.5с — быстрее обнаружение перемещения буфера
-— Интервалы пересканирования уменьшены [2, 3, 5, 10]с (было [2, 5, 10, 30]с)
-— Порог быстрого→полного пересканирования: 2 промаха (было 5)
+### Fixed
 
-— Bypass de traducción DICT — diccionario del addon desactivado para companion, todos los mensajes pasan por DeepL para calidad consistente
-— TTL de dedup aumentado de 30s a 60s — previene mensajes duplicados de copias zombie del buffer Lua
-— Umbral de re-escaneo inteligente reducido de 3s a 1.5s — detección más rápida de movimientos del buffer
-— Intervalos de re-escaneo reducidos [2, 3, 5, 10]s (era [2, 5, 10, 30]s)
-— Umbral de re-escaneo rápido→completo: 2 fallos (era 5)
+- A dedup bug on a seq reset — texts were saved from the *new* buffer rather than from the delivered messages, so every message after a `/reload` was skipped.
+- The player name property was missing from the `MemoryChatWatcher` wrapper class.
+- A lazy import of `clean_message_text` crashed the pipeline.
 
-### Fixed / Исправлено / Corregido
-- Seq reset dedup bug — was saving texts from NEW buffer instead of delivered messages, causing all post-/reload messages to be skipped
-- Player name property missing on MemoryChatWatcher wrapper class
-- Lazy import crash for clean_message_text in pipeline
+### Performance
 
-— Баг дедупликации при сбросе seq — сохранялись тексты из НОВОГО буфера вместо доставленных сообщений, из-за чего все сообщения после /reload пропускались
-— Отсутствие свойства player name в классе-обёртке MemoryChatWatcher
-— Краш ленивого импорта clean_message_text в pipeline
+- About half of all messages are delivered instantly through a quick rescan (0–31ms).
+- The other half arrive through a heap scan (2.5–3.8s), limited by memory bandwidth at 3.3GB.
+- A pointer-chasing prototype was implemented and left disabled; it needs research into WoW's Lua internals.
 
-— Bug de dedup al reiniciar seq — se guardaban textos del buffer NUEVO en vez de mensajes entregados, causando que todos los mensajes post-/reload se omitieran
-— Propiedad player name faltante en la clase wrapper MemoryChatWatcher
-— Crash de importación lazy de clean_message_text en pipeline
-
-### Performance / Производительность / Rendimiento
-- ~50% messages delivered instantly via quick rescan (0-31ms)
-- ~50% messages via heap scan (2.5-3.8s) — memory bandwidth limited at 3.3GB
-- Pointer chasing prototype implemented (disabled) — needs WoW Lua internals research
-
-— ~50% сообщений доставляются мгновенно через быстрое пересканирование (0-31мс)
-— ~50% сообщений через сканирование кучи (2.5-3.8с) — ограничение пропускной способности памяти 3.3ГБ
-— Прототип pointer chasing реализован (отключён) — требует исследования внутренностей WoW Lua
-
-— ~50% mensajes entregados instantáneamente via re-escaneo rápido (0-31ms)
-— ~50% mensajes via escaneo del heap (2.5-3.8s) — limitado por ancho de banda de memoria a 3.3GB
-— Prototipo de pointer chasing implementado (desactivado) — necesita investigación de internos de WoW Lua
+---
 
 ## [2.1.0] — 2026-03-18
 
-### Added / Добавлено / Añadido
-- Addon buffer format v2.1: SEQ|KIND|EVENT|author|text (DICT adds |translated)
-- Dedup in BufferAddEntry (author+text TTL 2s) — fixes triple messages from multiple ChatFrames
-- Addon buffers ALL channels regardless of dict.channels filter
-- Pipeline: DICT messages show with dictionary translation (no DeepL call)
-- Pipeline: RAW own-language messages shown without translation (conversation context)
-- Single-instance guard via PID lock file (wct.lock) with TerminateProcess
-- Zombie marker blacklist in memory reader
-- Spanish localization in Locales.lua (full esES/esMX)
+### Added
 
-— Формат буфера аддона v2.1: SEQ|KIND|EVENT|author|text (DICT добавляет |translated)
-— Дедупликация в BufferAddEntry (author+text TTL 2с) — исправляет тройные сообщения от нескольких ChatFrame
-— Аддон буферизует ВСЕ каналы независимо от фильтра dict.channels
-— Pipeline: DICT-сообщения отображаются со словарным переводом (без вызова DeepL)
-— Pipeline: RAW-сообщения на своём языке отображаются без перевода (контекст беседы)
-— Защита от повторного запуска через PID lock file (wct.lock) с TerminateProcess
-— Чёрный список зомби-маркеров в memory reader
-— Испанская локализация в Locales.lua (полная esES/esMX)
+- Addon buffer format v2.1: `SEQ|KIND|EVENT|author|text`, with DICT adding `|translated`.
+- Deduplication in `BufferAddEntry` (author plus text, 2s TTL), fixing triplicate messages from several ChatFrames.
+- The addon buffers every channel regardless of the `dict.channels` filter.
+- The pipeline shows DICT messages with their dictionary translation, without calling DeepL.
+- The pipeline shows RAW messages in your own language untranslated, for conversation context.
+- A single-instance guard through a PID lock file (`wct.lock`) with `TerminateProcess`.
+- A zombie marker blacklist in the memory reader.
+- Spanish localisation in `Locales.lua`, covering esES and esMX.
 
-— Formato de buffer del addon v2.1: SEQ|KIND|EVENT|author|text (DICT añade |translated)
-— Dedup en BufferAddEntry (author+text TTL 2s) — corrige mensajes triples de múltiples ChatFrames
-— El addon almacena TODOS los canales independientemente del filtro dict.channels
-— Pipeline: mensajes DICT se muestran con traducción del diccionario (sin llamada a DeepL)
-— Pipeline: mensajes RAW en tu idioma se muestran sin traducción (contexto de conversación)
-— Protección de instancia única via PID lock file (wct.lock) con TerminateProcess
-— Lista negra de marcadores zombie en memory reader
-— Localización al español en Locales.lua (completa esES/esMX)
+### Changed
 
-### Changed / Изменено / Cambiado
-- Version bumped to 2.1.0 across TOC, Core.lua, Config.lua, about_dialog.py
+- The version was raised to 2.1.0 across the TOC, `Core.lua`, `Config.lua` and `about_dialog.py`.
 
-— Версия обновлена до 2.1.0 в TOC, Core.lua, Config.lua, about_dialog.py
-
-— Versión actualizada a 2.1.0 en TOC, Core.lua, Config.lua, about_dialog.py
+---
 
 ## [2.0.0] — 2026-03-16
 
-### Added / Добавлено / Añadido
-- Merged Pirson's WoW Translator dictionary engine — 313 WoW terms in 14 languages with inline chat translation
-- LibBabble integration — 5000+ localized zone names, item sets, races, classes
-- Addon settings panel in WoW (Interface > AddOns > Chat Translator) with category toggles, channel filters, language picker, color picker
-- Minimap button for quick access to settings
-- Companion app toggle — enable/disable memory buffer for overlay independently
-- DICT/RAW message tagging — companion skips DeepL API for dictionary-matched messages
-- Neighborhood scan — memory reader recovers from Lua GC relocation in ~200ms (was ~2.5s)
-- Spanish README (README_es.md)
-- Full addon UI localization: English, Russian, Spanish
+### Added
 
-### Changed / Изменено / Cambiado
-- Addon architecture: switched from GetMessageInfo polling (200ms) to ChatFrame_AddMessageEventFilter (event-driven, 0ms delay)
-- Buffer flush interval reduced from 1.5s to 0.5s
-- Companion poll interval reduced from 500ms to 250ms
-- Buffer header now includes sequence number (`__WCT_BUF_0042__`) for fast staleness check
-- TOC updated for WoW Midnight (Interface: 120001, 120005)
-- Dual author credit: Andrey Yumashev + Pirson
+- Pirson's WoW Translator dictionary engine merged in — 313 WoW terms in 14 languages, with inline chat translation.
+- LibBabble integration — over 5000 localised zone names, item sets, races and classes.
+- An addon settings panel in WoW (Interface → AddOns → Chat Translator) with category toggles, channel filters, a language picker and a colour picker.
+- A minimap button for quick access to the settings.
+- A companion app toggle, enabling or disabling the memory buffer for the overlay independently.
+- DICT/RAW message tagging, so the companion skips the DeepL API for dictionary-matched messages.
+- A neighbourhood scan — the memory reader recovers from a Lua GC relocation in about 200ms rather than 2.5s.
+- A Spanish README (`README_es.md`).
+- Full addon interface localisation: English, Russian and Spanish.
 
-### Performance / Производительность / Rendimiento
-- End-to-end latency for dictionary hits: ~2.2s → ~0.75s
-- End-to-end latency for DeepL translations: ~2.5s → ~1.0s
-- GetMessageInfo polling preserved as disabled fallback (`/wt poll on`)
+### Changed
+
+- Addon architecture: `GetMessageInfo` polling every 200ms gave way to `ChatFrame_AddMessageEventFilter`, which is event-driven and adds no delay.
+- The buffer flush interval dropped from 1.5s to 0.5s.
+- The companion poll interval dropped from 500ms to 250ms.
+- The buffer header carries a sequence number (`__WCT_BUF_0042__`) for a fast staleness check.
+- The TOC was updated for WoW Midnight (Interface 120001, 120005).
+- Dual author credit: Andrey Yumashev and Pirson.
+
+### Performance
+
+- End-to-end latency for dictionary hits: ~2.2s → ~0.75s.
+- End-to-end latency for DeepL translations: ~2.5s → ~1.0s.
+- `GetMessageInfo` polling is kept as a disabled fallback (`/wt poll on`).
+
+---
 
 ## [1.0.8] — 2026-02-24
 
-### Fixed / Исправлено
-- Short phrases "hi", "sup", "go" now translated via phrasebook (were silently skipped due to MIN_TEXT_LENGTH and _SKIP_PHRASES filters)
-- Removed "go" from detector skip list — now handled as abbreviation before detection
-- Added "hi" → "привет", "sup" → "привет", "go" → "вперёд" as pre-detection abbreviations
+### Fixed
+
+- Short phrases — "hi", "sup", "go" — are translated through the phrasebook again; the `MIN_TEXT_LENGTH` and `_SKIP_PHRASES` filters had been dropping them silently.
+- "go" was removed from the detector's skip list and is handled as an abbreviation before detection.
+- "hi", "sup" and "go" were added as pre-detection abbreviations.
+
+---
 
 ## [1.0.7] — 2026-02-23
 
-### Added / Добавлено
-- WoW glossary: 80 safe abbreviations (9 languages) from Pirson's WoW Translator addon — instant translation of terms like aoe, dk, ilvl, gz, cc without API call
-- Context-gated term expansion: 102 WoW-specific terms (dungeon names, specs, roles) expanded to plain English before DeepL when 2+ gaming terms detected in message
-- Safety set: ~40 common English words (add, hit, focus, fire, arms, etc.) excluded from expansion to prevent false positives
+### Added
 
-### Fixed / Исправлено
-- Overlay resize grip now works — bottom-right corner ⇡ icon is a real drag handle
-- Reply translator defaults to → EN when own language is RU (was incorrectly set to → RU)
-- "go?" no longer mistranslated by DeepL — added to phrasebook as "вперёд"
+- A WoW glossary: 80 safe abbreviations in nine languages, from Pirson's WoW Translator addon — terms like aoe, dk, ilvl, gz and cc translate instantly with no API call.
+- Context-gated term expansion: 102 WoW-specific terms (dungeon names, specs, roles) are expanded to plain English before DeepL sees them, once two or more gaming terms appear in a message.
+- A safety set of about 40 common English words (add, hit, focus, fire, arms and so on) excluded from expansion, to prevent false positives.
 
-### Improved / Улучшено
-- Memory reader: seq reset guard — prevents re-translation of already-seen messages after addon /reload (saves DeepL API quota)
-- Memory reader: exponential backoff for marker-gone detection (2→4→8→16 stale reads before rescan instead of fixed 2)
-- Memory reader: adaptive rescan interval (2s→5s→10s→30s) when buffer address is stable, resets to 2s on new messages
-- Language detector: short Cyrillic text misdetected as Bulgarian/Ukrainian now treated as Russian (for RU users)
-- NPC filter: Say/Yell messages from NPC names (containing spaces) are now filtered from overlay
+### Changed
+
+- Memory reader: a seq reset guard prevents re-translating messages already seen after an addon `/reload`, which saves DeepL quota.
+- Memory reader: exponential backoff for marker-gone detection — 2, 4, 8 then 16 stale reads before a rescan, rather than a fixed 2.
+- Memory reader: an adaptive rescan interval (2s, 5s, 10s, 30s) while the buffer address is stable, reset to 2s on a new message.
+- Language detector: short Cyrillic text misread as Bulgarian or Ukrainian is treated as Russian for Russian-speaking users.
+- NPC filter: Say and Yell messages from NPC names, which contain spaces, are kept out of the overlay.
+
+### Fixed
+
+- The overlay resize grip works — the bottom-right corner is a real drag handle.
+- The reply translator defaults to English when your own language is Russian; it had been set to Russian.
+- "go?" is no longer mistranslated by DeepL; it is in the phrasebook.
+
+---
 
 ## [1.0.6] — 2026-02-23
 
-### Fixed / Исправлено
-- Fixed duplicate messages flooding overlay — file watcher no longer runs alongside memory reader; WoW buffers chatlog writes for minutes then flushes a huge batch that bypassed dedup TTL
-- File watcher now only activates as fallback when memory reader is unavailable (no pymem, no admin rights, WoW not running)
+### Fixed
+
+- Duplicate messages flooding the overlay: the file watcher no longer runs alongside the memory reader. WoW buffers chat-log writes for minutes and then flushes a large batch at once, which slipped past the dedup TTL.
+- The file watcher activates only as a fallback, when the memory reader is unavailable — no pymem, no administrator rights, or WoW not running.
+
+---
 
 ## [1.0.5] — 2026-02-23
 
-### Fixed / Исправлено
-- Fixed garbled binary characters (null bytes, raw memory data) appearing in translated messages — GetMessageInfo() can return strings with embedded \x00 bytes from taint corruption; now truncated at first null byte in both addon and companion
-- Addon: pcall-wrapped string.find for null byte detection (safe on secret values)
-- Companion: defensive payload sanitization strips null bytes and trailing control characters
-- Parser: fixed `_is_item_link_only` to match color-stripped hyperlinks — item-link-only messages now correctly filtered
+### Fixed
+
+- Garbled binary characters — null bytes and raw memory — appearing in translated messages. `GetMessageInfo()` can return strings with embedded null bytes from taint corruption; both the addon and the companion now truncate at the first one.
+- Addon: `string.find` is wrapped in `pcall` for null-byte detection, which is safe on secret values.
+- Companion: payload sanitisation strips null bytes and trailing control characters.
+- Parser: `_is_item_link_only` matches colour-stripped hyperlinks, so a message holding nothing but an item link is filtered correctly.
+
+---
 
 ## [1.0.4] — 2026-02-22
 
-### Fixed / Исправлено
-- Addon: fixed `table.concat` crash on secret-tainted strings in RebuildBuffer — now pcall-filters each entry individually, skipping secret values
-- Addon: concatenation with secret string produces secret result — `wctSeq .. "|RAW|" .. text` stays tainted, now handled gracefully
+### Added
 
-### Added / Добавлено
-- Phrasebook: "zug zug" (orc greeting), "zamn" (slang for damn)
-- Slang normalizer: "zamn" → "damn"
+- Phrasebook: "zug zug" (the orcish greeting) and "zamn".
+- Slang normaliser: "zamn" → "damn".
+
+### Fixed
+
+- Addon: a `table.concat` crash on secret-tainted strings in `RebuildBuffer`. Each entry is now filtered individually through `pcall`, skipping secret values.
+- Addon: concatenating with a secret string produces a secret result, so `wctSeq .. "|RAW|" .. text` stays tainted. That is handled gracefully now.
+
+---
 
 ## [1.0.3] — 2026-02-22
 
-### Fixed / Исправлено
-- Parser: fixed "Parse returned None" for all messages — raw WoW color codes (`|cXXXXXXXX...|r`) inside player names now stripped before regex matching
-- Parser: added support for `[BracketChannel] |Hplayer:...|h[Name]|h: text` format (used by Raid Warning / Объявление рейду in RU scrollback)
-- Parser: added "Объявление рейду" (dative case) to channel map — RU scrollback uses dative, not genitive
-- Addon: removed all dedup logic — secret string taint prevents even table indexing on concat results; companion handles dedup
-- Debug console: now toggleable at runtime via Settings without restart; fixed idempotent initialization
+### Fixed
+
+- Parser: "Parse returned None" for every message — raw WoW colour codes inside player names are stripped before the regex runs.
+- Parser: support for the `[BracketChannel] |Hplayer:...|h[Name]|h: text` format, used by Raid Warning in Russian scrollback.
+- Parser: "Объявление рейду" added to the channel map — Russian scrollback uses the dative case, not the genitive.
+- Addon: all dedup logic removed. Secret string taint prevents even indexing a table with the result of a concatenation, so the companion handles dedup.
+- Debug console: it can be toggled at runtime from the settings without a restart, and its initialisation is idempotent.
+
+---
 
 ## [1.0.2] — 2026-02-22
 
-### Fixed / Исправлено
-- Addon: fixed taint error "attempt to compare secret string" in TWW — Secret Values from GetMessageInfo are now concatenated (allowed) instead of compared (forbidden); double pcall contains taint per-frame and per-message
-- Addon: removed StripMarkup on addon side — raw text with WoW markup sent to companion, companion parser handles markup stripping
-- Pipeline: unmapped lingua languages (e.g. Tswana for "okay alr") now fall through to DeepL auto-detect instead of being skipped
+### Added
 
-### Added / Добавлено
-- Slang normalizer: gaming slang expanded to plain English before DeepL (summ→summon, bio→break, rezz→resurrect, pls→please, etc.) — dramatically improves translation of short chat messages
-- DeepL context parameter: "World of Warcraft raid group chat" hint (free, not billed)
-- Phrasebook: 30+ new raid abbreviations (summ, bio, rez, cds, bl, hero, brez, wipe, kick, gl guys, gg wp, etc.)
-- Version shown in overlay title bar
-- "About" tab in settings with developer info, GitHub link, and donate addresses
+- Slang normaliser: gaming slang is expanded to plain English before DeepL (summ → summon, bio → break, rezz → resurrect, pls → please and so on), which improves short chat messages considerably.
+- A DeepL context parameter: the hint "World of Warcraft raid group chat", which is free and not billed.
+- Phrasebook: over 30 new raid abbreviations — summ, bio, rez, cds, bl, hero, brez, wipe, kick, gl guys, gg wp and others.
+- The version is shown in the overlay title bar.
+- An "About" tab in the settings, with developer information, a GitHub link and donation addresses.
+
+### Fixed
+
+- Addon: the taint error "attempt to compare secret string" on The War Within. Secret values from `GetMessageInfo` are concatenated, which is allowed, rather than compared, which is not; a double `pcall` contains the taint per frame and per message.
+- Addon: `StripMarkup` was removed from the addon side. Raw text with WoW markup goes to the companion, whose parser strips it.
+- Pipeline: an unmapped lingua language — Tswana for "okay alr", say — falls through to DeepL's auto-detection rather than being skipped.
+
+---
 
 ## [1.0.1] — 2026-02-22
 
-### Fixed / Исправлено
-- Undetectable language now falls through to DeepL auto-detect instead of being skipped
-- Debug console now works correctly in windowed .exe (AllocConsole + CONOUT$ redirect)
-- Console hidden by default — enable via Settings → Overlay → "Show debug console"
-- Added INFO-level logging for translation pipeline steps (detect, skip, translate, DeepL result)
-- Fixed StreamHandler crash when sys.stderr is None in windowed exe
+### Fixed
+
+- An undetectable language falls through to DeepL auto-detection rather than being skipped.
+- The debug console works in the windowed `.exe` (`AllocConsole` plus a `CONOUT$` redirect).
+- The console is hidden by default and enabled from Settings → Overlay → "Show debug console".
+- INFO-level logging was added for the pipeline steps: detect, skip, translate, DeepL result.
+- A `StreamHandler` crash when `sys.stderr` is None in a windowed executable.
+
+---
 
 ## [1.0.0] — 2026-02-22
 
 First public release.
 
-Первый публичный релиз.
+### Added
 
-### Added / Добавлено
+**Core**
 
-**Core / Ядро:**
-- Real-time chat translation via addon memory buffer (< 1s latency)
-- Tiered memory scanning: region history (~30ms) → heap scan (~2.5s) → full scan (~7s)
-- File watcher fallback — polls WoWChatLog.txt every 1s when addon unavailable
-- Deduplication — messages from memory reader and file watcher are deduplicated by (author, text) with 30s TTL
-- WoW item/spell link filtering — messages with only item links are skipped
+- Real-time chat translation through the addon's memory buffer, under a second of latency.
+- Tiered memory scanning: region history (~30ms), then a heap scan (~2.5s), then a full scan (~7s).
+- A file watcher fallback, polling `WoWChatLog.txt` every second when the addon is unavailable.
+- Deduplication — messages from the memory reader and the file watcher are deduplicated by author and text with a 30-second TTL.
+- WoW item and spell link filtering — a message holding nothing but links is skipped.
 
-**Translation / Перевод:**
-- DeepL Free API integration (500K characters/month)
-- Built-in phrasebook: 45 phrases (EN/RU/DE/FR/ES) + 30 gaming abbreviations — instant, no API needed
-- Two-level translation cache: in-memory LRU (1000 entries) + SQLite persistent cache (7-day TTL)
-- Offline language detection via lingua-py (~1ms per message)
-- Cyrillic script fallback for short text that lingua can't classify
-- Dual-threshold language detector: lenient (0.1) for short text (≤20 chars), strict (0.25) for longer text
-- Gaming jargon auto-skip: lol, afk, brb, pull, cc, dps, heal, tank, etc.
+**Translation**
 
-**Overlay / Оверлей:**
-- Smart overlay with WoW-native dark theme and channel colors
-- Click-through mode by default (clicks pass through to the game)
-- Draggable title bar, resizable from all edges
-- Minimize to title bar with one click
-- Channel filter tabs: All, Party, Raid, Guild, Say, Whisper, Instance
-- Reply translator panel: type → translate → copy → paste in WoW
-- WoW connection status indicator (attached / searching / offline)
-- Translation ON/OFF toggle in title bar
-- Opacity slider (20-100%)
+- DeepL Free API integration (500,000 characters a month).
+- A built-in phrasebook: 45 phrases in English, Russian, German, French and Spanish, plus 30 gaming abbreviations — instant, with no API call.
+- A two-level translation cache: an in-memory LRU of 1000 entries over a persistent SQLite cache with a seven-day TTL.
+- Offline language detection through lingua-py, about a millisecond per message.
+- A Cyrillic-script fallback for short text lingua cannot classify.
+- A dual-threshold detector: lenient (0.1) for text of 20 characters or less, strict (0.25) above that.
+- Gaming jargon skipped automatically: lol, afk, brb, pull, cc, dps, heal, tank and the rest.
 
-**WoW Addon / Аддон WoW:**
-- BabelChat addon (~300 lines Lua)
-- ChatFrame scrollback polling every 200ms
-- Ring buffer (50 messages) with `__WCT_BUF__` / `__WCT_END__` markers
-- StripMarkup preserves hyperlinks while removing color codes
-- `/wct` slash commands: status, buf, log, auto, flush, poll, verbose
-- Auto-enable chat logging on login
-- Buffer flush every 1.5 seconds
+**Overlay**
 
-**Configuration / Настройка:**
-- 5-step setup wizard for first-time configuration
-- Settings dialog with 3 tabs: General, Overlay, Hotkeys
-- Global hotkeys via Win32 API (default: Ctrl+Shift+T to toggle translation)
-- 22 target languages supported
-- One-click addon installation from settings
-- Auto-detect WoW path via Windows Registry
-- Debug console toggle in settings
+- A smart overlay with a WoW-native dark theme and per-channel colours.
+- Click-through by default, so clicks reach the game.
+- A draggable title bar, resizable from every edge.
+- Minimise to the title bar in one click.
+- Channel filter tabs: All, Party, Raid, Guild, Say, Whisper, Instance.
+- A reply translator panel: type, translate, copy, paste into WoW.
+- A WoW connection indicator: attached, searching or offline.
+- A translation on/off toggle in the title bar.
+- An opacity slider, 20% to 100%.
 
-**Infrastructure / Инфраструктура:**
-- System tray integration with context menu
-- PyInstaller single-file .exe build (admin privileges required)
-- GitHub Actions: CI (lint + test) and Release (build .exe + GitHub Release)
-- Apache-2.0 license
+**WoW addon**
+
+- The BabelChat addon, about 300 lines of Lua.
+- ChatFrame scrollback polling every 200ms.
+- A 50-message ring buffer with `__WCT_BUF__` and `__WCT_END__` markers.
+- `StripMarkup` preserves hyperlinks while removing colour codes.
+- `/wct` slash commands: status, buf, log, auto, flush, poll, verbose.
+- Chat logging enabled automatically on login.
+- A buffer flush every 1.5 seconds.
+
+**Configuration**
+
+- A five-step setup wizard for the first run.
+- A settings dialog with three tabs: General, Overlay and Hotkeys.
+- Global hotkeys through the Win32 API; Ctrl+Shift+T toggles translation by default.
+- 22 target languages.
+- One-click addon installation from the settings.
+- The WoW path detected from the Windows registry.
+- A debug console toggle in the settings.
+
+**Infrastructure**
+
+- System tray integration with a context menu.
+- A single-file PyInstaller `.exe` build, requiring administrator rights.
+- GitHub Actions for CI (lint and test) and for releases (build the `.exe`, publish a GitHub Release).
+- The Apache-2.0 licence.

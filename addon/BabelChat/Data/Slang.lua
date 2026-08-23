@@ -297,4 +297,10 @@ addonTable.SlangDict = {
         ruRU = "ММР (рейтинг матчмейкинга)", zhCN = "匹配分", zhTW = "配對分",
         plPL = "MMR (rating dopasowania)", svSE = "Matchmaking-poäng", noNO = "Matchmaking-poeng"
     },
+    ["gogo"] = {
+        esES = "¡Vamos!", esMX = "¡Vámonos!", enUS = "Let's go", deDE = "Los geht's",
+        frFR = "On y va", itIT = "Andiamo", koKR = "고고", ptBR = "Vamos",
+        ruRU = "Погнали/пошли", zhCN = "走走走", zhTW = "走走走",
+        plPL = "Lecimy", svSE = "Kör", noNO = "Kjør"
+    },
 }

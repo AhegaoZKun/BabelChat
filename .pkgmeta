@@ -1,35 +1,38 @@
+# Read by BigWigsMods/packager from the repository root, which is also where
+# .git lives — the packager needs both, so topdir is the root and never the
+# addon subdirectory.
+#
+# The release workflow stages .release/BabelChat itself and runs the packager
+# with -c (skip copying). That is deliberate: the packager's own copy step is a
+# blacklist, and this is not an addon-only repository — it also holds the
+# companion app, its build outputs, and the developer's own config.json and
+# logs. A blacklist that lags by one entry uploads whatever it did not know
+# about to CurseForge and Wago, publicly and irreversibly. Staging the addon
+# explicitly means only the addon can ship, whatever else appears at the root
+# later.
+#
+# `ignore` is therefore absent rather than stale: with -c it is never consulted,
+# and a list that looks authoritative but is not read is worse than no list.
 package-as: BabelChat
+
+# Where the TOC is. The packager looks for it at the repository root or,
+# failing that, at the path named here — and the key is prefixed with the
+# package name, which is why it reads BabelChat/addon/BabelChat and not
+# addon/BabelChat. Without the prefix it strips the wrong component and reports
+# "Could not find an addon TOC file".
+#
+# The move itself is a no-op under -c, since the workflow has already staged the
+# addon at .release/BabelChat. This entry earns its place by telling the
+# packager where to read the version, the interface numbers and both store ids.
+move-folders:
+  BabelChat/addon/BabelChat: BabelChat
 
 enable-nolib-creation: no
 
-move-folders:
-  addon/BabelChat: BabelChat
-
-ignore:
-  - .git
-  - .github
-  - .gitignore
-  - .claude
-  - .claude-lib
-  - .frai
-  - .rag
-  - app
-  - assets
-  - build
-  - dist
-  - temp
-  - tests
-  - build.spec
-  - pyproject.toml
-  - requirements.txt
-  - CLAUDE.md
-  - "*.lock"
-  - "*.log"
-  - "*.pyc"
-  - __pycache__
-
+# Written by the release workflow: the section of CHANGELOG.md for the version
+# being released, so the store notes are that release's notes rather than all
+# nineteen versions of them. Absent outside CI, where the packager warns once
+# and generates notes from the commits instead.
 manual-changelog:
-  filename: CHANGELOG.md
+  filename: RELEASE_NOTES.md
   markup-type: markdown
-
-license-output: LICENSE

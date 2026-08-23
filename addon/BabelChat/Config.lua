@@ -4,6 +4,24 @@
 local ADDON_NAME, addonTable = ...
 local L = addonTable.L
 
+-- Vertical gap between a section heading and the first control under it.
+-- GameFontNormal draws 14px down from its anchor and a checkbox 26px, both
+-- anchored TOPLEFT at x=16, so anything under about 20 makes them overlap.
+-- The General and Companion sections already used 25; the Categories and
+-- Channels sections used 5, and looked like it.
+local SECTION_GAP = 25
+
+-- Height of the scrolling content. Generous on purpose: too tall only means
+-- a little empty space at the bottom, too short silently clips a section.
+local CONTENT_HEIGHT = 930
+
+local function CountEntries(dict)
+    if type(dict) ~= "table" then return 0 end
+    local n = 0
+    for _ in pairs(dict) do n = n + 1 end
+    return n
+end
+
 local function AddTooltip(frame, text)
     if not text then return end
     frame:SetScript("OnEnter", function(self)
@@ -18,8 +36,22 @@ end
 
 function addonTable.CreateConfigUI()
     local db = BabelChatDB
-    local panel = CreateFrame("Frame", "ChatTranslatorPanel", UIParent)
-    panel.name = "Chat Translator"
+    local canvas = CreateFrame("Frame", "BabelChatPanel", UIParent)
+    canvas.name = "BabelChat"
+
+    -- Settings.RegisterCanvasLayoutCategory hands the canvas to the options
+    -- window as-is, with no scrolling of its own. The content runs to roughly
+    -- 540px, so on a shorter panel — or at a UI scale above 1 — the Companion
+    -- section fell off the bottom with no way to reach it. Everything is built
+    -- inside a scroll frame instead; `panel` below is the scrolling content, so
+    -- the rest of this function is unchanged.
+    local scroll = CreateFrame("ScrollFrame", "BabelChatPanelScroll", canvas, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+
+    local panel = CreateFrame("Frame", "BabelChatPanelContent", scroll)
+    panel:SetSize(620, CONTENT_HEIGHT)
+    scroll:SetScrollChild(panel)
 
     local yOffset = -16
 
@@ -32,11 +64,11 @@ function addonTable.CreateConfigUI()
     local logo = panel:CreateTexture(nil, "ARTWORK")
     logo:SetSize(64, 64)
     logo:SetPoint("TOPRIGHT", -20, -10)
-    logo:SetTexture("Interface\\Addons\\BabelChat\\img\\logo_wt")
+    logo:SetTexture("Interface\\AddOns\\BabelChat\\img\\icon")
 
     local version = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     version:SetPoint("TOP", logo, "BOTTOM", 0, -2)
-    version:SetText("v" .. (C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "2.1.0"))
+    version:SetText("v" .. (C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "3.4.0"))
 
     -- ════════════════════════════════════
     -- SECTION 1: GENERAL
@@ -53,6 +85,19 @@ function addonTable.CreateConfigUI()
     mainCB:SetChecked(db.dict.enabled)
     mainCB:SetScript("OnClick", function(self) db.dict.enabled = self:GetChecked() end)
     AddTooltip(mainCB, L["TT_ENABLE"])
+
+    -- The gloss and the overlay answer the same question, so by default only
+    -- one of them speaks. This is the escape hatch for players who want both.
+    yOffset = yOffset - 24
+    local alwaysCB = CreateFrame("CheckButton", "WCT_AlwaysGlossCB", panel, "InterfaceOptionsCheckButtonTemplate")
+    alwaysCB:SetPoint("TOPLEFT", 16, yOffset)
+    _G[alwaysCB:GetName() .. "Text"]:SetText(L["UI_ALWAYS_GLOSS"])
+    _G[alwaysCB:GetName() .. "Text"]:SetFontObject("GameFontHighlightSmall")
+    alwaysCB:SetChecked(db.dict.mode == "always")
+    alwaysCB:SetScript("OnClick", function(self)
+        db.dict.mode = self:GetChecked() and "always" or "auto"
+    end)
+    AddTooltip(alwaysCB, L["TT_ALWAYS_GLOSS"])
 
     -- Color button
     local colorBtn = CreateFrame("Button", "WCT_ColorBtn", panel, "UIPanelButtonTemplate")
@@ -105,30 +150,40 @@ function addonTable.CreateConfigUI()
     filterHeader:SetText("|cffd597ff" .. L["CAT_HEADER"] .. "|r")
 
     local categories = {
-        { text = L["CAT_MAZZ"],    key = "showMazz",        tt = L["TT_CAT_MAZZ"] },
-        { text = L["CAT_SOCIAL"],  key = "showSocial",      tt = L["TT_CAT_SOCIAL"] },
-        { text = L["CAT_CLASSES"], key = "showClases",      tt = L["TT_CAT_CLASSES"] },
-        { text = L["CAT_ROLES"],   key = "showRoles",       tt = L["TT_CAT_ROLES"] },
-        { text = L["CAT_STATS"],   key = "showStats",       tt = L["TT_CAT_STATS"] },
-        { text = L["CAT_PROF"],    key = "showProfesiones", tt = L["TT_CAT_PROF"] },
-        { text = L["CAT_COMBAT"],  key = "showCombate",     tt = L["TT_CAT_COMBAT"] },
-        { text = L["CAT_TRADE"],   key = "showComercio",    tt = L["TT_CAT_TRADE"] },
-        { text = L["CAT_GROUPS"],  key = "showGrupos",      tt = L["TT_CAT_GROUPS"] },
-        { text = L["CAT_GUILD"],   key = "showHermandad",   tt = L["TT_CAT_GUILD"] },
-        { text = L["CAT_STATUS"],  key = "showEstado",      tt = L["TT_CAT_STATUS"] },
-        { text = L["CAT_SLANG"],   key = "showSlang",       tt = L["TT_CAT_SLANG"] },
-        { text = L["CAT_ENDGAME"], key = "showEndgame",     tt = L["TT_CAT_ENDGAME"] },
+        { text = L["CAT_MAZZ"],    key = "showDungeons",    tt = L["TT_CAT_MAZZ"],    dict = addonTable.MazzRaidDict },
+        { text = L["CAT_SOCIAL"],  key = "showSocial",      tt = L["TT_CAT_SOCIAL"],  dict = addonTable.SocialDict },
+        { text = L["CAT_CLASSES"], key = "showClasses",     tt = L["TT_CAT_CLASSES"], dict = addonTable.ClasesDict },
+        { text = L["CAT_ROLES"],   key = "showRoles",       tt = L["TT_CAT_ROLES"],   dict = addonTable.RolesDict },
+        { text = L["CAT_STATS"],   key = "showStats",       tt = L["TT_CAT_STATS"],   dict = addonTable.EstadisticasDict },
+        { text = L["CAT_PROF"],    key = "showProfessions", tt = L["TT_CAT_PROF"],    dict = addonTable.ProfesionesDict },
+        { text = L["CAT_COMBAT"],  key = "showCombat",      tt = L["TT_CAT_COMBAT"],  dict = addonTable.CombateDict },
+        { text = L["CAT_TRADE"],   key = "showTrade",       tt = L["TT_CAT_TRADE"],   dict = addonTable.ComercioDict },
+        { text = L["CAT_GROUPS"],  key = "showGroups",      tt = L["TT_CAT_GROUPS"],  dict = addonTable.GruposDict },
+        { text = L["CAT_GUILD"],   key = "showGuild",       tt = L["TT_CAT_GUILD"],   dict = addonTable.HermandadDict },
+        { text = L["CAT_STATUS"],  key = "showStatus",      tt = L["TT_CAT_STATUS"],  dict = addonTable.EstadoDict },
+        { text = L["CAT_SLANG"],   key = "showSlang",       tt = L["TT_CAT_SLANG"],   dict = addonTable.SlangDict },
+        { text = L["CAT_ENDGAME"], key = "showEndgame",     tt = L["TT_CAT_ENDGAME"], dict = addonTable.EndgameDict },
+        -- Zones and item sets come from LibBabble, which holds thousands of
+        -- names — a count there would say "5000" and mean nothing useful.
         { text = L["CAT_ZONES"],   key = "showZones",       tt = L["TT_CAT_ZONES"] },
         { text = L["CAT_SETS"],    key = "showSets",        tt = L["TT_CAT_SETS"] },
     }
 
-    yOffset = yOffset - 5
+    -- A header anchored TOPLEFT occupies 14px downward; a checkbox from
+    -- InterfaceOptionsCheckButtonTemplate occupies 26. Five pixels of gap put
+    -- the first row of checkboxes 9px INSIDE the heading above it.
+    yOffset = yOffset - SECTION_GAP
     for i, info in ipairs(categories) do
         local cb = CreateFrame("CheckButton", "WCT_CB_" .. info.key, panel, "InterfaceOptionsCheckButtonTemplate")
         local col = ((i - 1) % 3)
         local row = math.floor((i - 1) / 3)
         cb:SetPoint("TOPLEFT", 16 + col * 190, yOffset - row * 25)
-        _G[cb:GetName() .. "Text"]:SetText(info.text)
+        -- The count tells the player what the category is for without making
+        -- them hover for a tooltip: "Slang (48)" is self-explaining.
+        local label = info.text
+        local count = CountEntries(info.dict)
+        if count > 0 then label = label .. " (" .. count .. ")" end
+        _G[cb:GetName() .. "Text"]:SetText(label)
         _G[cb:GetName() .. "Text"]:SetFontObject("GameFontHighlightSmall")
         cb:SetChecked(db.dict.settings[info.key])
         cb:SetScript("OnClick", function(self)
@@ -165,7 +220,7 @@ function addonTable.CreateConfigUI()
         { text = L["CH_EMOTE"],   events = { "CHAT_MSG_EMOTE" },                                                                                     tt = L["TT_CH_EMOTE"] },
     }
 
-    yOffset = yOffset - 5
+    yOffset = yOffset - SECTION_GAP
     for i, info in ipairs(channelSettings) do
         local cb = CreateFrame("CheckButton", "WCT_CH_CB_" .. i, panel, "InterfaceOptionsCheckButtonTemplate")
         local col = ((i - 1) % 3)
@@ -289,9 +344,74 @@ function addonTable.CreateConfigUI()
     AddTooltip(compCB, L["TT_COMP_ENABLE"])
 
     -- ════════════════════════════════════
+    -- SECTION 6: ABOUT
+    -- ════════════════════════════════════
+    yOffset = yOffset - 30
+
+    -- Separator
+    local line5 = panel:CreateTexture(nil, "ARTWORK")
+    line5:SetSize(580, 1)
+    line5:SetPoint("TOPLEFT", 16, yOffset)
+    line5:SetColorTexture(1, 1, 1, 0.1)
+
+    yOffset = yOffset - SECTION_GAP
+    local aboutHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    aboutHeader:SetPoint("TOPLEFT", 16, yOffset)
+    aboutHeader:SetText("|cffd597ff" .. L["ABOUT_HEADER"] .. "|r")
+
+    yOffset = yOffset - 22
+    local authors = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    authors:SetPoint("TOPLEFT", 16, yOffset)
+    authors:SetText(L["ABOUT_AUTHORS"])
+
+    yOffset = yOffset - 18
+    local dictCredit = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    dictCredit:SetPoint("TOPLEFT", 16, yOffset)
+    dictCredit:SetText(L["ABOUT_DICT_CREDIT"])
+
+    -- A WoW addon cannot open a browser, and it cannot put text on the
+    -- clipboard either. An EditBox the player can click and press Ctrl+C in is
+    -- the whole of what the API allows, so that is what each link is.
+    local LINKS = {
+        { label = "GitHub", url = "https://github.com/Yumash/BabelChat" },
+        { label = "CurseForge", url = "https://www.curseforge.com/wow/addons/babelchat" },
+        { label = "Wago", url = "https://addons.wago.io/addons/babelchat" },
+        { label = L["ABOUT_DONATE"], url = "https://pay.cloudtips.ru/p/ea5537e6" },
+        { label = "USDT TRC20", url = "TGaUz963ZaCoHrfoDDgy1sCvSrK1wsZvcx" },
+        { label = "BTC", url = "1BkYvFT8iBVG3GfTqkR2aBkABNkTrhYuja" },
+        { label = "TON", url = "UQDFaHBN1pcQZ7_9-w1E_hS_JNfGf3d0flS_467w7LOQ7xbK" },
+    }
+    for index, link in ipairs(LINKS) do
+        yOffset = yOffset - 24
+        local caption = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        caption:SetPoint("TOPLEFT", 16, yOffset - 4)
+        caption:SetText(link.label .. ":")
+        caption:SetWidth(120)
+        caption:SetJustifyH("LEFT")
+
+        local box = CreateFrame("EditBox", "WCT_Link" .. index, panel, "InputBoxTemplate")
+        box:SetPoint("TOPLEFT", 140, yOffset)
+        box:SetSize(370, 20)
+        box:SetAutoFocus(false)
+        box:SetText(link.url)
+        box:SetCursorPosition(0)
+        -- Read-only in effect: any edit snaps back, so a stray keystroke cannot
+        -- turn the address into something that no longer goes anywhere.
+        box:SetScript("OnTextChanged", function(self, userInput)
+            if userInput then
+                self:SetText(link.url)
+                self:SetCursorPosition(0)
+            end
+        end)
+        box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        AddTooltip(box, L["TT_ABOUT_LINK"])
+    end
+
+    -- ════════════════════════════════════
     -- REGISTER PANEL
     -- ════════════════════════════════════
-    local config_category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+    local config_category = Settings.RegisterCanvasLayoutCategory(canvas, canvas.name)
     Settings.RegisterAddOnCategory(config_category)
     addonTable.categoryID = config_category:GetID()
 end

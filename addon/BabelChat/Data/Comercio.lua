@@ -105,7 +105,7 @@ addonTable.ComercioDict = {
         itIT = "Blasone",
         koKR = "문장",
         ptBR = "Brasão",
-        ruRU = "Герб",
+        ruRU = "Эмблема",
         zhCN = "纹章",
         zhTW = "紋章",
         plPL = "Herb/Wizytówka (Crest)",
@@ -127,5 +127,21 @@ addonTable.ComercioDict = {
         plPL = "Brąz",
         svSE = "Brons",
         noNO = "Bronse"
+    },
+    ["sold"] = {
+        esES = "Vendido",
+        esMX = "Vendido",
+        enUS = "Sold",
+        deDE = "Verkauft",
+        frFR = "Vendu",
+        itIT = "Venduto",
+        koKR = "판매 완료",
+        ptBR = "Vendido",
+        ruRU = "Продано",
+        zhCN = "已售出",
+        zhTW = "已售出",
+        plPL = "Sprzedane",
+        svSE = "Sålt",
+        noNO = "Solgt"
     },
 }

@@ -17,6 +17,10 @@ local lib = LibStub("LibBabble-3.0"):New(MAJOR_VERSION, MINOR_VERSION)
 if not lib then return end
 
 local GAME_LOCALE = GetLocale()
+-- BabelChat: enGB ships no tables of its own upstream, so an EU-English
+-- client fell through every branch to the error() at the end of this file
+-- and threw on login. The two locales share their item-set names.
+if GAME_LOCALE == "enGB" then GAME_LOCALE = "enUS" end
 
 -- Notes: Do not manually edit the translation here, as it may be overwritten by WoWAce localization automation tool
 -- To revise translation, please visit: http://www.wowace.com/addons/libbabble-itemset-3-0/localization/

@@ -88,5 +88,5 @@ def expand_wow_terms(text: str) -> str:
 
     result = _EXPAND_RE.sub(_replace, text)
     if result != text:
-        logger.info("WoW terms expanded: %r -> %r", text[:60], result[:60])
+        logger.debug("WoW terms expanded: %r -> %r", text[:60], result[:60])
     return result

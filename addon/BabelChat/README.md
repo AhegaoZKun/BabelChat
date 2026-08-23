@@ -1,72 +1,51 @@
 # BabelChat
 
-**Break the language barrier in World of Warcraft.**
+Chat in a language you don't read, translated where you're already looking.
 
-BabelChat is a chat translation addon with an optional companion app. It works in two modes:
+## On its own
 
-## Standalone Mode (Addon Only)
+Install it and play. Nothing to configure, no account, no key.
 
-The addon translates **gaming slang, abbreviations, and WoW-specific terms** directly in your chat window using a built-in dictionary of **347 terms in 14 languages**.
+Gaming terms get their meaning appended in grey on the same line:
 
-When someone types `lfm icc hc need heal`, you see a clean annotation below:
-> → looking for more, Icecrown Citadel, heroic, need healer
+```
+wtb gilded crest, cod    wtb = Куплю · gilded = Золочёная эмблема · crest = Эмблема +1
+```
 
-No external app needed. No API keys. Works out of the box.
+**436 terms in 14 languages**, plus every zone and item-set name from LibBabble.
+The language comes from your WoW client, so a Russian client glosses in Russian.
 
-**Supported languages:** English, Spanish, German, French, Italian, Portuguese, Russian, Korean, Chinese (Simplified & Traditional), Polish, Swedish, Norwegian.
+## With the companion app
 
-## Companion Mode (Addon + Desktop App)
+For whole sentences rather than terms, run the free companion app from
+<https://github.com/Yumash/BabelChat>. It reads this addon's chat buffer and
+shows translations in an overlay above WoW — read-only, no injection, no
+automation.
 
-For **full sentence translation** via DeepL, download the free companion app from [GitHub](https://github.com/Yumash/BabelChat). The app reads the addon's memory buffer and shows translations in a sleek overlay on top of WoW — with less than 2 seconds latency.
+While the app is running the addon stays quiet, so the same message is not
+answered twice in different words. Turn on "show the gloss even when the app is
+running" in `/babel config` if you want both.
 
-The companion app is **read-only** (no injection, no automation) — same approach as WeakAuras Companion and WarcraftLogs.
+## Commands
 
-## Dictionary Categories
-
-| Category | Examples | Terms |
-|----------|----------|-------|
-| Social & Slang | ty, gg, brb, ez, copium, go next | 104 |
-| Classes & Specs | dk, ret, bm, disc, resto, boomkin | 59 |
-| Raid & Dungeon | wipe, prog, soak, kite, brez, vault | 54 |
-| Combat | aggro, aoe, cc, dps, dot, cleave | 33 |
-| Groups | lfm, lf1m, premade, pug | 29 |
-| Stats | crit, haste, mastery, vers, ilvl | 19 |
-| Professions | jc, bs, enchant, herb, alch, tailor | 17 |
-| Status | afk, oom, dc, rdy | 11 |
-| Trade | wtb, wts, bis, mats, cod | 8 |
-| Roles | tank, healer, dps | 7 |
-| Guild | gm, officer, recruit, gbank | 5 |
-| Zones | 5000+ zone names via LibBabble | - |
-
-## Slash Commands
-
-| Command | Description |
-|---------|------------|
-| `/babel` | Show help |
-| `/babel config` | Open settings panel |
-| `/babel on` / `off` | Toggle dictionary translation |
-| `/babel test` | Test translation with a sample message |
-| `/babel companion` | Show companion app buffer status |
-
-## Key Differences from WoW Translator
-
-BabelChat is inspired by [WoW Translator](https://www.curseforge.com/wow/addons/wow-translator) by **Pirson** and includes his dictionary data (MIT License). Key differences:
-
-| | WoW Translator | BabelChat |
-|---|---|---|
-| Dictionary terms | 314 | 347 (+slang category) |
-| Full sentence translation | No | Yes (via DeepL companion app) |
-| Translation display | Inline color codes in chat | Clean annotation below message |
-| Hyperlink handling | Can break item links | Hyperlink-aware (skips links) |
-| Overlap protection | No | Yes (prevents double translations) |
-| Companion app | No | Free overlay with streaming translation |
-| Slash command | /wt | /babel |
+| Command | What it does |
+|---|---|
+| `/babel` | help |
+| `/babel config` | settings panel |
+| `/babel on` / `off` | glossary on or off |
+| `/babel test` | try it on a sample message |
+| `/babel companion` | companion buffer status |
 
 ## Credits
 
-- **Pirson** — Original WoW Translator addon, dictionary data (314 terms × 14 languages). [Buy Me a Coffee](https://buymeacoffee.com/franciscorb)
-- **Andrey Yumashev** — BabelChat addon integration, companion app, DictEngine v2
+The glossary began as [WoW Translator](https://www.curseforge.com/wow/addons/wow-translator)
+by **Pirson** (MIT), which contributed 314 terms across 14 languages. BabelChat
+added slang and a current Endgame/Midnight set, rewrote the matching engine, and
+built the companion app.
 
-## License
+- **Pirson** — glossary data and the in-game translation idea — [Buy Me a Coffee](https://buymeacoffee.com/franciscorb)
+- **Andrey Yumashev** — addon, companion app, translation engine
+- **AhegaoZKun** — Linux/Wayland support, Microsoft Translator backend
 
-MIT License — free to use, modify, and distribute.
+MIT License. Full description, provider comparison and privacy notes:
+<https://github.com/Yumash/BabelChat>

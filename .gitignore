@@ -34,6 +34,9 @@ settings_dialog_pos.json
 # Logs & lock files
 *.log
 *.lock
+# ...except the scanner's, which pins what CI builds. A cdylib nobody
+# publishes wants a reproducible dependency set, not a fresh resolve per run.
+!babelchat_scanner_win/Cargo.lock
 
 # Downloaded addons (research)
 AutoChatLog/
@@ -42,7 +45,14 @@ AutoChatLog/
 build/
 dist/
 AppDir/
-tools/
+# Ignore the directory's CONTENTS, not the directory: git cannot re-include
+# a file whose parent directory is itself excluded, so `tools/` would make
+# the exception below silently do nothing.
+tools/*
+# The build helpers a checkout needs to reproduce a shipped asset stay in.
+# docs/tech/addon.md points at this one, and an ignored generator makes the
+# committed icon impossible for anyone else to regenerate.
+!tools/make_addon_icon.py
 
 # Rust build artifacts
 babelchat_scanner/target/
@@ -79,3 +89,24 @@ babelchat_scanner_*/target/
 .frai/
 .claude-lib/
 
+# Store API tokens, kept as files so they never pass through a terminal or a
+# chat log on the way to `gh secret set`. Ignored before they exist on purpose:
+# this repository is public and `git add -A` is a habit.
+.cf
+.curseforge
+.wago
+*.token
+# GigaChat credentials, handed over the same way: a file, never a paste into a
+# terminal or a chat log. The bare name is here because .gc matches none of the
+# patterns below, and a credential that is ignored only by luck is not ignored.
+.gc
+.secrets/
+# Anything at the repository root that reads as a credential file.
+.*token*
+.*secret*
+.*api-key*
+
+# Built by the release workflow: the staged addon and the store release notes
+# extracted from CHANGELOG.md for the version being published.
+/.release
+/RELEASE_NOTES.md

@@ -19,12 +19,13 @@ import sys
 from dotenv import load_dotenv
 from lingua import Language
 
-from app.config import CONFIG_FILE, AppConfig, resolve_chatlog_path
+from app import debug_log
+from app.config import CONFIG_FILE, AppConfig, enabled_channels, resolve_chatlog_path
+from app.i18n import tr
 from app.overlay_gtk import ChatOverlayGtk
-from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_gtk import SettingsWindowGtk
-from app.translator import TranslatorService
+from app.translator import TranslatorService, any_configured
 from app.tray_sni import MenuItem, TrayIcon
 
 _LANG_CODE_TO_LINGUA: dict[str, Language] = {
@@ -46,37 +47,15 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     chatlog = resolve_chatlog_path(config)
     own_lang = _LANG_CODE_TO_LINGUA.get(config.own_language, Language.ENGLISH)
 
-    enabled_channels: set[Channel] = set()
-    if config.channels_party:
-        enabled_channels |= {Channel.PARTY, Channel.PARTY_LEADER}
-    if config.channels_raid:
-        enabled_channels |= {Channel.RAID, Channel.RAID_LEADER, Channel.RAID_WARNING}
-    if config.channels_guild:
-        enabled_channels |= {Channel.GUILD, Channel.OFFICER}
-    if config.channels_say:
-        enabled_channels |= {Channel.SAY, Channel.YELL}
-    if config.channels_whisper:
-        enabled_channels |= {Channel.WHISPER_FROM, Channel.WHISPER_TO}
-    if config.channels_instance:
-        enabled_channels |= {Channel.INSTANCE, Channel.INSTANCE_LEADER}
-    if config.channels_trade:
-        enabled_channels |= {Channel.TRADE}
-    if config.channels_general:
-        enabled_channels |= {Channel.GENERAL}
-    if config.channels_services:
-        enabled_channels |= {Channel.SERVICES}
-    if config.channels_lfg:
-        enabled_channels |= {Channel.LOOKING_FOR_GROUP}
+    channels = enabled_channels(config)
 
     return PipelineConfig(
         chatlog_path=chatlog,
-        deepl_api_key=config.deepl_api_key,
-        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
-        microsoft_region=getattr(config, "microsoft_region", ""),
-        translator_priority=getattr(config, "translator_priority", "deepl"),
+        providers=config.providers,
+        translator_priority=config.translator_priority,
         target_lang=config.target_language,
         own_language=own_lang,
-        enabled_channels=enabled_channels,
+        enabled_channels=channels,
         skip_own_messages=config.skip_own_messages,
         translation_enabled=config.translation_enabled_default,
     )
@@ -90,13 +69,17 @@ def main() -> int:
     )
 
     config = AppConfig.load()
+    # Off unless asked for: it records every chat line in full.
+    debug_log.configure(config.debug_capture_trace)
+
+    # The Qt entry point has always done this and the GTK one never did, so
+    # every Linux user got the default interface language regardless of what
+    # they picked in Settings — and the default is Russian.
+    tr.set_language(config.ui_language)
 
     # First run: no config file yet, or no translation API configured →
     # run the setup wizard (its own blocking GTK loop) before normal startup.
-    if not os.path.exists(CONFIG_FILE) or (
-        not config.deepl_api_key
-        and not getattr(config, "microsoft_api_key", "")
-    ):
+    if not os.path.exists(CONFIG_FILE) or not any_configured(config.providers):
         from app.setup_wizard_gtk import run_setup_wizard
 
         config = run_setup_wizard(config)
@@ -106,12 +89,7 @@ def main() -> int:
     overlay = ChatOverlayGtk(config)
 
     # Reply translator (outgoing): default EN unless own language is EN.
-    reply_translator = TranslatorService(
-        api_key=config.deepl_api_key,
-        microsoft_api_key=getattr(config, "microsoft_api_key", ""),
-        microsoft_region=getattr(config, "microsoft_region", ""),
-        priority=getattr(config, "translator_priority", "deepl"),
-    )
+    reply_translator = TranslatorService.from_config(config)
     reply_lang = "EN" if config.own_language != "EN" else config.target_language
     overlay.set_translator(reply_translator, reply_lang)
 
@@ -148,12 +126,7 @@ def main() -> int:
             pipeline.update_config(_build_pipeline_config(updated))
             # Rebuild the reply translator so API key/priority changes take
             # effect without a restart.
-            new_translator = TranslatorService(
-                api_key=updated.deepl_api_key,
-                microsoft_api_key=getattr(updated, "microsoft_api_key", ""),
-                microsoft_region=getattr(updated, "microsoft_region", ""),
-                priority=getattr(updated, "translator_priority", "deepl"),
-            )
+            new_translator = TranslatorService.from_config(updated)
             new_reply_lang = "EN" if updated.own_language != "EN" else updated.target_language
             overlay.set_translator(new_translator, new_reply_lang)
             # Restyle the overlay live (opacity/font) without a restart.
