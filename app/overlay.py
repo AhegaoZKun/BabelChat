@@ -331,20 +331,28 @@ class ChatOverlay(FramelessDragResizeMixin, QWidget):
         # Initial update
         self._update_wow_status()
 
+    #: Status to (label, colour, explanation key). A named problem gets a
+    #: colour of its own and a tooltip saying what to do about it \u2014 the whole
+    #: failure this replaces was an indicator that looked healthy while nothing
+    #: was arriving.
+    _WOW_STATES = {
+        "attached": ("WoW: \u2714", "#40FF40", ""),
+        "searching": ("WoW: ...", "#FFD200", "overlay.wow.searching"),
+        "offline": ("WoW: \u2716", "#888", "overlay.wow.offline"),
+        "process_gone": ("WoW: \u2716", "#888", "overlay.wow.offline"),
+        "access_denied": ("WoW: \U0001f512", "#FF6B6B", "overlay.wow.access_denied"),
+        "no_buffer": ("WoW: ?", "#FF9F40", "overlay.wow.no_buffer"),
+    }
+
     def _update_wow_status(self) -> None:
         """Update WoW connection status label."""
         if not hasattr(self, "_wow_checker"):
             return
         status = self._wow_checker()
-        if status == "attached":
-            self._wow_status.setText("WoW: \u2714")
-            self._wow_status.setStyleSheet("color: #40FF40; font-size: 9px; padding: 0 4px;")
-        elif status == "searching":
-            self._wow_status.setText("WoW: ...")
-            self._wow_status.setStyleSheet("color: #FFD200; font-size: 9px; padding: 0 4px;")
-        else:
-            self._wow_status.setText("WoW: \u2716")
-            self._wow_status.setStyleSheet("color: #888; font-size: 9px; padding: 0 4px;")
+        label, colour, explanation = self._WOW_STATES.get(status, ("WoW: \u2716", "#FF6B6B", "overlay.wow.unknown"))
+        self._wow_status.setText(label)
+        self._wow_status.setStyleSheet(f"color: {colour}; font-size: 9px; padding: 0 4px;")
+        self._wow_status.setToolTip(tr(explanation, e=status) if explanation else "")
 
     def set_translator(self, translator: TranslatorService, target_lang: str) -> None:
         """Provide the translator service and target language for reply translation."""

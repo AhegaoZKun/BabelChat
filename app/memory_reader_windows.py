@@ -141,6 +141,56 @@ def _open_for_reading(pid: int):
     return pm
 
 
+# ── why the game's memory cannot be read ─────────────────────────────────────
+#
+# Every scan path returned None for "nothing new in the buffer" and for "the
+# operating system refused to let us look", which are not remotely the same
+# thing. The second one never resolves on its own and the app said nothing
+# about it: the overlay showed WoW as connected, because being connected meant
+# only that a process with that name existed, and then no message ever arrived.
+# A tester spent an evening on that.
+
+#: Windows error codes worth naming. Anything else is reported by number.
+_ERROR_ACCESS_DENIED = 5
+_ERROR_INVALID_PARAMETER = 87
+
+#: How long a buffer may be absent before the app stops looking busy and says
+#: so. Long enough to cover a character-select screen and a zone load, short
+#: enough that nobody spends an evening guessing.
+_SILENCE_BEFORE_COMPLAINT = 45.0
+
+ACCESS_DENIED = "access_denied"
+PROCESS_GONE = "process_gone"
+NO_BUFFER = "no_buffer"
+
+
+def describe_access(pid: int) -> str:
+    """Whether this process may read that one, and why not.
+
+    Returns "" when the memory can be read. The check is the same OpenProcess
+    the scanner does, so a success here means the scanner will get its handle
+    too.
+    """
+    try:
+        import pymem.ressources.kernel32 as kernel32
+    except ImportError:
+        return ""  # the native scanner is in use; it does its own opening
+
+    process_vm_read = 0x0010
+    process_query_information = 0x0400
+    handle = kernel32.OpenProcess(process_vm_read | process_query_information, False, pid)
+    if handle:
+        kernel32.CloseHandle(handle)
+        return ""
+
+    code = ctypes.get_last_error() or ctypes.windll.kernel32.GetLastError()
+    if code == _ERROR_ACCESS_DENIED:
+        return ACCESS_DENIED
+    if code == _ERROR_INVALID_PARAMETER:
+        return PROCESS_GONE
+    return f"open_failed_{code}"
+
+
 def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
     """Fallback: use pymem if the native scanner is not available."""
     try:
@@ -206,6 +256,11 @@ class WoWAddonBufReader:
         self._thread: threading.Thread | None = None
         self._pid: int | None = None
         self._attached = False
+        #: Why nothing is arriving, when the answer is not "WoW is not running".
+        #: Read by the overlay, which used to have no way to tell a working
+        #: reader from a refused one.
+        self._problem: str = ""
+        self._first_miss_at: float = 0.0
         self._last_seq = 0
         self._player_name: str = ""
         self._delivered_payloads: set[str] = set()
@@ -217,6 +272,11 @@ class WoWAddonBufReader:
     @property
     def is_attached(self) -> bool:
         return self._attached
+
+    @property
+    def problem(self) -> str:
+        """"" when nothing is wrong, otherwise why no message is arriving."""
+        return self._problem
 
     @property
     def player_name(self) -> str:
@@ -259,10 +319,22 @@ class WoWAddonBufReader:
     def _attach(self) -> None:
         pid = _find_wow_pid()
         if pid is None:
+            self._problem = ""  # WoW simply is not running; that is not a fault
             raise RuntimeError("WoW process not found")
+
+        # Finding the process is not the same as being allowed to read it, and
+        # treating them as one is what let the overlay show a green tick beside
+        # a reader that could never deliver a message.
+        refusal = describe_access(pid)
+        if refusal:
+            self._problem = refusal
+            raise RuntimeError(refusal)
+
         self._pid = pid
         self._attached = True
+        self._problem = ""
         self._consecutive_misses = 0
+        self._first_miss_at = 0.0
         logger.info("Attached to WoW PID %d", pid)
 
     def _detach(self) -> None:
@@ -295,9 +367,24 @@ class WoWAddonBufReader:
 
         if content is None:
             self._consecutive_misses += 1
+            # Attached, allowed to read, and still nothing there. That means the
+            # addon is not writing its buffer — disabled, not installed, or not
+            # loaded for this character — and no amount of waiting fixes it. Say
+            # so rather than looking busy.
+            now = time.monotonic()
+            if self._first_miss_at == 0.0:
+                self._first_miss_at = now
+            elif not self._problem and now - self._first_miss_at > _SILENCE_BEFORE_COMPLAINT:
+                self._problem = NO_BUFFER
+                logger.warning(
+                    "No addon buffer in WoW's memory after %.0fs — is the addon enabled for this character?",
+                    now - self._first_miss_at,
+                )
             return
 
         self._consecutive_misses = 0
+        self._first_miss_at = 0.0
+        self._problem = ""
         self._deliver_new_messages(content)
 
     def _deliver_new_messages(self, content: str) -> None:
@@ -432,6 +519,10 @@ class MemoryChatWatcher:
     @property
     def is_attached(self) -> bool:
         return self._reader.is_attached
+
+    @property
+    def problem(self) -> str:
+        return self._reader.problem
 
     @property
     def player_name(self) -> str:

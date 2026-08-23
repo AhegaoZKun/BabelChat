@@ -34,6 +34,23 @@ QTabBar::tab:hover:!selected {
     background: #2e2e2e;
 }
 
+/* Every tab and every wizard page sits inside a QScrollArea, and a scroll
+   area paints its viewport from the palette, not from this stylesheet. On a
+   machine whose Qt palette is light that viewport came out #efefef — a white
+   page behind the dark group boxes, showing through wherever they did not
+   cover it, which is a bar across each group title. Transparent lets the
+   window's own colour through, whatever the palette happens to be. */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+QScrollArea > QWidget#qt_scrollarea_viewport {
+    background: transparent;
+}
+
 QGroupBox {
     border: 1px solid #444;
     border-radius: 4px;

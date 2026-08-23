@@ -267,4 +267,9 @@ STRINGS: dict[str, str] = {
     "error.credential_shape": "The server could not read the credentials. Usually that means the whole authorization key — the long string ending in == — went into the Client Secret field. It needs the two separate values instead: Client ID and Client Secret, both shaped like 01234567-89ab-cdef-0123-456789abcdef.",
     "error.scope_rejected": "The key works, but the project is on the wrong tier: the app asks for individual access (GIGACHAT_API_PERS) and this project does not have it. Create a GigaChat API project with the individual access type.",
     "error.credential_missing": "Fill in both fields: Client ID and Client Secret. Both are shown on the project page in Sber Studio.",
+    "overlay.wow.searching": "Looking for the WoW process. Start the game and capture begins on its own.",
+    "overlay.wow.offline": "WoW is not running.",
+    "overlay.wow.access_denied": "Windows will not let this read WoW's memory. Usually that means the game is running as administrator and BabelChat is not. Run both the same way: either both plain, or both elevated.",
+    "overlay.wow.no_buffer": "WoW is running, but the addon is not writing its buffer. Check on the character select screen that BabelChat is enabled and loaded for this character. In game, /babel status will say.",
+    "overlay.wow.unknown": "Reading WoW's memory failed: {e}",
 }

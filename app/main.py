@@ -371,6 +371,12 @@ def main() -> int:
         mw = pipeline._memory_watcher
         if mw is None:
             return "offline"
+        # A named problem outranks both of the other answers: "attached" used to
+        # mean only that a process called Wow.exe existed, so a reader Windows
+        # was refusing showed the same green tick as a working one.
+        problem = getattr(mw, "problem", "")
+        if problem:
+            return problem
         if mw.is_attached:
             return "attached"
         return "searching"

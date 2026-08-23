@@ -267,4 +267,9 @@ STRINGS: dict[str, str] = {
     "error.credential_shape": "El servidor no pudo leer las credenciales. Normalmente significa que la clave de autorización completa — la cadena larga que termina en == — se pegó en el campo Client Secret. Hacen falta los dos valores por separado: Client ID y Client Secret, ambos con la forma 01234567-89ab-cdef-0123-456789abcdef.",
     "error.scope_rejected": "La clave funciona, pero el proyecto está en el plan equivocado: la aplicación pide acceso para particulares (GIGACHAT_API_PERS) y este proyecto no lo tiene. Cree un proyecto GigaChat API con acceso para particulares.",
     "error.credential_missing": "Rellene ambos campos: Client ID y Client Secret. Los dos aparecen en la página del proyecto en Sber Studio.",
+    "overlay.wow.searching": "Buscando el proceso de WoW. Inicia el juego y la captura empieza sola.",
+    "overlay.wow.offline": "WoW no está en ejecución.",
+    "overlay.wow.access_denied": "Windows no permite leer la memoria de WoW. Normalmente significa que el juego se ejecuta como administrador y BabelChat no. Ejecuta ambos igual: o los dos normales, o los dos elevados.",
+    "overlay.wow.no_buffer": "WoW está en ejecución, pero el addon no escribe su búfer. Comprueba en la pantalla de selección de personaje que BabelChat esté activado y cargado para ese personaje. En el juego, /babel status lo dice.",
+    "overlay.wow.unknown": "No se pudo leer la memoria de WoW: {e}",
 }
