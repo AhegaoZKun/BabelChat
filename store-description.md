@@ -55,8 +55,13 @@ one:
 | **Microsoft Translator** | an Azure account | 2M characters / month |
 
 Configure more than one and they cover for each other: if your preferred service
-is down or out of allowance, the next one is tried instead of the message being
-dropped.
+is down, out of allowance, or declines to translate a particular message, the
+next one is tried instead of the message being dropped.
+
+The overlay keeps up with a busy Trade channel: messages appear in the poll they
+were sent in, and the companion costs about a tenth of one percent of a core
+while it does it. It reads the addon's buffer through a pointer the addon parks
+for it, so nothing is scanned for and nothing competes with the game.
 
 **You can also just not configure any of them.** MyMemory needs no account, so
 sentence translation works on first launch, and the in-game glossary works
@@ -197,8 +202,14 @@ BabelChat дописывает серым, на той же строке:
 | **DeepL** | карту для подтверждения личности — на Free не списывает | 500 тыс. символов в месяц |
 | **Microsoft Translator** | аккаунт Azure | 2 млн символов в месяц |
 
-Настроишь несколько — они подстрахуют друг друга: если основной лёг или исчерпал
-лимит, пробуется следующий, а не теряется сообщение.
+Настроишь несколько — они подстрахуют друг друга: если основной лёг, исчерпал
+лимит или отказался переводить конкретное сообщение, пробуется следующий, а не
+теряется сообщение.
+
+Оверлей поспевает за оживлённой торговлей: сообщение появляется в том же опросе,
+в котором отправлено, а компаньон тратит на это около десятой доли процента ядра.
+Он читает буфер аддона по указателю, который аддон для этого и кладёт, — ничего
+не ищется в памяти и ничто не конкурирует с игрой.
 
 **Можно и вовсе ничего не настраивать.** MyMemory не требует аккаунта, так что
 перевод фраз работает с первого запуска, а внутриигровой словарь — всегда.

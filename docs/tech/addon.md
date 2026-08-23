@@ -53,7 +53,9 @@ every line that follows, for the rest of the session.
 - 50-message ring buffer with dedup (author+text, 2s TTL)
 - Format: `SEQ|KIND|EVENT|author|text` (tab separator for DICT translated text)
 - Flushed to `BabelChatDB.wctbuf` every 0.25s via `C_Timer.NewTicker`
-- Pre-allocated SavedVariable keys for pointer stability
+- Pre-allocated SavedVariable keys for pointer stability — this is load-bearing,
+  not tidiness: the companion holds the address of one slot in this table, and
+  adding a key afterwards would rehash it and move every slot
 - `pcall` wrapping for secret-tainted instance chat
 
 ## Dictionary Engine (DictEngine.lua)
@@ -132,6 +134,17 @@ companion protocol rests on: without it WoW never persists the table, so
 - `minimap.*` — minimap icon position
 - `wctbuf` — ring buffer content (read by companion app)
 - `wctSeq` — sequence counter (persists across `/reload`)
+- `wctFlush` — the pulse: a rebuild counter that ticks on every flush, including
+  the idle ones every two seconds. It is what lets the companion tell a live
+  buffer from the bytes an earlier one left behind, which are otherwise
+  identical — same markers, same last message. Persists across `/reload`, or the
+  live buffer would look older than the corpse of the previous session
+- `wctAnchor` — a constant, written once and never changed. The companion finds
+  it and then reads the buffer through the table slot beside it, instead of
+  searching memory for the string, which moves on every rebuild. It has to be
+  set inside `PreallocateCompanionKeys` with the others: adding a key later
+  rehashes the table, and a rehash moves every slot including the one the
+  companion is holding. See [memory-reader.md](memory-reader.md)
 - `firstRun` — drives the welcome frame
 
 ## Migration

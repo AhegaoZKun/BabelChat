@@ -8,10 +8,11 @@ BabelChat is a two-component system: a WoW addon (Lua) captures chat messages, a
 WoW Process                          Companion App (Python, no elevation)
 ┌─────────────────────┐              ┌──────────────────────────────┐
 │  BabelChat addon    │              │  Memory Reader               │
-│  ├── ChatFilter     │  ReadProc    │  ├── Rust scanner + pymem    │
-│  ├── Ring buffer    │──Memory───→  │  ├── Seq freshness tracking  │
-│  ├── DictEngine     │  (250ms)     │  └── Zombie buffer detection │
-│  └── SavedVariable  │              │          │                   │
+│  ├── ChatFilter     │  pointer     │  ├── Anchor → slot → buffer  │
+│  ├── Ring buffer    │──from the──→ │  ├── Pulse: is this copy     │
+│  ├── DictEngine     │  addon's     │  │   still being written to? │
+│  │   + anchor+pulse │  table       │  └── Sweep, only as fallback │
+│  └── SavedVariable  │  (250ms)     │          │                   │
 │      BabelChatDB    │              │          ▼                   │
 └─────────────────────┘              │  Pipeline                    │
                                      │  ├── Parse → Dedup → Filter  │
@@ -34,7 +35,10 @@ WoW Process                          Companion App (Python, no elevation)
 1. WoW fires `CHAT_MSG_*` event → addon's `ChatFilter` intercepts
 2. Addon writes `SEQ|KIND|EVENT|author|text` to ring buffer (50 entries)
 3. Every 0.25s (`FLUSH_INTERVAL` in `CompanionBuffer.lua`, matched to the companion's poll rate), the addon flushes the buffer to `BabelChatDB.wctbuf` (Lua SavedVariable string)
-4. Companion app reads buffer via `ReadProcessMemory` every 250ms
+4. Companion reads the buffer every 250ms — through a pointer the addon parks
+   for it, not by searching. See [memory-reader.md](memory-reader.md): a Lua
+   string is reallocated somewhere new on every rebuild, so searching costs a
+   sweep of the heap per rebuild, which is 48% of one core, measured.
 5. Parser extracts messages, dedup filters duplicates (60s TTL, monotonic clock)
 6. Language detector (lingua-py, offline) identifies source language
 7. Translation stages (abbreviations → phrasebook → cache → slang expansion → WoW terms → provider chain)
@@ -72,7 +76,7 @@ modules, and every module the rest of this document names:
 | `setup_wizard` | ~460 | First-run wizard, PyQt (5 steps) |
 | `settings_gtk` | ~440 | Linux settings window |
 | `pipeline` | ~440 | Translation orchestration with streaming |
-| `memory_reader_windows` | ~440 | ReadProcessMemory via the Rust scanner, pymem fallback |
+| `memory_reader_windows` | ~350 | Poll loop, sequence tracking, and what to tell the user when nothing arrives |
 | `parser` | ~430 | WoW chat log parser (EN+RU clients, addon record format) |
 | `settings_dialog` | ~430 | Windows settings UI (tabs: General, Overlay, Hotkeys, About) |
 | `translators/gigachat_provider` | ~400 | GigaChat backend: it is an LLM, so the request is a chat completion pinned to translating |
@@ -113,7 +117,7 @@ modules, and every module the rest of this document names:
 | Main (PyQt6 or GTK4 event loop) | Overlay, Settings, Tray | `_config` via `update_config()` |
 | Memory reader | `WoWAddonBufReader._run_loop` | Calls `pipeline._on_new_line` |
 | File watcher (fallback) | `ChatLogWatcher._poll_loop` | Calls `pipeline._on_new_line` |
-| Rust scanner | Region scan lives in the native library | Return values only (no shared state) |
+| Rust scanner | Anchor lookup and, failing that, the region sweep | Return values only (no shared state) |
 
 **Thread safety:**
 - `_recent_messages` protected by `threading.Lock`
@@ -126,11 +130,11 @@ modules, and every module the rest of this document names:
 
 | Decision | Rationale |
 |----------|-----------|
-| Memory buffer, not file watcher | WoW buffers WoWChatLog.txt with 1-5 min delay. Addon → Lua string → ReadProcessMemory = <1s |
+| Memory buffer, not file watcher | WoW buffers WoWChatLog.txt by volume, and chat is low volume — minutes of delay. Through memory: one poll |
 | Overlay, not in-game UI | WoW Lua sandbox cannot make HTTP requests. An external overlay can call a translation API |
 | Streaming translation | Show original immediately (0ms), translation arrives async (0.5-2s). Perceived latency = 0 |
 | Outgoing via clipboard | ToS compliance — no automation, user manually pastes |
-| Python, not C++/Rust | Bottleneck is I/O (ReadProcessMemory), not CPU. Python gives PyQt6/GTK4 + lingua-py + the provider SDKs |
+| Python, with Rust where it counts | The reading is I/O-bound and Python is fine for it; finding the buffer is not, and that part is a Rust cdylib. Python gives PyQt6/GTK4, lingua-py and the provider SDKs |
 | GigaChat first in the chain | Reachability, not quality: no card, no VPN, free for individuals. MyMemory second because it needs no account at all |
 | MIT license | Compatible with Pirson's WoW Translator (MIT), simplest for community |
 
