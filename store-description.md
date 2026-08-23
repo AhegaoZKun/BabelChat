@@ -101,6 +101,10 @@ know.
 
 ## Details that matter in practice
 
+- **A Mythic+ key silences chat, and the app says so.** From Midnight on, the
+  game hands chat to addons as a secret value while a key is running — no addon
+  can read it, this one included. The overlay tells you instead of looking
+  broken, and translation returns when the key ends.
 - **Item links survive.** Nothing inside a hyperlink or a colour block is ever
   touched, so a linked item name is never half-glossed.
 - **Punctuation doesn't hide terms.** `dps/heal`, `gg,wp` and `brb/afk` all
@@ -237,6 +241,10 @@ BabelChat дописывает серым, на той же строке:
 
 ## Мелочи, которые заметны на практике
 
+- **В ключе M+ чат закрыт, и приложение об этом говорит.** С Midnight игра
+  отдаёт аддонам текст чата секретным значением, пока идёт забег: прочитать его
+  не может ни один аддон, этот в том числе. Оверлей честно сообщает об этом, а
+  перевод возвращается сам после ключа.
 - **Ссылки на предметы не ломаются** — внутрь гиперссылок и цветовых блоков
   подсказка не лезет.
 - **Пунктуация не прячет термины.** `dps/heal`, `gg,wp`, `brb/afk` — находятся

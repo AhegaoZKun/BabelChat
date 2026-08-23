@@ -138,6 +138,36 @@ def test_no_readme_asks_for_administrator_rights(name):
         assert phrase not in body, f"{name} still tells the user to elevate"
 
 
+@pytest.mark.parametrize(
+    ("name", "phrase"),
+    [
+        ("docs/user/faq.md", "secret value"),
+        ("docs/user/faq_ru.md", "секретным значением"),
+        ("store-description.md", "secret value"),
+        ("store-description.md", "секретным значением"),
+    ],
+)
+def test_the_documents_a_player_reads_explain_the_keystone_silence(name, phrase):
+    """Chat cannot be read during a Mythic+ key — the game hands addons a secret
+    value, and no addon gets past that. A user who is not told will report it as
+    a bug in this one, so every document a player actually opens says it, in the
+    language that document is written in."""
+    body = read(name)
+
+    assert phrase in body, f"{name} does not explain why chat goes quiet in a key"
+
+
+@pytest.mark.parametrize("name", ["docs/user/faq.md", "docs/user/faq_ru.md"])
+def test_no_faq_still_says_the_reader_searches_memory(name):
+    """It swept the heap for the buffer, and that sweep was the performance
+    problem this release exists to remove. A user told to expect a search will
+    also expect the cost of one."""
+    body = read(name).lower()
+
+    for phrase in ("scanning wow's memory", "сканирует память"):
+        assert phrase not in body, f"{name} still describes the sweep as the mechanism"
+
+
 @claude_md
 def test_claude_md_records_what_was_tried_and_failed():
     """The dead-ends list is the part of this file that saves the most time,

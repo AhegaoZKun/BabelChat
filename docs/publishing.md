@@ -27,7 +27,10 @@ actually wrong in the past — it does not read the prose for you.
 2. Check `## Interface` against the live client. `test_the_interface_version_matches_the_client_that_is_installed`
    reads `.build.info` and does this for you when a client is installed; on CI
    it skips, so on a machine with no WoW it is on you.
-3. Add the release to `CHANGELOG.md`.
+3. Add the release to `CHANGELOG.md` and `CHANGELOG_ru.md`, and set the date to
+   the day you tag — not the day you wrote the section. 3.4.0 sat at 2026-08-21
+   for two days of testing, and a changelog that dates a release before it
+   happened is the kind of small wrongness nobody checks and everybody copies.
 4. Re-read `store-description.md` against what actually changed. The tests catch
    stale numbers, not stale claims.
 

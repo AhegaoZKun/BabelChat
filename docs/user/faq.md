@@ -82,10 +82,21 @@ words — tick "always show the gloss" in `/babel config` if you want both.
 ## Connection Issues
 
 ### "WoW: Searching..." in the overlay
-The memory reader is scanning WoW's memory for the addon buffer. This can take 1-3 seconds on first connection, or after a `/reload`. If it persists:
+The reader is looking for the anchor the addon parks in memory for it. That takes a second or two on the first connection and after a `/reload`; from then on it follows a pointer and finds the buffer without searching. If it persists:
 1. Make sure BabelChat addon is installed and enabled
 2. Try `/babel companion` in WoW chat to verify the buffer is active
 3. Restart BabelChat.exe
+
+### Chat stops being translated inside a Mythic+ key
+
+This is the game, not the addon. From Midnight on, while a keystone is running
+Blizzard hands chat text to addons as a *secret value*: it looks like a string
+and raises an error the moment anything reads it. No addon can read chat during a
+key — BabelChat included, and every other chat addon too.
+
+The overlay says so rather than looking broken, and translation comes back by
+itself when the key ends. Raids, dungeons without a key, and everything outside a
+run are unaffected. The same applies inside a rated PvP match.
 
 ### BabelChat can't find WoW
 Make sure WoW is running before BabelChat tries to connect. The app will keep trying every 5 seconds.
