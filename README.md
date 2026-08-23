@@ -99,9 +99,9 @@ The delay is the provider round-trip — your text travels to their servers, get
 │  ├── Ring buffer (50 messages, flushed every 250ms)      │
 │  └── Writes to BabelChatDB.wctbuf (Lua SavedVariable)    │
 └──────────┬───────────────────────────────────────────────┘
-           │  Memory read (every 250ms)
-           │  Windows: ReadProcessMemory (pymem)
-           │  Linux:   process_vm_readv via Rust scanner
+           │  Memory read (every 250ms), through a pointer the addon
+           │  parks for it — no searching, ~0.1% of one core
+           │  Windows: ReadProcessMemory / Linux: process_vm_readv
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │  Companion App (Python + Rust)                           │
@@ -270,14 +270,14 @@ WoW, so an addon-only setup has no egress at all.
 | Component          | Technology                                                                 |
 | ------------------ | -------------------------------------------------------------------------- |
 | App                | Python 3.12, PyQt6 (Windows) / GTK4 + layer-shell (Linux)                  |
-| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: Rust (`process_vm_readv`)     |
-| Rust Scanner       | Rayon (parallel scan), address cache; `SCHED_IDLE` threads on Linux        |
+| Memory Reader      | Rust cdylib; reads through a pointer the addon parks, not by searching     |
+| Rust Scanner       | Anchor + pulse; a full sweep only as a fallback; idle-priority threads     |
 | Language Detection | lingua-py (offline)                                                        |
 | Translation        | GigaChat, MyMemory, DeepL, Microsoft — tried in that order                 |
 | Cache              | SQLite + LRU                                                               |
 | Build              | PyInstaller → .exe (Windows) / AppImage, .deb, .rpm (Linux)                |
 | Addon              | Lua 5.1, WoW API                                                           |
-| Tests              | 795 tests (pytest)                                                         |
+| Tests              | 998 tests (pytest)                                                         |
 
 ## Development
 

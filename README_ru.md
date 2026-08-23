@@ -99,9 +99,9 @@ BabelChat использует **progressive rendering** (стриминг):
 │  ├── Кольцевой буфер (50 сообщений, сброс каждые 250мс) │
 │  └── Пишет в BabelChatDB.wctbuf (Lua SavedVariable)     │
 └──────────┬───────────────────────────────────────────────┘
-           │  Чтение памяти (каждые 250мс)
-           │  Windows: ReadProcessMemory (pymem)
-           │  Linux:   process_vm_readv через Rust-сканер
+           │  Чтение памяти (каждые 250мс) по указателю, который
+           │  аддон для этого и кладёт — без поиска, ~0,1% ядра
+           │  Windows: ReadProcessMemory / Linux: process_vm_readv
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │  Приложение-компаньон (Python + Rust)                    │
@@ -271,14 +271,14 @@ BabelChat переводит, отправляя текст сообщений �
 | Компонент          | Технология                                                                  |
 | ------------------ | --------------------------------------------------------------------------- |
 | Приложение         | Python 3.12, PyQt6 (Windows) / GTK4 + layer-shell (Linux)                   |
-| Memory Reader      | Windows: pymem (ReadProcessMemory) / Linux: Rust (`process_vm_readv`)       |
-| Rust-сканер        | Rayon (параллельное сканирование), кэш адреса; потоки SCHED\_IDLE на Linux  |
+| Чтение памяти      | Библиотека на Rust; читает по указателю от аддона, а не поиском              |
+| Rust-сканер        | Якорь и пульс; полный проход только запасным путём; фоновый приоритет        |
 | Определение языка  | lingua-py (офлайн)                                                          |
 | Перевод            | GigaChat, MyMemory, DeepL, Microsoft — в этом порядке                       |
 | Кэш                | SQLite + LRU                                                                |
 | Сборка             | PyInstaller → .exe (Windows) / AppImage, .deb, .rpm (Linux)                 |
 | Аддон              | Lua 5.1, WoW API                                                            |
-| Тесты              | 795 тестов (pytest)                                                        |
+| Тесты              | 998 тестов (pytest)                                                        |
 
 ## Разработка
 

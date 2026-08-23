@@ -99,9 +99,9 @@ La demora viene del round-trip a los servidores del proveedor — tu texto viaja
 │  ├── Buffer circular (50 mensajes, flush cada 250ms)     │
 │  └── Escribe en BabelChatDB.wctbuf (Lua SavedVariable)  │
 └──────────┬───────────────────────────────────────────────┘
-           │  Lectura de memoria (cada 250ms)
-           │  Windows: ReadProcessMemory (pymem)
-           │  Linux:   process_vm_readv via escáner Rust
+           │  Lectura de memoria (cada 250ms) por un puntero que el
+           │  addon deja para eso — sin búsqueda, ~0,1% de un núcleo
+           │  Windows: ReadProcessMemory / Linux: process_vm_readv
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │  App acompañante (Python + Rust)                         │
@@ -273,14 +273,14 @@ alguno.
 | Componente          | Tecnología                                                              |
 | ------------------- | ----------------------------------------------------------------------- |
 | App                 | Python 3.12, PyQt6 (Windows) / GTK4 + layer-shell (Linux)               |
-| Memory Reader       | Windows: pymem (ReadProcessMemory) / Linux: Rust (`process_vm_readv`)  |
-| Escáner Rust        | Rayon (escaneo paralelo), caché de dirección; hilos SCHED\_IDLE en Linux |
+| Lectura de memoria  | Biblioteca en Rust; lee por un puntero del addon, no buscando           |
+| Escáner Rust        | Ancla y pulso; barrido completo solo de respaldo; prioridad de fondo     |
 | Detección de idioma | lingua-py (offline)                                                     |
 | Traducción          | GigaChat, MyMemory, DeepL, Microsoft — en ese orden                     |
 | Caché               | SQLite + LRU                                                            |
 | Compilación         | PyInstaller → .exe (Windows) / AppImage, .deb, .rpm (Linux)             |
 | Addon               | Lua 5.1, WoW API                                                        |
-| Tests               | 795 tests (pytest)                                                      |
+| Tests               | 998 tests (pytest)                                                      |
 
 ## Desarrollo
 
