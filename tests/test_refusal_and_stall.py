@@ -243,3 +243,96 @@ def test_a_forced_scan_is_not_refused_by_the_rate_limiter():
     source = scanner_source()
 
     assert "if !forced && now.saturating_sub(last) < SCAN_MIN_GAP_MS {" in source
+
+
+# ── and the refusal has to survive the chain ─────────────────────────────────
+
+
+def chain_of(*backends):
+    """A TranslatorService with a fixed order, for testing what it does with
+    results rather than how it sorts providers.
+
+    `active_ids` is a property computed from the registry of real providers, so
+    a fake cannot be put in the order any other way — and the alternative,
+    registering fakes globally, leaks between tests.
+    """
+    from app.translators.service import TranslatorService
+
+    class Fixed(TranslatorService):
+        def __init__(self, mapping):
+            self._backends = mapping
+            self._priority = ""
+
+        @property
+        def active_ids(self):
+            return tuple(self._backends)
+
+    return Fixed({name: backend for name, backend in backends})
+
+
+def test_a_refusal_is_what_the_user_is_told_even_though_it_was_not_last():
+    """The keyless fallback is always last, so its failure is what the chain
+    returned — and "the translator declined this message" was unreachable
+    however often it happened. A refusal explains itself; a network error at
+    the end of the chain does not explain the refusal at the start of it."""
+    from app.translators.base import FAILURE, failed
+
+    class Declines:
+        def translate(self, text, target_lang, source_lang=None):
+            return failed(text, target_lang, source_lang, REFUSED, "declines")
+
+    class Unreachable:
+        def translate(self, text, target_lang, source_lang=None):
+            return failed(text, target_lang, source_lang, FAILURE.RETRIES, "unreachable")
+
+    result = chain_of(("declines", Declines()), ("unreachable", Unreachable())).translate("сука", "RU")
+
+    assert result.success is False
+    assert result.error == REFUSED, f"the chain reported {result.error!r} instead of the refusal"
+    assert result.translated == "сука"
+
+
+def test_a_provider_that_succeeds_after_a_refusal_still_wins():
+    """Remembering the refusal must not stop the next provider being used —
+    MyMemory has no opinion about the word it was handed, and a translation
+    beats an explanation."""
+    from app.translators.base import TranslationResult, failed
+
+    class Declines:
+        def translate(self, text, target_lang, source_lang=None):
+            return failed(text, target_lang, source_lang, REFUSED, "declines")
+
+    class Obliges:
+        def translate(self, text, target_lang, source_lang=None):
+            return TranslationResult(
+                original=text,
+                translated="перевод",
+                source_lang="",
+                target_lang=target_lang,
+                success=True,
+                backend="obliges",
+            )
+
+    result = chain_of(("declines", Declines()), ("obliges", Obliges())).translate("сука", "RU")
+
+    assert result.success is True
+    assert result.translated == "перевод"
+
+
+def test_an_ordinary_failure_is_still_the_last_one():
+    """Only a refusal is promoted. Otherwise the first thing that went wrong
+    would mask everything after it, and the last failure is usually the most
+    informative one about why nothing worked."""
+    from app.translators.base import FAILURE, failed
+
+    class Quota:
+        def translate(self, text, target_lang, source_lang=None):
+            return failed(text, target_lang, source_lang, FAILURE.QUOTA, "quota")
+
+    class Network:
+        def translate(self, text, target_lang, source_lang=None):
+            return failed(text, target_lang, source_lang, FAILURE.RETRIES, "network")
+
+    result = chain_of(("quota", Quota()), ("network", Network())).translate("hello", "RU")
+
+    assert result.error == FAILURE.RETRIES

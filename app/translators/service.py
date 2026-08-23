@@ -15,6 +15,11 @@ from app.translators.base import (
 
 logger = logging.getLogger(__name__)
 
+# Imported here rather than at the top of the module: the providers import this
+# one, so naming it up there would close the circle.
+REFUSED = "provider_refused"
+
+
 
 class TranslatorService:
     """Translates through the configured providers, preferred one first.
@@ -93,18 +98,26 @@ class TranslatorService:
             return failed(text, target_lang, source_lang, FAILURE.NO_BACKEND)
 
         result: TranslationResult | None = None
+        refusal: TranslationResult | None = None
         for provider_id in chain:
             result = self._backends[provider_id].translate(text, target_lang, source_lang)
             if result.success:
                 return result
+            # A provider that declined to translate — rather than failing to —
+            # is the one worth remembering. Without this the reason is lost: the
+            # keyless fallback is always last in the chain, so its network error
+            # would be what the user is shown, and "the translator declined this
+            # message" would be unreachable however often it happened.
+            if result.error == REFUSED and refusal is None:
+                refusal = result
             # The provider id, not the error text: a provider can put the
             # request URL in there, and for a GET-based one that URL carries
             # the message and any identifying parameter.
             logger.info("Backend %s failed, trying next", provider_id)
             logger.debug("Backend %s error: %s", provider_id, result.error)
-        # Every backend failed; the last failure is the most informative one to
-        # surface, and it still carries the original text.
-        return result  # type: ignore[return-value]
+        # Every backend failed. A refusal explains itself; anything else, the
+        # last failure is the most informative. Either way the original survives.
+        return refusal or result  # type: ignore[return-value]
 
     def get_usage(self):
         """DeepL usage stats, when DeepL is one of the configured providers."""
