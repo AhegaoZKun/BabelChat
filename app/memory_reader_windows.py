@@ -234,6 +234,15 @@ class WoWAddonBufReader:
         if not lines:
             return
 
+        # Expire the post-reload suppression list BEFORE anything is filtered
+        # against it. Clearing it at the end of the method instead meant the
+        # first message to arrive after the sixty seconds were up was still
+        # matched against the old list and dropped — and in guild chat the texts
+        # in that list are "привет" and "ку", so the message it cost was a real
+        # one.
+        if self._pre_reset_texts and time.monotonic() > self._pre_reset_expire:
+            self._pre_reset_texts.clear()
+
         max_seq_in_buf = 0
         for line in lines:
             parts = line.split("|", 1)
@@ -347,9 +356,6 @@ class WoWAddonBufReader:
                     log_line = bare_log_line(msg_text)
 
                 self._on_new_line(log_line, dict_translated=(kind == "DICT"))
-
-        if self._pre_reset_texts and time.monotonic() > self._pre_reset_expire:
-            self._pre_reset_texts.clear()
 
         if new_count > 0:
             self._last_new_msg_time = time.monotonic()

@@ -170,3 +170,24 @@ def test_the_padding_experiment_left_nothing_behind():
 
     assert "BUFFER_PAD_TO" not in body
     assert "string.rep" not in body
+
+
+# ── kernel objects the scans used to leak ────────────────────────────────────
+
+
+def test_the_parallel_scans_own_their_worker_handles():
+    """Both scans open one process handle per worker thread — thousands of
+    regions against four workers, so one per region would be far worse — and
+    neither closed them. Four kernel objects per scan, and the scanner this
+    replaced scanned continuously: enough over a long session to exhaust the
+    handle table, at which point OpenProcess starts refusing and the app goes
+    deaf with nothing to say about why.
+
+    Owning the handle is the only version that cannot be forgotten the next
+    time somebody adds a worker."""
+    source = scanner_source()
+
+    assert "struct OwnedHandle" in source, "nothing closes a handle on its own"
+    assert "impl Drop for OwnedHandle" in source, "the owner does not actually close it"
+    assert source.count("|| owned_process(pid),") == 2, "a parallel scan still opens a bare handle per worker"
+    assert "|| open_process(pid).map(|h| h.0 as isize)," not in source, "the leaking pattern is still there"

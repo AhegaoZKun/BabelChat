@@ -148,9 +148,7 @@ def test_the_scanner_keeps_the_best_copy_not_the_first():
     # being written. Stopping without one meant stopping at whichever candidate
     # the threads reached first, and that was a corpse — measured, a pulse
     # frozen at 271 for two and a half minutes.
-    assert "if baseline > 0 && score.0 > baseline {" in source, (
-        "the scan stops early with no baseline to stop against"
-    )
+    assert "if baseline > 0 && score.0 > baseline {" in source, "the scan stops early with no baseline to stop against"
 
 
 def test_an_addon_without_a_pulse_still_works():
@@ -188,3 +186,50 @@ def test_the_probe_that_renewed_the_stale_cache_is_gone():
 
     assert "_probe_ignoring_sequence" not in body
     assert "_PROBE_EVERY_N_MISSES" not in body
+
+
+# ── what a failed rebuild must not do ────────────────────────────────────────
+
+
+def test_the_pulse_is_committed_only_after_the_buffer_is_written():
+    """Advancing the counter first and then failing leaves the number in memory
+    ahead of the number on disk, so a /reload restores the smaller one and the
+    pulse steps BACKWARDS — which the reader reads as the buffer it is holding
+    having died, and it drops a perfectly good slot.
+
+    Checked in the source rather than by behaviour: making the serialisation
+    fail needs a value the door refuses to let in, so there is no way to reach
+    that branch from a test, and a test that cannot reach it would pass with
+    the order reversed."""
+    import pathlib
+
+    body = (pathlib.Path(__file__).resolve().parent.parent / "addon" / "BabelChat" / "CompanionBuffer.lua").read_text(
+        encoding="utf-8"
+    )
+    rebuild = body[body.index("local function RebuildBuffer()") :]
+    rebuild = rebuild[: rebuild.index(chr(10) + "end")]
+
+    computed = rebuild.index("local pulse = wctFlush + 1")
+    concat = rebuild.index("table.concat(parts")
+    committed = rebuild.index("wctFlush = pulse")
+
+    assert computed < concat < committed, "the pulse is committed before the buffer it describes exists"
+    assert "wctFlush = wctFlush + 1" not in rebuild, "the counter is advanced in place again"
+
+
+def test_a_failed_rebuild_backs_off_instead_of_spinning():
+    """`lastRebuild` is set at the END of a rebuild, so a failed one leaves it
+    stale and the heartbeat condition true. Without resetting it in the failure
+    branch a repeating fault becomes four attempts a second, for as long as the
+    cause lasts."""
+    import pathlib
+
+    body = (pathlib.Path(__file__).resolve().parent.parent / "addon" / "BabelChat" / "CompanionBuffer.lua").read_text(
+        encoding="utf-8"
+    )
+    ticker = body[body.index("flushTicker = C_Timer.NewTicker") :]
+    ticker = ticker[: ticker.index("end)")]
+
+    failure = ticker[ticker.index("if not ok then") :]
+
+    assert "lastRebuild = GetTime()" in failure, "a failed rebuild leaves the heartbeat asking again next tick"

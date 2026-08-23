@@ -16,7 +16,7 @@ use rayon::prelude::*;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 use crate::markers::{find_content_start, rank, MARKER, MARKER_END, LAST_PULSE};
-use crate::process::{get_pool, open_process, read_memory, Region, CHUNK_SIZE, MAX_BUF_READ};
+use crate::process::{get_pool, open_process, owned_process, read_memory, Region, CHUNK_SIZE, MAX_BUF_READ};
 #[cfg(windows)]
 use crate::process::get_readable_regions;
 
@@ -87,10 +87,12 @@ pub(crate) fn full_scan(pid: u32, min_seq: i32) -> Option<(usize, Vec<u8>)> {
         // OpenProcess/CloseHandle per region — regions number in the
         // thousands; handles are expensive kernel objects.
         regions.par_iter().for_each_init(
-            || open_process(pid).map(|h| h.0 as isize),
+            // Owned, so each worker's handle is closed when the thread is
+            // done with it rather than leaked four at a time per scan.
+            || owned_process(pid),
             |h, region| {
-                let Some(raw) = h else { return };
-                let handle = HANDLE(*raw as *mut _);
+                let Some(owned) = h else { return };
+                let handle = owned.0;
                 if found.load(Ordering::Relaxed) { return; }
                 if let Some((addr, content)) = scan_region(handle, region, min_seq) {
                     let score = rank(&content);

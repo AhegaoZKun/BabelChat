@@ -19,12 +19,8 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 use crate::markers::{find_content_start, rank, MARKER, MARKER_END};
 #[cfg(windows)]
-use crate::process::{get_pool, get_readable_regions, open_process, read_memory, CHUNK_SIZE, MAX_BUF_READ};
+use crate::process::{get_pool, get_readable_regions, open_process, owned_process, read_memory, CHUNK_SIZE, MAX_BUF_READ};
 
-/// How long a cached address may produce nothing before it is checked by a
-/// scan. Long enough that an ordinary lull in chat costs nothing, short enough
-/// that a relocated buffer is found while the player is still looking at the
-/// message they expected to see translated.
 /// The number the addon parks in its saved table and never changes.
 ///
 /// Everything else about the buffer moves. It is a Lua string, so every rebuild
@@ -100,10 +96,12 @@ pub(crate) fn locate_anchor(pid: u32) -> Option<(usize, usize)> {
     let anchors: Mutex<Vec<usize>> = Mutex::new(Vec::new());
     get_pool().install(|| {
         regions.par_iter().for_each_init(
-            || open_process(pid).map(|h| h.0 as isize),
+            // Owned, so each worker's handle is closed when the thread is
+            // done with it rather than leaked four at a time per scan.
+            || owned_process(pid),
             |h, region| {
-                let Some(raw) = h else { return };
-                let handle = HANDLE(*raw as *mut _);
+                let Some(owned) = h else { return };
+                let handle = owned.0;
                 let mut offset = 0usize;
                 let mut chunk = vec![0u8; CHUNK_SIZE];
                 while offset < region.size {

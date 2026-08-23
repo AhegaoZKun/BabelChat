@@ -4,7 +4,7 @@
 #[cfg(windows)]
 use windows::Win32::{
     System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_IDLE},
-    Foundation::HANDLE,
+    Foundation::{CloseHandle, HANDLE},
     System::{
         Diagnostics::Debug::ReadProcessMemory,
         Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT,
@@ -22,6 +22,34 @@ pub(crate) const MAX_ADDRESS: usize = 0x7FFF_FFFF_FFFF;
 // ── Process handle ────────────────────────────────────────────────────────────
 
 #[cfg(windows)]
+/// A process handle that closes itself.
+///
+/// The parallel scans open one handle per worker thread — thousands of regions
+/// against four workers, so opening one per region would be far worse — and
+/// then never closed them. Four kernel objects leaked per scan, and the scanner
+/// this replaced scanned continuously: enough, over a long session, to exhaust
+/// the process handle table and have OpenProcess start refusing, at which point
+/// the app goes deaf with nothing to say about why.
+///
+/// Making the handle own itself is the only version of this that cannot be
+/// forgotten the next time somebody adds a worker.
+#[cfg(windows)]
+pub(crate) struct OwnedHandle(pub(crate) HANDLE);
+
+#[cfg(windows)]
+impl Drop for OwnedHandle {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            unsafe { let _ = CloseHandle(self.0); }
+        }
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn owned_process(pid: u32) -> Option<OwnedHandle> {
+    open_process(pid).map(OwnedHandle)
+}
+
 pub(crate) fn open_process(pid: u32) -> Option<HANDLE> {
     unsafe {
         let h = OpenProcess(

@@ -167,13 +167,18 @@ local function RebuildBuffer()
     -- loop re-concatenated the whole buffer per entry and probed the result each
     -- time — quadratic work and ~190 KB of garbage per flush, four times a
     -- second, forever.
-    wctFlush = wctFlush + 1
+    -- Computed here, committed after the concat succeeds. Advancing the
+    -- counter first and then failing would leave the number in memory ahead of
+    -- the number on disk, so a /reload would restore the smaller one and the
+    -- pulse would step BACKWARDS — which the reader takes as a sign that the
+    -- buffer it is holding has died.
+    local pulse = wctFlush + 1
     -- First record, before anything that can vary in length, so a truncated
     -- read still carries it.
     local locked = (lastRefusal > 0 and (GetTime() - lastRefusal) < REFUSAL_MEMORY) and "1" or "0"
     local parts = {
         seqHeader,
-        "0|META|FLUSH|" .. wctFlush,
+        "0|META|FLUSH|" .. pulse,
         "0|META|LOCKED|" .. locked,
         "0|META|PLAYER|" .. fullName,
     }
@@ -182,6 +187,7 @@ local function RebuildBuffer()
     end
     parts[#parts + 1] = "__WCT_END__"
     BabelChatDB.wctbuf = table.concat(parts, "\n")
+    wctFlush = pulse
     BabelChatDB.wctSeq = wctSeq
     BabelChatDB.wctFlush = wctFlush
     lastRebuild = GetTime()
@@ -267,6 +273,12 @@ function addonTable.StartBufferFlush()
                 -- cannot be serialised, and keeping it poisons every flush.
                 wctBuf = {}
                 bufDirty = false
+                -- And back off. `lastRebuild` is set at the END of a rebuild,
+                -- so a failed one leaves it stale and the heartbeat condition
+                -- true — which turns a repeating failure into four attempts a
+                -- second instead of one every two, for as long as the cause
+                -- lasts. That is the exact spin this guard was written to stop.
+                lastRebuild = GetTime()
             end
         end
     end)
