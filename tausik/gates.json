@@ -27,8 +27,11 @@
       "addon/BabelChat/Data/Combate.lua",
       "addon/BabelChat/Data/Grupos.lua",
       "app/overlay_gtk.py",
-      "app/babelchat_scanner_win.dll"
+      "app/babelchat_scanner_win.dll",
+      "CHANGELOG.md",
+      "CHANGELOG_ru.md"
     ],
-    "_reason_overlay": "app/overlay_gtk.py (1032) is over the cap and still exempt: splitting it is the same job done for the Qt overlay, and it cannot be verified here because gi is not installed on Windows or on CI — a blind refactor of the Linux frontend right before a release is worse than the file being long. Tracked as overlay-split. app/overlay.py came off this list: it is 473 lines now, down from 1221."
+    "_reason_overlay": "app/overlay_gtk.py (1032) is over the cap and still exempt: splitting it is the same job done for the Qt overlay, and it cannot be verified here because gi is not installed on Windows or on CI — a blind refactor of the Linux frontend right before a release is worse than the file being long. Tracked as overlay-split. app/overlay.py came off this list: it is 473 lines now, down from 1221.",
+    "_reason_history": "CHANGELOG.md and CHANGELOG_ru.md are append-only records of what shipped. They grow by one entry per release for as long as the project lives, and splitting them by size would put a version boundary wherever the five-hundredth line happened to fall. The cap exists so that a module stays comprehensible; a history is read by searching it, not by reading it through. The two are listed separately rather than exempting *.md, so a design document that grows past the cap still has to answer for it."
   }
 }
