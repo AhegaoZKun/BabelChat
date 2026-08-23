@@ -136,9 +136,7 @@ def test_the_generated_release_artefacts_are_not_committed():
     import subprocess
 
     for name in (".release", "RELEASE_NOTES.md"):
-        result = subprocess.run(
-            ["git", "check-ignore", "-q", name], cwd=ROOT, capture_output=True, check=False
-        )
+        result = subprocess.run(["git", "check-ignore", "-q", name], cwd=ROOT, capture_output=True, check=False)
         assert result.returncode == 0, f"{name} is not ignored"
 
 
@@ -152,12 +150,38 @@ def test_the_upload_is_skipped_when_no_token_is_configured(workflow):
 
 
 def test_the_environment_uses_the_variable_names_the_packager_reads(workflow):
-    """`CF_API_KEY` is the name of a different tool's variable. Getting this
-    wrong means an upload that silently does not happen."""
+    """`CF_API_KEY` is the name the pinned packager reads, and this test used to
+    forbid it.
+
+    It asserted exactly `{CF_API_TOKEN, WAGO_API_TOKEN}`, on the belief that
+    CF_API_KEY belonged to some other tool. release.sh at the v2 tag says
+    otherwise — it reads the CurseForge token from CF_API_KEY and looks at
+    nothing else; the CF_API_TOKEN line was added to that script after the tag.
+    So 3.4.0 published to Wago, whose variable name did not change, and skipped
+    CurseForge in silence, with this test green.
+
+    Both names are passed now, carrying the same secret: one for the version
+    that is pinned, one for whatever it is bumped to.
+    """
     env = publish_step(workflow)["env"]
 
-    assert set(env) == {"CF_API_TOKEN", "WAGO_API_TOKEN"}, env
+    assert "CF_API_KEY" in env, "the packager pinned here reads the CurseForge token from CF_API_KEY"
+    assert env["CF_API_KEY"] == env["CF_API_TOKEN"], "two names, one secret"
+    assert "WAGO_API_TOKEN" in env
     assert "GITHUB_API_TOKEN" not in env, "the release job already makes the GitHub release"
+
+
+def test_the_branch_guard_checks_the_commit_that_was_checked_out(workflow):
+    """`GITHUB_SHA` is the commit that triggered the run. On workflow_dispatch
+    that is the branch the workflow file came from, while the job packages
+    whatever `inputs.tag` checked out — so the guard would approve main and
+    publish something else entirely. Re-running a release for an existing tag is
+    exactly when that path is taken."""
+    steps = workflow["jobs"]["publish-addon"]["steps"]
+    guard = next(s for s in steps if "outside main" in str(s.get("name", "")))
+
+    assert "git rev-parse HEAD" in guard["run"], "the guard reads the trigger, not the checkout"
+    assert "merge-base --is-ancestor" in guard["run"]
 
 
 def test_the_checkout_is_deep_enough_for_a_changelog(workflow):
@@ -196,9 +220,7 @@ def test_a_file_holding_a_token_is_ignored_by_git(name):
     chat log on the way to `gh secret set`. This repository is public."""
     import subprocess
 
-    result = subprocess.run(
-        ["git", "check-ignore", "-q", name], cwd=ROOT, capture_output=True, check=False
-    )
+    result = subprocess.run(["git", "check-ignore", "-q", name], cwd=ROOT, capture_output=True, check=False)
 
     assert result.returncode == 0, f"{name} would be committed"
 
@@ -221,9 +243,7 @@ def test_there_is_exactly_one_store_description():
     ).stdout.splitlines()
 
     descriptions = [
-        name
-        for name in tracked
-        if "description" in name.lower() and not name.startswith(("docs/", "app/", "tests/"))
+        name for name in tracked if "description" in name.lower() and not name.startswith(("docs/", "app/", "tests/"))
     ]
 
     assert descriptions == ["store-description.md"], f"more than one store page: {descriptions}"
@@ -260,9 +280,7 @@ def test_publishing_refuses_a_tag_that_is_not_on_main(workflow):
 def test_the_branch_check_does_not_rely_on_base_ref(workflow):
     """`github.event.base_ref` reports the branch the tag was pushed alongside,
     which is whatever the pusher had checked out — not where the commit lives."""
-    guard = next(
-        s for s in workflow["jobs"]["publish-addon"]["steps"] if "main" in str(s.get("name", "")).lower()
-    )
+    guard = next(s for s in workflow["jobs"]["publish-addon"]["steps"] if "main" in str(s.get("name", "")).lower())
 
     assert "base_ref" not in guard["run"], "the guard executes base_ref"
 
