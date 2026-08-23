@@ -367,8 +367,6 @@ def main() -> int:
             config = wizard.get_config()
             break
 
-    # Create overlay
-    print("DEBUG: creating overlay", flush=True)
     overlay = ChatOverlay(config)
     overlay.update_channel_filters(_enabled_filter_names(config))
 
@@ -379,7 +377,7 @@ def main() -> int:
     overlay.set_translator(reply_translator, reply_lang)
 
     overlay.show()
-    print("DEBUG: overlay shown", flush=True)
+    logger.info("Overlay shown")
 
     # Create system tray
     tray = TrayIcon()
