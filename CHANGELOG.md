@@ -55,6 +55,7 @@ ship under the same number.
 - **The settings window was half in English** for every Russian-speaking user, and the Linux one rendered raw string-table keys where field labels belong. Language names are now written in each language itself.
 - **Section headings overlapped the controls beneath them** in the in-game options panel, and the category names were the Spanish ones the dictionary came from.
 - **CI had been red on every run, and not because of the code.** The native scanner is a build artefact that nothing in the workflow built, two test dependencies were never declared so 29 tests silently turned into skips there, and the test-count floor was taken from a developer machine that collected fifty more tests than CI could.
+- **Starting the app could terminate an unrelated program.** Only one copy should run, so startup killed whatever process the lock file named — and the lock file named a bare PID, which the operating system hands back out to something else once the process it belonged to is gone. On a machine that had been rebooted since the last run, that number could be anything: a browser, a game, the editor the user was working in. The lock now records when the process started as well, and nothing is terminated unless both match.
 
 ### Tests
 
