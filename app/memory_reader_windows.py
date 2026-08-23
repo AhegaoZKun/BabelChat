@@ -31,6 +31,7 @@ from app.addon_protocol import (
 # the tests read them from here.
 from app.memory_scan_windows import (  # noqa: F401
     ACCESS_DENIED,
+    CHAT_LOCKED,
     NO_BUFFER,
     PROCESS_GONE,
     WOW_PROCESS_NAMES,
@@ -84,6 +85,8 @@ class WoWAddonBufReader:
         #: Has the addon's buffer ever been found in this process? An empty
         #: scan means something different before and after that.
         self._buffer_ever_seen: bool = False
+        #: The addon reported that the game is refusing it chat text.
+        self._chat_locked: bool = False
         self._last_seq = 0
         self._player_name: str = ""
         self._delivered_payloads: set[str] = set()
@@ -99,7 +102,11 @@ class WoWAddonBufReader:
     @property
     def problem(self) -> str:
         """ "" when nothing is wrong, otherwise why no message is arriving."""
-        return self._problem
+        # A live lock outranks nothing else: everything above it means the app
+        # cannot read, and this one means there is nothing to read. But it must
+        # survive a successful poll, which clears `_problem`, or it would be
+        # reported once and then forgotten while the key is still running.
+        return self._problem or (CHAT_LOCKED if self._chat_locked else "")
 
     @property
     def player_name(self) -> str:
@@ -263,6 +270,16 @@ class WoWAddonBufReader:
 
             if kind == "META":
                 meta_parts = payload.split("|", 1)
+                if meta_parts[0] == "LOCKED" and len(meta_parts) > 1:
+                    locked = meta_parts[1].strip() == "1"
+                    if locked != self._chat_locked:
+                        self._chat_locked = locked
+                        logger.info(
+                            "Chat is locked by the game (a keystone run is live)"
+                            if locked
+                            else "Chat is readable again"
+                        )
+                    continue
                 if meta_parts[0] == "PLAYER" and len(meta_parts) > 1:
                     name = meta_parts[1].strip()
                     if name and name != self._player_name:

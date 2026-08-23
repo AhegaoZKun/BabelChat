@@ -152,6 +152,13 @@ _ERROR_INVALID_PARAMETER = 87
 ACCESS_DENIED = "access_denied"
 PROCESS_GONE = "process_gone"
 NO_BUFFER = "no_buffer"
+#: The addon is running and being refused. Inside a mythic keystone run, and
+#: only while the key is live, Blizzard hands chat text to addons as a secret
+#: value: it reports as a string and raises on every operation, so nothing can
+#: read it, forward it or translate it. Not a fault, and not something anyone
+#: can fix — but the overlay simply stopping, with no word about why, is what a
+#: tester spent a run puzzling over.
+CHAT_LOCKED = "chat_locked"
 
 
 def describe_access(pid: int) -> str:

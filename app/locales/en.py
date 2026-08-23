@@ -273,4 +273,5 @@ STRINGS: dict[str, str] = {
     "overlay.wow.no_buffer": "WoW is running, but the addon is not writing its buffer. Check on the character select screen that BabelChat is enabled and loaded for this character. In game, /babel status will say.",
     "overlay.wow.unknown": "Reading WoW's memory failed: {e}",
     "overlay.refused": "the translator declined this message",
+    "overlay.wow.chat_locked": "A mythic keystone run is in progress. Until it ends the game does not give addons the chat text — a Blizzard restriction, with no way around it. Translation comes back on its own afterwards. Raids and ordinary dungeons are unaffected.",
 }

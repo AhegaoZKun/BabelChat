@@ -41,6 +41,22 @@ _WOW_STATUS_INTERVAL = 2000  # WoW connection status poll interval (ms)
 _COPIED_FLASH_MS = 2000  # Duration of "Copied!" flash label (ms)
 
 
+
+def _on_screen_y(widget: QWidget, wanted: int) -> int:
+    """`wanted`, unless that would put the window off the screen.
+
+    Growing back upwards from the bottom edge can ask for a negative y when the
+    overlay was collapsed near the top, and a window with its title bar above
+    the screen cannot be dragged back.
+    """
+    screen = widget.screen() or QApplication.primaryScreen()
+    if screen is None:
+        return max(0, wanted)
+    available = screen.availableGeometry()
+    lowest = available.bottom() - widget.height()
+    return max(available.top(), min(wanted, lowest))
+
+
 class ChatOverlay(FramelessDragResizeMixin, QWidget):
     """WoW-styled smart overlay chat window.
 
@@ -302,11 +318,28 @@ class ChatOverlay(FramelessDragResizeMixin, QWidget):
             self._resize_grip.hide()
             self._toggle_btn.hide()
             self._minimize_btn.setText("+")
-            # Shrink to title bar only
+            # Shrink to title bar only, keeping the BOTTOM edge where it is.
+            #
+            # Qt shrinks a window towards its top-left, so an overlay parked
+            # along the bottom of the screen used to jump into the middle of it
+            # when collapsed — which defeats collapsing it. Anchoring the bottom
+            # instead means it tucks against the edge and stays there.
+            bottom = self.y() + self.height()
             self.setMinimumSize(0, 0)
             self.resize(_MINIMIZE_WIDTH, _MINIMIZE_HEIGHT)
+            # The height it actually became, not the one asked for: the title
+            # bar's own layout will not go below about sixty pixels, and
+            # anchoring to the wish rather than the fact left the window thirty
+            # pixels below where it started.
+            self.move(self.x(), _on_screen_y(self, bottom - self.height()))
         else:
-            # Restore
+            # Restore — measure the collapsed bottom edge FIRST.
+            #
+            # Showing the widgets back and lifting the minimum size both make
+            # the window taller straight away, so a measurement taken after
+            # them is of a window that has already grown, and the restored one
+            # lands a hundred pixels too low.
+            bottom = self.y() + self.height()
             self._toolbar.show()
             self._filter_bar.show()
             self._chat_area.show()
@@ -319,7 +352,9 @@ class ChatOverlay(FramelessDragResizeMixin, QWidget):
             self._minimize_btn.setText("─")
             self.setMinimumSize(_MIN_WIDTH, _MIN_HEIGHT)
             if self._restored_size:
+                # Grow back upwards, from the same edge it shrank to.
                 self.resize(*self._restored_size)
+                self.move(self.x(), _on_screen_y(self, bottom - self.height()))
 
     def _on_opacity_changed(self, value: int) -> None:
         self._bg_opacity = value
@@ -354,6 +389,7 @@ class ChatOverlay(FramelessDragResizeMixin, QWidget):
         "process_gone": ("WoW: \u2716", "#888", "overlay.wow.offline"),
         "access_denied": ("WoW: \U0001f512", "#FF6B6B", "overlay.wow.access_denied"),
         "no_buffer": ("WoW: ?", "#FF9F40", "overlay.wow.no_buffer"),
+        "chat_locked": ("WoW: \U0001f512", "#FFD200", "overlay.wow.chat_locked"),
     }
 
     def _update_wow_status(self) -> None:

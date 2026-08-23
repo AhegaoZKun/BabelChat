@@ -19,6 +19,15 @@ local wctBuf = {}              -- accumulator table
 local wctSeq = 0               -- monotonic sequence counter
 local wctFlush = 0             -- monotonic rebuild counter — the buffer's pulse
 local lastRebuild = 0          -- GetTime() of the last rebuild
+-- When a chat argument was last refused as a secret value.
+--
+-- Inside a mythic keystone run, and only while the key is live, Blizzard hands
+-- chat text to addons as a secret: it reports as a string and raises on every
+-- operation, so nothing can read it, forward it or translate it. The addon
+-- drops those quietly, which is correct — and left the player watching an
+-- overlay that had simply stopped, with nothing to say why.
+local lastRefusal = 0
+local REFUSAL_MEMORY = 30.0
 local bufDirty = false
 local flushTicker = nil
 local logFlushTicker = nil
@@ -161,7 +170,13 @@ local function RebuildBuffer()
     wctFlush = wctFlush + 1
     -- First record, before anything that can vary in length, so a truncated
     -- read still carries it.
-    local parts = { seqHeader, "0|META|FLUSH|" .. wctFlush, "0|META|PLAYER|" .. fullName }
+    local locked = (lastRefusal > 0 and (GetTime() - lastRefusal) < REFUSAL_MEMORY) and "1" or "0"
+    local parts = {
+        seqHeader,
+        "0|META|FLUSH|" .. wctFlush,
+        "0|META|LOCKED|" .. locked,
+        "0|META|PLAYER|" .. fullName,
+    }
     for idx = 1, #wctBuf do
         parts[#parts + 1] = wctBuf[idx]
     end
@@ -195,7 +210,13 @@ function addonTable.BufferAddEntry(text, kind, event, author)
     -- Probe every caller-supplied value BEFORE it is tested, compared or stored.
     -- `kind` is not probed: it is one of our own string literals, never a chat
     -- event argument, so it can never be secret.
-    if not IsUsable(text) then return end
+    if not IsUsable(text) then
+        -- Remember that we were refused, so the companion can say why the
+        -- overlay has gone quiet instead of just going quiet.
+        lastRefusal = GetTime()
+        bufDirty = true
+        return
+    end
 
     -- A missing author and a secret author get the same treatment, and we do not
     -- need to tell them apart — neither can be written to the buffer. Assigning
