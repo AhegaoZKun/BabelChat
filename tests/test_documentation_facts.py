@@ -25,6 +25,16 @@ def read(name: str) -> str:
     return (ROOT / name).read_text(encoding="utf-8")
 
 
+#: CLAUDE.md is deliberately not committed — .gitignore lists it with the other
+#: local dev-tool files — so it does not exist on CI. The checks that read it
+#: are a safeguard for the machine where it is edited, and they skip with a
+#: reason rather than passing vacuously in the one place nobody is looking.
+claude_md = pytest.mark.skipif(
+    not (ROOT / "CLAUDE.md").is_file(),
+    reason="CLAUDE.md is gitignored (local dev-tool file) and absent here",
+)
+
+
 def declared_version() -> str:
     toc = (ROOT / "addon" / "BabelChat" / "BabelChat.toc").read_text(encoding="utf-8", errors="replace")
     found = re.search(r"^## Version:\s*([0-9.]+)", toc, re.MULTILINE)
@@ -56,7 +66,11 @@ def test_every_readme_states_the_test_count_ci_enforces():
     READMEs said 795 while the suite ran 998."""
     floor = declared_test_floor()
 
-    for name in (*READMES, "CLAUDE.md"):
+    checked = [*READMES]
+    if (ROOT / "CLAUDE.md").is_file():
+        checked.append("CLAUDE.md")
+
+    for name in checked:
         stated = re.search(r"(\d{3,5})\s*(?:tests|тестов|passing|\(pytest\))", read(name))
         assert stated, f"{name} states no test count"
         # Within a tenth, not exact. Exact would mean editing four files on
@@ -68,6 +82,7 @@ def test_every_readme_states_the_test_count_ci_enforces():
         )
 
 
+@claude_md
 def test_claude_md_no_longer_carries_a_table_of_line_counts():
     """Twenty-one numbers, sixteen wrong. Nothing keeps them honest and nobody
     reads them for anything a `wc -l` would not answer better."""
@@ -79,6 +94,7 @@ def test_claude_md_no_longer_carries_a_table_of_line_counts():
     assert numbers == [], f"the module map has gone back to quoting line counts: {numbers}"
 
 
+@claude_md
 def test_the_module_count_is_right():
     """The one number in there that is worth stating, because it says how big
     the thing is."""
@@ -89,6 +105,7 @@ def test_the_module_count_is_right():
     assert int(claimed.group(1)) == actual, f"CLAUDE.md says {claimed.group(1)}, there are {actual}"
 
 
+@claude_md
 def test_claude_md_states_the_version_the_addon_declares():
     body = read("CLAUDE.md")
 
@@ -121,6 +138,7 @@ def test_no_readme_asks_for_administrator_rights(name):
         assert phrase not in body, f"{name} still tells the user to elevate"
 
 
+@claude_md
 def test_claude_md_records_what_was_tried_and_failed():
     """The dead-ends list is the part of this file that saves the most time,
     and three of its entries were learned expensively in one session."""
