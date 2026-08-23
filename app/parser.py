@@ -268,7 +268,12 @@ def _clean_text(raw_text: str) -> str | None:
     return text
 
 
-_RE_COLOR_CODES = re.compile(r"\|c[0-9a-fA-F]{8}|\|r")
+#: WoW's colour escapes. The old form is `|c` plus eight hex digits; the newer
+#: one, which The War Within introduced for item quality and keystones, is `|cn`
+#: plus a colour NAME and a colon — `|cnIQ4:`. Only the first was stripped, so a
+#: keystone link arrived in chat as `|cnIQ4:[Ключ: Арена Шрама Бездны (2)]` and
+#: that is what the overlay showed.
+_RE_COLOR_CODES = re.compile(r"\|c[0-9a-fA-F]{8}|\|cn[A-Za-z0-9_]+:|\|r")
 
 
 def parse_line(line: str) -> ChatMessage | None:

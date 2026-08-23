@@ -63,6 +63,45 @@ BAD_RESPONSE = "bad_response"
 CREDENTIAL_SHAPE = "credential_shape"
 SCOPE_REJECTED = "scope_rejected"
 CREDENTIAL_MISSING = "credential_missing"
+#: The model answered, but with a refusal rather than a translation.
+REFUSED = "provider_refused"
+
+#: What GigaChat says when it will not translate something. It answers 200 with
+#: a paragraph about itself, and that paragraph went into the overlay as if it
+#: were the translation of a one-word message. Matching on the wording alone
+#: would catch a genuine translation of a sentence about language models, so
+#: length is part of the test: a refusal is a canned paragraph, and it dwarfs
+#: the chat line that provoked it.
+_REFUSAL_MARKERS = (
+    "как любая языковая модель",
+    "как и любая языковая модель",
+    "языковая модель",
+    "не обладает собственным мнением",
+    "разговоры на некоторые темы",
+    "не могу ответить",
+    "не могу обсуждать",
+    "давайте сменим тему",
+    "as a language model",
+    "i can't help with that",
+    "i cannot assist",
+)
+
+#: A reply this many times longer than the message is not a translation of it.
+_REFUSAL_LENGTH_RATIO = 3
+_REFUSAL_MIN_EXTRA = 40
+
+
+def looks_like_a_refusal(source: str, reply: str) -> bool:
+    """Did the model decline instead of translating?
+
+    Both halves are needed. The wording alone would flag a real translation of
+    a message that happens to mention language models; the length alone would
+    flag a terse word rendered as a long polite sentence.
+    """
+    lowered = reply.lower()
+    if not any(marker in lowered for marker in _REFUSAL_MARKERS):
+        return False
+    return len(reply) > len(source) * _REFUSAL_LENGTH_RATIO + _REFUSAL_MIN_EXTRA
 
 _SYSTEM_PROMPT = (
     "You translate World of Warcraft chat messages into {target}. "
@@ -282,7 +321,7 @@ class GigaChatBackend:
                     return failed(text, target_lang, source_lang, detail, "gigachat")
                 continue
 
-            if outcome.error in (FAILURE.AUTH, FAILURE.QUOTA, TLS_UNTRUSTED, BAD_RESPONSE):
+            if outcome.error in (FAILURE.AUTH, FAILURE.QUOTA, TLS_UNTRUSTED, BAD_RESPONSE, REFUSED):
                 # Retrying cannot change any of these.
                 return failed(text, target_lang, source_lang, outcome.error, "gigachat")
 
@@ -341,6 +380,15 @@ class GigaChatBackend:
         translated = _extract_content(payload)
         if translated is None:
             return failed(text, target_lang, None, BAD_RESPONSE, "gigachat")
+
+        if looks_like_a_refusal(text, translated):
+            # Not an error as far as HTTP is concerned — a 200 with a paragraph
+            # about what the model will not discuss. Passing it on put that
+            # paragraph in the overlay where the translation belongs. Reporting
+            # it as a failure lets the next provider have a go, and MyMemory has
+            # no opinion about the word it was handed.
+            logger.info("GigaChat declined to translate a message; handing it on")
+            return failed(text, target_lang, None, REFUSED, "gigachat")
 
         return TranslationResult(
             original=text,

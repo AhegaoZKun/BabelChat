@@ -29,6 +29,7 @@ from app.overlay_widgets import (
 from app.parser import Channel
 from app.pipeline import TranslatedMessage
 from app.translator import TranslatorService
+from app.translators.gigachat_provider import REFUSED
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,17 @@ class ChatOverlay(FramelessDragResizeMixin, QWidget):
             # No translation — show text in channel color
             cursor.setCharFormat(chan_fmt)
             cursor.insertText(msg.original.text)
+
+            # When every provider declined, say so in three words rather than
+            # leaving the line looking like an ordinary untranslated one. The
+            # alternative was worse: GigaChat's refusal is a paragraph about
+            # itself, and passing it through put that paragraph where the
+            # translation goes.
+            if self._translation_enabled and msg.translation and msg.translation.error == REFUSED:
+                note_fmt = QTextCharFormat()
+                note_fmt.setForeground(QColor("#888888"))
+                cursor.setCharFormat(note_fmt)
+                cursor.insertText(f" — {tr('overlay.refused')}")
 
         # Auto-scroll to bottom
         self._chat_area.verticalScrollBar().setValue(self._chat_area.verticalScrollBar().maximum())

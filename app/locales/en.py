@@ -272,4 +272,5 @@ STRINGS: dict[str, str] = {
     "overlay.wow.access_denied": "Windows will not let this read WoW's memory. Usually that means the game is running as administrator and BabelChat is not. Run both the same way: either both plain, or both elevated.",
     "overlay.wow.no_buffer": "WoW is running, but the addon is not writing its buffer. Check on the character select screen that BabelChat is enabled and loaded for this character. In game, /babel status will say.",
     "overlay.wow.unknown": "Reading WoW's memory failed: {e}",
+    "overlay.refused": "the translator declined this message",
 }

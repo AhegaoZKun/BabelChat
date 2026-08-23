@@ -31,7 +31,14 @@ _CYRILLIC_THRESHOLD = 0.5
 
 # Cyrillic sibling languages: lingua often confuses short Russian text
 # with Bulgarian or Ukrainian. On RU servers 99%+ Cyrillic is Russian.
-_CYRILLIC_SIBLING_LANGUAGES = frozenset({Language.BULGARIAN, Language.UKRAINIAN})
+#: Languages lingua reaches for when a short Russian word is not quite Russian
+#: enough. A Russian-speaking user gets nothing from having these translated:
+#: they read them already, and the detection is usually wrong anyway — "сука"
+#: came back as Belarusian and was sent to a translation service, which then
+#: refused it.
+_CYRILLIC_SIBLING_LANGUAGES = frozenset(
+    {Language.BULGARIAN, Language.UKRAINIAN, Language.BELARUSIAN}
+)
 
 
 def _cyrillic_ratio(text: str) -> float:

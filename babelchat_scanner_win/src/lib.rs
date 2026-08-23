@@ -38,6 +38,13 @@ struct Cache {
     /// Cached process handle (raw value). Reused across polls instead of
     /// OpenProcess/CloseHandle 4×/sec; invalidated when a read fails.
     handle: isize,
+    /// When this address last yielded a message, in ms. A cached address that
+    /// has gone quiet is not necessarily idle chat: when Lua's GC relocates the
+    /// buffer, the bytes it left behind still parse — same markers, same last
+    /// sequence — so the fast path reads a ghost forever and never rescans.
+    /// That is a silent, permanent stall, and it is what "it works for a minute
+    /// and then stops" turned out to be.
+    last_fresh_ms: u64,
 }
 
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
@@ -46,6 +53,11 @@ static SCAN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 /// a /reload), scans would otherwise repeat every poll. Minimum gap in ms.
 static LAST_SCAN_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 const SCAN_MIN_GAP_MS: u64 = 3000;
+/// How long a cached address may produce nothing before it is checked by a
+/// scan. Long enough that an ordinary lull in chat costs nothing, short enough
+/// that a relocated buffer is found while the player is still looking at the
+/// message they expected to see translated.
+const CACHE_MAX_QUIET_MS: u64 = 10_000;
 static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
 
 fn now_ms() -> u64 {
@@ -334,14 +346,29 @@ pub extern "C" fn find_and_read_buffer(
     #[cfg(windows)]
     {
         let mut cache = CACHE.lock().unwrap();
-        if let Some(ref c) = *cache {
+        if let Some(ref mut c) = *cache {
             if c.pid == pid {
                 let handle = HANDLE(c.handle as *mut _);
                 match try_read_at(handle, c.addr, min_seq) {
-                    FastRead::Fresh(content) => return write_out(content),
-                    // CRITICAL: idle (no new chat) must not fall through to a
-                    // full memory scan — that was pegging the CPU every poll.
-                    FastRead::NoNew => return 0,
+                    FastRead::Fresh(content) => {
+                        c.last_fresh_ms = now_ms();
+                        return write_out(content);
+                    }
+                    // Idle chat must not fall through to a full scan on every
+                    // poll — that pegged the CPU. But it must not be trusted
+                    // for ever either, because a ghost buffer is indis-
+                    // tinguishable from an idle one from here. After
+                    // CACHE_MAX_QUIET_MS with nothing new, verify by scanning;
+                    // the scan is rate-limited, so the cost of a genuinely
+                    // quiet chat is one scan every few seconds, not one per
+                    // poll.
+                    FastRead::NoNew => {
+                        if now_ms().saturating_sub(c.last_fresh_ms) < CACHE_MAX_QUIET_MS {
+                            return 0;
+                        }
+                        unsafe { let _ = CloseHandle(handle); }
+                        *cache = None; // fall through to scan
+                    }
                     FastRead::Stale => {
                         unsafe { let _ = CloseHandle(handle); }
                         *cache = None; // fall through to scan
@@ -372,7 +399,8 @@ pub extern "C" fn find_and_read_buffer(
             {
                 // Cache a persistent handle alongside the address.
                 if let Some(h) = open_process(pid) {
-                    *CACHE.lock().unwrap() = Some(Cache { pid, addr, handle: h.0 as isize });
+                    *CACHE.lock().unwrap() =
+                        Some(Cache { pid, addr, handle: h.0 as isize, last_fresh_ms: now_ms() });
                 }
             }
             write_out(content)
