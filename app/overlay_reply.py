@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from app.i18n import tr
+from app.overlay_chrome import _EDGE_MARGIN
 from app.overlay_widgets import ReplyTranslateWorker
 from app.translator import TranslatorService
 
@@ -248,3 +249,109 @@ class ReplyDialog(QWidget):
                 clipboard.setText(text)
             self._status.setText(tr("overlay.reply.copied"))
             QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._status.setText(""))
+
+
+class ReplyPanelMixin:
+    """The outgoing half of the overlay: type here, translate, copy, paste.
+
+    Split out of ChatOverlay because it is a different job from showing the
+    chat — everything above this line is about what other people said, and
+    everything below is about what you are about to say. The overlay module had
+    grown past the size the project caps files at, and this was the seam.
+
+    The attributes it uses (`_translator`, `_reply_input`, `_reply_output` and
+    the rest) are built by app/overlay_chrome.py and set up in ChatOverlay's
+    constructor; the mixin is not usable on its own.
+    """
+
+    def set_translator(self, translator: TranslatorService, target_lang: str) -> None:
+        """Provide the translator service and target language for reply translation."""
+        self._translator = translator
+        self._target_lang = target_lang
+        idx = self._reply_lang_combo.findData(target_lang)
+        if idx >= 0:
+            self._reply_lang_combo.setCurrentIndex(idx)
+        if self._reply_dialog is not None:
+            self._reply_dialog.set_translator(translator, target_lang)
+
+    def _on_reply_lang_changed(self, index: int) -> None:
+        code = self._reply_lang_combo.currentData()
+        if code:
+            self._target_lang = code
+
+    def _on_reply_focus_in(self, event: object) -> None:
+        """Temporarily remove X11BypassWindowManagerHint so keyboard input works."""
+        pos = self.pos()
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.move(pos)
+        self.show()
+        self._reply_input.setFocus()
+
+    def _on_reply_focus_out(self, event: object) -> None:
+        """Restore X11BypassWindowManagerHint when input loses focus."""
+        pos = self.pos()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.X11BypassWindowManagerHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.move(pos)
+        self.show()
+
+    def _do_reply_translate(self) -> None:
+        text = self._reply_input.text().strip()
+        if not text or self._translator is None:
+            return
+        self._reply_output.setText(tr("overlay.reply.translating"))
+        self._reply_input.setEnabled(False)
+        worker = ReplyTranslateWorker(self._translator, text, self._target_lang)
+        worker.signals.finished.connect(self._on_reply_translated)
+        self._thread_pool.start(worker)
+
+    @pyqtSlot(str, bool)
+    def _on_reply_translated(self, translated: str, success: bool) -> None:
+        self._reply_input.setEnabled(True)
+        if success:
+            self._reply_output.setText(translated)
+            # Auto-copy to clipboard
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(translated)
+            self._reply_status.setText(tr("overlay.reply.copied"))
+            QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._reply_status.setText(""))
+        else:
+            self._reply_output.setText(tr("overlay.reply.error"))
+
+    def _copy_reply(self) -> None:
+        text = self._reply_output.text()
+        if text and text != tr("overlay.reply.translating") and text != tr("overlay.reply.error"):
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+            self._reply_status.setText(tr("overlay.reply.copied"))
+            QTimer.singleShot(_COPIED_FLASH_MS, lambda: self._reply_status.setText(""))
+
+    # -- Drag & resize support --
+
+    _EDGE_CURSORS: dict[str, Qt.CursorShape] = {
+        "br": Qt.CursorShape.SizeFDiagCursor,
+        "bl": Qt.CursorShape.SizeBDiagCursor,
+        "tr": Qt.CursorShape.SizeBDiagCursor,
+        "tl": Qt.CursorShape.SizeFDiagCursor,
+        "b": Qt.CursorShape.SizeVerCursor,
+        "t": Qt.CursorShape.SizeVerCursor,
+        "r": Qt.CursorShape.SizeHorCursor,
+        "l": Qt.CursorShape.SizeHorCursor,
+    }
+
+    # -- Settings persistence --
+
+    def _position_reply_dialog(self) -> None:
+        """Position the reply dialog flush below the overlay's visible content."""
+        if self._reply_dialog is None:
+            return
+        geo = self.geometry()
+        # Subtract edge margin so dialog sits flush against the visible container
+        self._reply_dialog.move(geo.left() + _EDGE_MARGIN, geo.bottom() - _EDGE_MARGIN)
+        self._reply_dialog.resize(geo.width() - _EDGE_MARGIN * 2, self._reply_dialog.sizeHint().height())
+
