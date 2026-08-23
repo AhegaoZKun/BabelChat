@@ -8,7 +8,7 @@ ship under the same number.
 
 ---
 
-## [3.4.0] — 2026-08-21
+## [3.4.0] — 2026-08-23
 
 ### Added
 
