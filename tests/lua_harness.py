@@ -133,9 +133,20 @@ class AddonHarness:
         raw = self.db.wctbuf
         return raw if raw is not None else ""
 
+    def buffer_frame(self) -> str:
+        """The buffer up to and including the end marker, without the padding.
+
+        Every real reader stops at the marker; the buffer is padded past it to a
+        fixed length so that rebuilding it does not move it in memory.
+        """
+        text = self.buffer_text()
+        marker = "__WCT_END__"
+        cut = text.find(marker)
+        return text if cut == -1 else text[: cut + len(marker)]
+
     def buffer_entries(self) -> list[str]:
         """Buffer payload lines: everything between the header and the end marker."""
-        text = self.buffer_text()
+        text = self.buffer_frame()
         if not text:
             return []
         lines = text.split("\n")

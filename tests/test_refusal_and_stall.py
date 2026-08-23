@@ -180,39 +180,11 @@ def test_a_fresh_read_resets_the_clock():
 # ── and the Python side can climb back down ──────────────────────────────────
 
 
-def test_the_reader_checks_whether_it_has_run_ahead_of_the_buffer():
-    """The min_seq filter lives inside the scanner, so a buffer whose highest
-    sequence is below ours is invisible — and the recovery for that case sits
-    behind a scanner result that can never arrive."""
-    import sys
-
-    if sys.platform != "win32":
-        pytest.skip("the Windows memory reader")
-    pytest.importorskip("pymem")
-    import app.memory_reader_windows as module
-
-    reader = module.WoWAddonBufReader(lambda *_a, **_k: None)
-    reader._pid = 4321
-    reader._last_seq = 500
-
-    asked = []
-
-    def scanner(pid, min_seq):
-        asked.append(min_seq)
-        return "10|RAW|SAY|Player|hello" if min_seq == 0 else None
-
-    module_scanner = "_pymem_find_buffer"
-    original = getattr(module, module_scanner)
-    module._rust_lib = None
-    setattr(module, module_scanner, scanner)
-    try:
-        for _ in range(module._PROBE_EVERY_N_MISSES):
-            reader._poll()
-    finally:
-        setattr(module, module_scanner, original)
-
-    assert 0 in asked, "the reader never asks without its own sequence filter"
-    assert reader._last_seq < 500, "it noticed the buffer was behind it and did not rewind"
+# NOTE: the "have I run ahead of the buffer?" probe that used to be tested here
+# is gone. It asked the scanner with a filter of zero, and at zero any parseable
+# bytes at the cached address look fresh — so the question renewed the very
+# cache it existed to catch, and held a dead address for two minutes at a time.
+# What replaced it is the buffer's pulse; see tests/test_buffer_pulse.py.
 
 
 # ── the colour escape The War Within added ───────────────────────────────────
@@ -246,3 +218,22 @@ def test_a_bare_pipe_in_ordinary_text_is_left_alone():
     from app.parser import _RE_COLOR_CODES
 
     assert _RE_COLOR_CODES.sub("", "a | b |cn| c") == "a | b |cn| c"
+
+
+# ── what replaced the probe ──────────────────────────────────────────────────
+
+
+def test_a_negative_sequence_still_forces_a_scan():
+    """Kept from the first attempt at this, because it is the only way to make
+    the scanner distrust its cache from outside — and a diagnostic that cannot
+    do that is not much of one."""
+    source = scanner_source()
+
+    assert "let forced = min_seq < 0;" in source
+    assert "if !forced {" in source, "a forced call still goes through the fast path"
+
+
+def test_a_forced_scan_is_not_refused_by_the_rate_limiter():
+    source = scanner_source()
+
+    assert "if !forced && now.saturating_sub(last) < SCAN_MIN_GAP_MS {" in source

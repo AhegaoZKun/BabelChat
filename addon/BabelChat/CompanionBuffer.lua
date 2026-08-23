@@ -6,10 +6,19 @@ local ADDON_NAME, addonTable = ...
 -- ── Constants ────────────────────────────────────────────────
 local MSG_LIMIT = 50           -- ring buffer size
 local FLUSH_INTERVAL = 0.25   -- match companion poll rate (was 1.5s)
+-- Rebuild at least this often even with nothing new to say. Every rebuild
+-- allocates a NEW Lua string and frees the old one, and the freed bytes stay
+-- readable for a while — so the companion can be looking at a copy that will
+-- never change again. It cannot tell that from a quiet chat, because until now
+-- the only thing in the buffer that moved was the message counter. A pulse that
+-- ticks regardless is what makes a dead copy recognisable at a glance.
+local HEARTBEAT_INTERVAL = 2.0
 
 -- ── State ────────────────────────────────────────────────────
 local wctBuf = {}              -- accumulator table
 local wctSeq = 0               -- monotonic sequence counter
+local wctFlush = 0             -- monotonic rebuild counter — the buffer's pulse
+local lastRebuild = 0          -- GetTime() of the last rebuild
 local bufDirty = false
 local flushTicker = nil
 local logFlushTicker = nil
@@ -115,11 +124,22 @@ function addonTable.PreallocateCompanionKeys()
     local db = BabelChatDB
     if db.wctbuf == nil then db.wctbuf = "" end
     if db.wctSeq == nil then db.wctSeq = 0 end
+    if db.wctFlush == nil then db.wctFlush = 0 end
+    -- A number that never changes, so the companion can find it however long
+    -- the search takes, and know where this table's storage lives. Everything
+    -- else here moves or ticks: the buffer string is reallocated on every
+    -- rebuild, and a search for a value that changes while you search finds
+    -- nothing. This one is the fixed point the rest is measured from.
+    db.wctAnchor = 8675309123457
     if db._r1 == nil then db._r1 = 0 end
     if db._r2 == nil then db._r2 = 0 end
     if db._r3 == nil then db._r3 = 0 end
     -- Restore seq counter so it survives /reload (reader tracks by seq)
     wctSeq = db.wctSeq or 0
+    -- Carried across a reload for the same reason as the sequence: the reader
+    -- compares pulses between copies, and a pulse that restarted at zero would
+    -- make the live buffer look older than the corpse of the previous session.
+    wctFlush = db.wctFlush or 0
 end
 
 -- ── Buffer rebuild ───────────────────────────────────────────
@@ -138,13 +158,18 @@ local function RebuildBuffer()
     -- loop re-concatenated the whole buffer per entry and probed the result each
     -- time — quadratic work and ~190 KB of garbage per flush, four times a
     -- second, forever.
-    local parts = { seqHeader, "0|META|PLAYER|" .. fullName }
+    wctFlush = wctFlush + 1
+    -- First record, before anything that can vary in length, so a truncated
+    -- read still carries it.
+    local parts = { seqHeader, "0|META|FLUSH|" .. wctFlush, "0|META|PLAYER|" .. fullName }
     for idx = 1, #wctBuf do
         parts[#parts + 1] = wctBuf[idx]
     end
     parts[#parts + 1] = "__WCT_END__"
     BabelChatDB.wctbuf = table.concat(parts, "\n")
     BabelChatDB.wctSeq = wctSeq
+    BabelChatDB.wctFlush = wctFlush
+    lastRebuild = GetTime()
     bufDirty = false
 end
 
@@ -206,7 +231,10 @@ function addonTable.StartBufferFlush()
     end
 
     flushTicker = C_Timer.NewTicker(FLUSH_INTERVAL, function()
-        if bufDirty then
+        -- Idle chat still rebuilds, just rarely. One concat of a couple of
+        -- kilobytes every two seconds is nothing next to a companion that goes
+        -- deaf for minutes at a time.
+        if bufDirty or (GetTime() - lastRebuild) >= HEARTBEAT_INTERVAL then
             -- table.concat fails on the whole table, not on one entry, and this
             -- ticker runs four times a second forever. Without the guard a
             -- single unexpected entry would mean a Lua error every 0.25s until

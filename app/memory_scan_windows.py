@@ -93,6 +93,22 @@ def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
     return buf.raw[:n].decode("utf-8", errors="replace")
 
 
+def scanner_state() -> str:
+    """What the native scanner thinks its situation is.
+
+    Its cached address, the pulse it last saw there, how long that has been
+    silent and how many scans it has run. Every step of the stall hunt was an
+    inference about these five numbers from the outside; now they can be read.
+    """
+    if _rust_lib is None or not hasattr(_rust_lib, "describe_state"):
+        return "native scanner not loaded"
+    buf = ctypes.create_string_buffer(256)
+    _rust_lib.describe_state.restype = ctypes.c_int32
+    _rust_lib.describe_state.argtypes = [ctypes.c_char_p, ctypes.c_int32]
+    n = _rust_lib.describe_state(buf, 256)
+    return buf.raw[:n].decode("utf-8", errors="replace") if n > 0 else "unavailable"
+
+
 # ── Pure-Python fallback scanner ──────────────────────────────────────────────
 
 

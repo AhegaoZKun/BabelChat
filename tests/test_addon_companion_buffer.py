@@ -37,10 +37,17 @@ def test_buffer_is_wrapped_in_markers():
     h.addon_table.BufferAddEntry("hi", "RAW", "SAY", "Bob")
     flush(h)
 
-    text = h.buffer_text()
+    text = h.buffer_frame()
     assert text.startswith("__WCT_BUF_0001__\n")
     assert text.endswith("\n__WCT_END__")
     assert "0|META|PLAYER|Tester-TestRealm" in text
+    # There was padding here for a while, on the theory that a fixed length
+    # would make the allocator hand back the same block and stop the buffer
+    # moving. Measurement said otherwise — nineteen addresses in two minutes,
+    # because Lua interns strings and the old one is still alive when the new
+    # one is asked for. The buffer is read through the addon's table now, so
+    # where it lands stopped mattering.
+    assert h.buffer_text() == text, "the buffer carries something past its end marker"
 
 
 def test_missing_author_and_event_fall_back():
@@ -223,7 +230,7 @@ def test_a_player_typing_the_end_marker_cannot_truncate_the_buffer():
     h.addon_table.BufferAddEntry("this must still arrive", "RAW", "SAY", "Bob")
     flush(h)
 
-    text = h.buffer_text()
+    text = h.buffer_frame()
     assert text.count("__WCT_END__") == 1, "only the real frame marker may appear"
     assert text.index("__WCT_END__") == len(text) - len("__WCT_END__")
     assert len(h.buffer_entries()) == 2
@@ -256,7 +263,7 @@ def test_no_arrangement_of_underscores_reconstructs_the_end_marker(typed):
     h.addon_table.BufferAddEntry("must still arrive", "RAW", "SAY", "Bob")
     flush(h)
 
-    text = h.buffer_text()
+    text = h.buffer_frame()
     assert text.count("__WCT_END__") == 1, f"{typed!r} put a second end marker in the buffer"
     assert text.endswith("__WCT_END__")
     assert len(h.buffer_entries()) == 2
@@ -361,8 +368,17 @@ def channel_token(h, channel_string, zone_channel_id):
         # CHAT_MSG_CHANNEL: (text, author, lang, channelString, author2, flags,
         # zoneChannelID, channelIndex, channelBaseName)
         h.addon_table.ChatFilter(
-            None, "CHAT_MSG_CHANNEL", "hi", "Vasya",
-            "", channel_string, "Vasya", 0, zone_channel_id, 1, "Trade",
+            None,
+            "CHAT_MSG_CHANNEL",
+            "hi",
+            "Vasya",
+            "",
+            channel_string,
+            "Vasya",
+            0,
+            zone_channel_id,
+            1,
+            "Trade",
         )
     finally:
         h.addon_table.BufferAddEntry = original

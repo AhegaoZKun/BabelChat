@@ -39,6 +39,7 @@ from app.memory_scan_windows import (  # noqa: F401
     _rust_find_buffer,
     _rust_lib,
     describe_access,
+    scanner_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,11 +49,10 @@ logger = logging.getLogger(__name__)
 #: enough that nobody spends an evening guessing.
 _SILENCE_BEFORE_COMPLAINT = 45.0
 
-#: How often to check whether we have run ahead of the buffer, counted in
-#: fruitless polls. At four polls a second this is roughly every five seconds —
-#: often enough that nobody sits looking at a stalled overlay, rare enough that
-#: it is not a full scan on every tick.
-_PROBE_EVERY_N_MISSES = 20
+#: How often to write the native scanner's own view of things into the log,
+#: counted in fruitless polls. Four polls a second, so roughly every fifteen
+#: seconds of silence — which is when anyone would want to know.
+_STATE_EVERY_N_MISSES = 60
 
 POLL_INTERVAL = 0.25
 ATTACH_RETRY_INTERVAL = 5.0
@@ -61,15 +61,6 @@ _MAX_DELIVERED_PAYLOADS = 200
 
 # ── Main reader class ─────────────────────────────────────────────────────────
 
-
-
-def _leading_sequence(line: str) -> int:
-    """The sequence number a buffer line starts with, or 0."""
-    head = line.split("|", 1)[0].strip()
-    try:
-        return int(head)
-    except ValueError:
-        return 0
 
 
 class WoWAddonBufReader:
@@ -200,21 +191,15 @@ class WoWAddonBufReader:
 
         if content is None:
             self._consecutive_misses += 1
-            # The min_seq filter lives inside the scanner, so a buffer whose
-            # highest sequence is BELOW what we already delivered is invisible
-            # to us — and the recovery for exactly that case sits in
-            # _deliver_new_messages, which only runs when the scanner returns
-            # something. A reader that got ahead of the buffer could therefore
-            # never get back in step, and a /reload that rebuilds the ring is
-            # enough to do it. Every so often, ask without the filter.
-            if self._consecutive_misses % _PROBE_EVERY_N_MISSES == 0:
-                self._probe_ignoring_sequence()
             # Only when the buffer has NEVER been seen since attaching. The
             # scanner returns the same None for "no buffer in this process" and
             # for "nothing in it newer than what you already have", so counting
             # every quiet minute as a fault made the app accuse the addon during
             # any lull in chat — which it did, on the first run, while the addon
             # was working and had already handed over the player's name.
+            if self._consecutive_misses % _STATE_EVERY_N_MISSES == 0:
+                logger.debug("Scanner: %s", scanner_state())
+
             now = time.monotonic()
             if self._first_miss_at == 0.0:
                 self._first_miss_at = now
@@ -225,8 +210,9 @@ class WoWAddonBufReader:
             ):
                 self._problem = NO_BUFFER
                 logger.warning(
-                    "No addon buffer in WoW's memory after %.0fs — is the addon enabled for this character?",
+                    "No addon buffer in WoW's memory after %.0fs — is the addon enabled for this character? (%s)",
                     now - self._first_miss_at,
+                    scanner_state(),
                 )
             return
 
@@ -235,30 +221,6 @@ class WoWAddonBufReader:
         self._problem = ""
         self._buffer_ever_seen = True
         self._deliver_new_messages(content)
-
-    def _probe_ignoring_sequence(self) -> None:
-        """Read the buffer as if nothing had been delivered yet.
-
-        Only to find out whether we have run ahead of it. When the buffer is
-        genuinely older than our position, `_deliver_new_messages` recognises
-        the reset and rewinds; when it is not, nothing there is newer than
-        `_last_seq` and every line is filtered out as already seen.
-        """
-        if self._pid is None:
-            return
-        content = _rust_find_buffer(self._pid, 0) if _rust_lib else _pymem_find_buffer(self._pid, 0)
-        if content is None:
-            return
-
-        self._buffer_ever_seen = True
-        highest = max((_leading_sequence(line) for line in content.splitlines()), default=0)
-        if highest and highest < self._last_seq:
-            logger.info(
-                "The addon's buffer restarted below where we were reading (%d < %d) — rewinding",
-                highest,
-                self._last_seq,
-            )
-            self._deliver_new_messages(content)
 
     def _deliver_new_messages(self, content: str) -> None:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
