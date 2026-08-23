@@ -66,10 +66,10 @@ def test_each_refusal_code_gets_its_own_answer(code, expected, monkeypatch):
     place, so each is pinned."""
     import pymem.ressources.kernel32 as kernel32
 
-    import app.memory_reader_windows as module
+    import app.memory_scan_windows as scanner
 
     monkeypatch.setattr(kernel32, "OpenProcess", lambda *_a: 0)
-    monkeypatch.setattr(module.ctypes, "get_last_error", lambda: code)
+    monkeypatch.setattr(scanner.ctypes, "get_last_error", lambda: code)
 
     assert describe_access(4321) == expected
 

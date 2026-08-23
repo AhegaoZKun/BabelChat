@@ -163,7 +163,10 @@ def test_the_loader_is_shared_by_both_platform_readers(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(native_scanner, "load_scanner", lambda *a, **k: sentinel)
 
-    for module_name in ("app.memory_reader_windows", "app.memory_reader_linux"):
+    # The scanning half of the Windows reader lives in its own module now, and
+    # the reader imports the handle from it — so that one has to be reloaded
+    # first, or the reader re-imports the handle the old module still holds.
+    for module_name in ("app.memory_scan_windows", "app.memory_reader_windows", "app.memory_reader_linux"):
         module = importlib.reload(importlib.import_module(module_name))
         handle = module._rust_lib
         assert handle is sentinel, f"{module_name} does not get its scanner from the shared loader"
