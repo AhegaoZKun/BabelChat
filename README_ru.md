@@ -11,7 +11,9 @@
 
 ---
 
-![BabelChat Демо](https://github.com/Yumash/BabelChat/raw/main/assets/demo.webp)
+<video src="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4" controls muted width="900">
+  <a href="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4">Смотреть запись</a>
+</video>
 
 ## Проблема
 

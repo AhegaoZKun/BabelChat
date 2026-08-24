@@ -11,7 +11,9 @@ Real-time chat translation with a smart overlay — companion app + WoW addon
 
 ---
 
-![BabelChat Demo](https://github.com/Yumash/BabelChat/raw/main/assets/demo.webp)
+<video src="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4" controls muted width="900">
+  <a href="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4">Watch the recording</a>
+</video>
 
 ## The Problem
 
