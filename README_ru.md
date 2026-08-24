@@ -11,9 +11,9 @@
 
 ---
 
-[![BabelChat Демо](https://github.com/Yumash/BabelChat/raw/main/assets/demo-poster.jpg)](https://github.com/Yumash/BabelChat/blob/main/assets/demo.mp4)
+![BabelChat Демо](https://github.com/Yumash/BabelChat/raw/main/assets/demo.webp)
 
-*33 секунды: оверлей открывается, сворачивается, таскается по экрану, и английская строка превращается в русскую.*
+*Оверлей открывается, сворачивается, таскается по экрану, английская строка становится русской — а внизу аддон подписывает ту же строку прямо в чате. [Исходное качество](https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4).*
 
 ## Проблема
 
