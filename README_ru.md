@@ -11,9 +11,9 @@
 
 ---
 
-<video src="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4" controls muted width="900">
-  <a href="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4">Смотреть запись</a>
-</video>
+[![BabelChat Демо](https://github.com/Yumash/BabelChat/raw/main/assets/demo-poster.jpg)](https://github.com/Yumash/BabelChat/blob/main/assets/demo.mp4)
+
+*33 секунды: оверлей открывается, сворачивается, таскается по экрану, и английская строка превращается в русскую.*
 
 ## Проблема
 

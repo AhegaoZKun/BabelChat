@@ -11,9 +11,9 @@ Real-time chat translation with a smart overlay — companion app + WoW addon
 
 ---
 
-<video src="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4" controls muted width="900">
-  <a href="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4">Watch the recording</a>
-</video>
+[![BabelChat Demo](https://github.com/Yumash/BabelChat/raw/main/assets/demo-poster.jpg)](https://github.com/Yumash/BabelChat/blob/main/assets/demo.mp4)
+
+*33 seconds: the overlay opens, collapses, gets dragged around, and a line of English turns into Russian.*
 
 ## The Problem
 

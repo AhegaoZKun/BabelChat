@@ -11,9 +11,9 @@ Traducción de chat en tiempo real — app acompañante + addon de WoW
 
 ---
 
-<video src="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4" controls muted width="900">
-  <a href="https://github.com/Yumash/BabelChat/raw/main/assets/demo.mp4">Ver la grabación</a>
-</video>
+[![BabelChat Demo](https://github.com/Yumash/BabelChat/raw/main/assets/demo-poster.jpg)](https://github.com/Yumash/BabelChat/blob/main/assets/demo.mp4)
+
+*33 segundos: el overlay se abre, se pliega, se arrastra, y una línea en inglés se vuelve rusa.*
 
 ## El Problema
 
