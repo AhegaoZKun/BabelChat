@@ -134,6 +134,23 @@ def main() -> int:
         on_message=overlay.deliver_message,
     )
 
+    # Start the pipeline only once a translation provider is configured.
+    # Settings can configure the first provider while the application is
+    # already running, so this also acts as the startup failsafe used by the
+    # settings callback below.
+    pipeline_started = False
+
+    def _start_pipeline_if_ready(updated_config: AppConfig) -> None:
+        nonlocal pipeline_started
+        if pipeline_started:
+            return
+        if not any_configured(updated_config.providers):
+            logging.info("pipeline not started: no translation provider configured")
+            return
+
+        pipeline.start()
+        pipeline_started = True
+
     def _quit() -> None:
         try:
             if tray is not None:
@@ -155,6 +172,15 @@ def main() -> int:
             return
 
         def _on_saved(updated: AppConfig) -> None:
+            nonlocal config
+            config = updated
+
+            # The translation helper is process-global. Changing the saved config
+            # alone is not enough because existing GTK widgets already contain
+            # strings produced by tr() at construction time.
+            tr.set_language(updated.ui_language)
+            overlay.apply_language()
+
             # Apply live: rebuild pipeline config (channels/langs).
             pipeline.update_config(_build_pipeline_config(updated))
             # If this save is what FIRST configured a provider, this is the

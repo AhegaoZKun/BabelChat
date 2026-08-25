@@ -556,6 +556,7 @@ class ChatOverlayGtk:
         title = Gtk.Label(label="BabelChat")
         title.set_xalign(0.0)
         title.set_hexpand(True)
+        self._title_label = title
         # WoW connection status ("WoW: ✔ / … / ✖"), polled via the checker
         # wired by main — same behavior as the PyQt overlay.
         self._wow_status = Gtk.Label(label="WoW: ?")
@@ -570,10 +571,12 @@ class ChatOverlayGtk:
         self._translate_toggle.set_cursor_from_name("pointer")
         self._translate_toggle.connect("toggled", self._on_translate_toggled)
         settings_btn = Gtk.Button(label="⚙")
+        self._settings_button = settings_btn
         settings_btn.add_css_class("bc-tool")
         settings_btn.set_cursor_from_name("pointer")
         settings_btn.connect("clicked", lambda _b: self.on_settings and self.on_settings())
         quit_btn = Gtk.Button(label="✕")
+        self._quit_button = quit_btn
         quit_btn.add_css_class("bc-close")
         quit_btn.set_cursor_from_name("pointer")
         quit_btn.connect("clicked", lambda _b: self.on_quit and self.on_quit())
@@ -870,6 +873,24 @@ class ChatOverlayGtk:
         """Set the TR toggle state (fires the normal toggled handler)."""
         if getattr(self, "_translate_toggle", None) is not None:
             self._translate_toggle.set_active(enabled)
+
+    def apply_language(self) -> None:
+        """Refresh all persistent overlay UI text after a language change."""
+        if self._win is None:
+            return
+        self._translate_toggle.set_label(
+            tr("overlay.badge.on") if self._translate_toggle.get_active() else tr("overlay.badge.off")
+        )
+        self._translate_toggle.set_tooltip_text(tr("overlay.translate_toggle"))
+        self._reply_entry.set_placeholder_text(tr("overlay.reply.placeholder"))
+        self._reply_lang_dd.set_tooltip_text(tr("overlay.reply.into"))
+        self._copy_btn.set_label(tr("overlay.reply.copy"))
+        self._copy_btn.set_tooltip_text(tr("overlay.reply.copy"))
+        self._update_filter_labels()
+
+    def _update_filter_labels(self) -> None:
+        for name, btn in getattr(self, "_filter_buttons", {}).items():
+            btn.set_label(tr(_FILTER_LABELS[name]))
 
     def apply_appearance(self) -> None:
         """(Re)build the overlay CSS from current config — opacity, font size.

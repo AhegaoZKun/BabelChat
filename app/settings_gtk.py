@@ -441,3 +441,6 @@ class SettingsWindowGtk:
 
         if self._on_saved is not None:
             self._on_saved(c)
+        # The dialog's labels were created in the old language. Close it after
+        # save so the next opening is rebuilt with the newly selected language.
+        self._win.close()
