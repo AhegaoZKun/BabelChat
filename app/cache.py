@@ -148,6 +148,21 @@ class TranslationCache:
             logger.info("Cleaned up %d expired translations", deleted)
         return deleted
 
+    def clear(self) -> int:
+        """Delete every cached translation. Returns how many rows went.
+
+        The cache stores the source text verbatim, which means it holds other
+        players' messages for as long as the TTL. Someone who wants that gone
+        should not have to find and delete a SQLite file.
+        """
+        with self._lock:
+            cursor = self._conn.execute("DELETE FROM translations")
+            self._conn.commit()
+            deleted = cursor.rowcount
+            self._memory.clear()
+        logger.info("Cleared %d cached translations", deleted)
+        return deleted
+
     def stats(self) -> dict[str, int]:
         """Return cache statistics."""
         with self._lock:

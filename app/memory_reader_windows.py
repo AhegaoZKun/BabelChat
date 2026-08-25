@@ -13,207 +13,55 @@ Falls back to pure-Python pymem scanner if the DLL is not found.
 
 from __future__ import annotations
 
-import contextlib
-import ctypes
 import logging
-import pathlib
 import re
-import sys
 import threading
 import time
 from collections.abc import Callable
 
+from app import debug_log
+from app.addon_protocol import (
+    bare_log_line,
+    is_system_noise,
+    make_synthetic_log_line,
+)
+
+# Re-exported deliberately: ACCESS_DENIED and PROCESS_GONE are this reader's
+# vocabulary even though the scanner is what produces them, and the overlay and
+# the tests read them from here.
+from app.memory_scan_windows import (  # noqa: F401
+    ACCESS_DENIED,
+    CHAT_LOCKED,
+    NO_BUFFER,
+    PROCESS_GONE,
+    WOW_PROCESS_NAMES,
+    _find_wow_pid,
+    _pymem_find_buffer,
+    _rust_find_buffer,
+    _rust_lib,
+    describe_access,
+    scanner_state,
+)
+
 logger = logging.getLogger(__name__)
 
-# ── DLL loading ───────────────────────────────────────────────────────────────
+#: How long a buffer may be absent before the app stops looking busy and says
+#: so. Long enough to cover a character-select screen and a zone load, short
+#: enough that nobody spends an evening guessing.
+_SILENCE_BEFORE_COMPLAINT = 45.0
 
-_DLL_NAMES = [
-    "babelchat_scanner_win.dll",
-    str(pathlib.Path(__file__).parent / "babelchat_scanner_win.dll"),
-    str(pathlib.Path(__file__).parent.parent / "babelchat_scanner_win.dll"),
-]
+#: How often to write the native scanner's own view of things into the log,
+#: counted in fruitless polls. Four polls a second, so roughly every fifteen
+#: seconds of silence — which is when anyone would want to know.
+_STATE_EVERY_N_MISSES = 60
 
-
-def _load_rust_lib() -> ctypes.CDLL | None:
-    for name in _DLL_NAMES:
-        try:
-            lib = ctypes.CDLL(name)
-            lib.find_and_read_buffer.restype = ctypes.c_int32
-            lib.find_and_read_buffer.argtypes = [
-                ctypes.c_int32,  # pid
-                ctypes.c_int32,  # min_seq
-                ctypes.c_char_p,  # out_buf
-                ctypes.c_int32,  # out_len
-            ]
-            logger.info("Loaded Rust scanner: %s", name)
-            return lib
-        except OSError:
-            continue
-    return None
-
-
-_rust_lib: ctypes.CDLL | None = _load_rust_lib()
-_OUT_BUF_SIZE = 131072  # 128KB
-
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-MARKER_START = b"__WCT_BUF_"
-MARKER_START_LEGACY = b"__WCT_BUF__"
-MARKER_END = b"__WCT_END__"
 POLL_INTERVAL = 0.25
 ATTACH_RETRY_INTERVAL = 5.0
 SCAN_RETRY_INTERVAL = 2.0
-MAX_BUF_READ = 65536
-
-RAW_LOG_FILE = str(
-    (pathlib.Path.home() / "babelchat_raw.log") if getattr(sys, "frozen", False) else pathlib.Path("babelchat_raw.log")
-)
-
-WOW_PROCESS_NAMES = ["Wow.exe", "WowT.exe", "WowB.exe"]
 _MAX_DELIVERED_PAYLOADS = 200
 
-# ── Process discovery ─────────────────────────────────────────────────────────
-
-
-def _find_wow_pid() -> int | None:
-    """Find WoW PID using Windows EnumProcesses / tasklist fallback."""
-    import subprocess
-
-    try:
-        out = subprocess.check_output(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        ).decode("utf-8", errors="replace")
-        for line in out.splitlines():
-            parts = [p.strip('"') for p in line.split('","')]
-            if len(parts) >= 2:
-                name = parts[0]
-                if name in WOW_PROCESS_NAMES:
-                    try:
-                        return int(parts[1])
-                    except ValueError:
-                        continue
-    except Exception:
-        pass
-
-    # Fallback: pymem
-    try:
-        import pymem
-        import pymem.exception
-
-        for proc_name in WOW_PROCESS_NAMES:
-            try:
-                pm = pymem.Pymem(proc_name)
-                pid = pm.process_id
-                pm.close_process()
-                return pid
-            except pymem.exception.ProcessNotFound:
-                continue
-    except ImportError:
-        pass
-
-    return None
-
-
-def _is_system_noise(text: str) -> bool:
-    t = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", text.lstrip())
-    if t.startswith(("<DBM>", "<BW>", "<WA>", "|TInterface", "[WCT]", "[MoveAny")):
-        return True
-    if "|Hachievement:" in t:
-        return True
-    return any(phrase in t for phrase in ("has earned", "achievement", "creates:", "создает:"))
-
-
-# ── Rust scanner call ─────────────────────────────────────────────────────────
-
-
-def _rust_find_buffer(pid: int, min_seq: int) -> str | None:
-    if _rust_lib is None:
-        return None
-    buf = ctypes.create_string_buffer(_OUT_BUF_SIZE)
-    n = _rust_lib.find_and_read_buffer(pid, min_seq, buf, _OUT_BUF_SIZE)
-    if n <= 0:
-        return None
-    return buf.raw[:n].decode("utf-8", errors="replace")
-
-
-# ── Pure-Python fallback scanner ──────────────────────────────────────────────
-
-
-def _pymem_find_buffer(pid: int, min_seq: int) -> str | None:
-    """Fallback: use pymem if Rust DLL not available."""
-    try:
-        import pymem
-        import pymem.exception
-        import pymem.pattern
-
-        for proc_name in WOW_PROCESS_NAMES:
-            try:
-                pm = pymem.Pymem(proc_name)
-                break
-            except pymem.exception.ProcessNotFound:
-                continue
-        else:
-            return None
-
-        addrs = pymem.pattern.pattern_scan_all(
-            pm.process_handle,
-            rb"__WCT_BUF_",
-            return_multiple=True,
-        )
-        best_content = None
-        best_seq = min_seq
-        for a in addrs or []:
-            try:
-                raw = pm.read_bytes(a, MAX_BUF_READ)
-            except Exception:
-                continue
-            co = _find_content_start(raw)
-            if co == -1:
-                continue
-            end_idx = raw.find(MARKER_END, co)
-            if end_idx == -1:
-                continue
-            content = raw[co:end_idx]
-            seq = _extract_max_seq(content)
-            if seq > best_seq:
-                best_seq = seq
-                best_content = content.decode("utf-8", errors="replace")
-        pm.close_process()
-        return best_content
-    except Exception:
-        return None
-
-
-def _find_content_start(raw: bytes) -> int:
-    if raw.startswith(b"__WCT_BUF_"):
-        end = raw.find(b"__", 10)
-        if end != -1:
-            return end + 2
-    if raw.startswith(MARKER_START_LEGACY):
-        return len(MARKER_START_LEGACY)
-    return -1
-
-
-def _extract_max_seq(content: bytes) -> int:
-    max_seq = 0
-    for line in content.split(b"\n"):
-        line = line.strip()
-        if not line:
-            continue
-        idx = line.find(b"|")
-        if idx <= 0:
-            continue
-        try:
-            seq = int(line[:idx])
-            if seq > max_seq:
-                max_seq = seq
-        except ValueError:
-            continue
-    return max_seq
-
-
 # ── Main reader class ─────────────────────────────────────────────────────────
+
 
 
 class WoWAddonBufReader:
@@ -229,6 +77,16 @@ class WoWAddonBufReader:
         self._thread: threading.Thread | None = None
         self._pid: int | None = None
         self._attached = False
+        #: Why nothing is arriving, when the answer is not "WoW is not running".
+        #: Read by the overlay, which used to have no way to tell a working
+        #: reader from a refused one.
+        self._problem: str = ""
+        self._first_miss_at: float = 0.0
+        #: Has the addon's buffer ever been found in this process? An empty
+        #: scan means something different before and after that.
+        self._buffer_ever_seen: bool = False
+        #: The addon reported that the game is refusing it chat text.
+        self._chat_locked: bool = False
         self._last_seq = 0
         self._player_name: str = ""
         self._delivered_payloads: set[str] = set()
@@ -242,12 +100,19 @@ class WoWAddonBufReader:
         return self._attached
 
     @property
+    def problem(self) -> str:
+        """ "" when nothing is wrong, otherwise why no message is arriving."""
+        # A live lock outranks nothing else: everything above it means the app
+        # cannot read, and this one means there is nothing to read. But it must
+        # survive a successful poll, which clears `_problem`, or it would be
+        # reported once and then forgotten while the key is still running.
+        return self._problem or (CHAT_LOCKED if self._chat_locked else "")
+
+    @property
     def player_name(self) -> str:
         return self._player_name
 
     def start(self) -> None:
-        with contextlib.suppress(OSError):
-            open(RAW_LOG_FILE, "w").close()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -284,10 +149,23 @@ class WoWAddonBufReader:
     def _attach(self) -> None:
         pid = _find_wow_pid()
         if pid is None:
+            self._problem = ""  # WoW simply is not running; that is not a fault
             raise RuntimeError("WoW process not found")
+
+        # Finding the process is not the same as being allowed to read it, and
+        # treating them as one is what let the overlay show a green tick beside
+        # a reader that could never deliver a message.
+        refusal = describe_access(pid)
+        if refusal:
+            self._problem = refusal
+            raise RuntimeError(refusal)
+
         self._pid = pid
         self._attached = True
+        self._problem = ""
         self._consecutive_misses = 0
+        self._first_miss_at = 0.0
+        self._buffer_ever_seen = False
         logger.info("Attached to WoW PID %d", pid)
 
     def _detach(self) -> None:
@@ -320,15 +198,50 @@ class WoWAddonBufReader:
 
         if content is None:
             self._consecutive_misses += 1
+            # Only when the buffer has NEVER been seen since attaching. The
+            # scanner returns the same None for "no buffer in this process" and
+            # for "nothing in it newer than what you already have", so counting
+            # every quiet minute as a fault made the app accuse the addon during
+            # any lull in chat — which it did, on the first run, while the addon
+            # was working and had already handed over the player's name.
+            if self._consecutive_misses % _STATE_EVERY_N_MISSES == 0:
+                logger.debug("Scanner: %s", scanner_state())
+
+            now = time.monotonic()
+            if self._first_miss_at == 0.0:
+                self._first_miss_at = now
+            elif (
+                not self._problem
+                and not self._buffer_ever_seen
+                and now - self._first_miss_at > _SILENCE_BEFORE_COMPLAINT
+            ):
+                self._problem = NO_BUFFER
+                logger.warning(
+                    "No addon buffer in WoW's memory after %.0fs — is the addon enabled for this character? (%s)",
+                    now - self._first_miss_at,
+                    scanner_state(),
+                )
             return
 
         self._consecutive_misses = 0
+        self._first_miss_at = 0.0
+        self._problem = ""
+        self._buffer_ever_seen = True
         self._deliver_new_messages(content)
 
     def _deliver_new_messages(self, content: str) -> None:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         if not lines:
             return
+
+        # Expire the post-reload suppression list BEFORE anything is filtered
+        # against it. Clearing it at the end of the method instead meant the
+        # first message to arrive after the sixty seconds were up was still
+        # matched against the old list and dropped — and in guild chat the texts
+        # in that list are "привет" and "ку", so the message it cost was a real
+        # one.
+        if self._pre_reset_texts and time.monotonic() > self._pre_reset_expire:
+            self._pre_reset_texts.clear()
 
         max_seq_in_buf = 0
         for line in lines:
@@ -366,6 +279,16 @@ class WoWAddonBufReader:
 
             if kind == "META":
                 meta_parts = payload.split("|", 1)
+                if meta_parts[0] == "LOCKED" and len(meta_parts) > 1:
+                    locked = meta_parts[1].strip() == "1"
+                    if locked != self._chat_locked:
+                        self._chat_locked = locked
+                        logger.info(
+                            "Chat is locked by the game (a keystone run is live)"
+                            if locked
+                            else "Chat is readable again"
+                        )
+                    continue
                 if meta_parts[0] == "PLAYER" and len(meta_parts) > 1:
                     name = meta_parts[1].strip()
                     if name and name != self._player_name:
@@ -396,110 +319,46 @@ class WoWAddonBufReader:
                 event = ""
                 author = ""
                 msg_text = payload
-                dict_translated_text = ""
 
-                if kind == "DICT":
-                    sub_parts = payload.split("|", 2)
-                    if len(sub_parts) >= 3:
-                        event = sub_parts[0]
-                        author = sub_parts[1]
-                        text_and_translated = sub_parts[2]
-                        if "\t" in text_and_translated:
-                            msg_text, dict_translated_text = text_and_translated.split("\t", 1)
-                        else:
-                            msg_text = text_and_translated
-                else:
-                    sub_parts = payload.split("|", 2)
-                    if len(sub_parts) >= 3:
-                        event = sub_parts[0]
-                        author = sub_parts[1]
-                        msg_text = sub_parts[2]
+                # RAW and DICT carry identical fields; `kind` only records
+                # whether the addon also glossed the line in chat. The gloss
+                # itself is no longer transmitted — this pipeline discards it
+                # regardless (see _on_new_line), and the newline DictEngine
+                # embedded in it used to split the record in half.
+                sub_parts = payload.split("|", 2)
+                if len(sub_parts) >= 3:
+                    event = sub_parts[0]
+                    author = sub_parts[1]
+                    msg_text = sub_parts[2]
+                    # Addon 3.3.0 and earlier appended the gloss after a tab; 3.4.0
+                    # does not.
+                    # The addon is installed by hand, so an app updated ahead of
+                    # it still receives those records; keeping the tail would
+                    # send the gloss to the translation API and print it in the
+                    # overlay. Current records never contain a tab — the addon
+                    # strips them — so this only ever fires on a legacy buffer.
+                    tab = msg_text.find("	")
+                    if tab != -1:
+                        msg_text = msg_text[:tab]
 
-                try:
-                    with open(RAW_LOG_FILE, "a", encoding="utf-8") as f:
-                        t = time.localtime()
-                        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                        f.write(f"[{ts}] #{seq} [{kind}] {event}|{author}|{msg_text}\n")
-                except OSError:
-                    pass
+                debug_log.record(seq, kind, event, author, msg_text)
 
-                if _is_system_noise(msg_text):
+                if is_system_noise(msg_text):
                     continue
 
                 msg_text = re.sub(r"^\d{1,2}:\d{2}:\d{2}\s+", "", msg_text)
 
                 if event:
-                    log_line = self._make_synthetic_log_line(event, author, msg_text)
+                    log_line = make_synthetic_log_line(event, author, msg_text)
                     if not log_line:
-                        t = time.localtime()
-                        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                        log_line = f"{ts}  {msg_text}"
+                        log_line = bare_log_line(msg_text)
                 else:
-                    t = time.localtime()
-                    ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-                    log_line = f"{ts}  {msg_text}"
+                    log_line = bare_log_line(msg_text)
 
-                if kind == "DICT":
-                    self._on_new_line(log_line, dict_translated=True, dict_text=dict_translated_text)
-                else:
-                    self._on_new_line(log_line)
-
-        if self._pre_reset_texts and time.monotonic() > self._pre_reset_expire:
-            self._pre_reset_texts.clear()
+                self._on_new_line(log_line, dict_translated=(kind == "DICT"))
 
         if new_count > 0:
             self._last_new_msg_time = time.monotonic()
-
-    @staticmethod
-    def _make_synthetic_log_line(channel: str, author: str, text: str) -> str | None:
-        # Public/numbered channels arrive as "CHANNEL:<Name>" (e.g.
-        # "CHANNEL:Trade - City"). Classify the name into a log channel so the
-        # parser/filter can treat Trade / Services / General / LFG distinctly.
-        if channel.startswith("CHANNEL:"):
-            name = channel.split(":", 1)[1].strip().lower()
-            if "trade" in name:
-                log_channel = "Trade"
-            elif "service" in name or "comercio" in name:
-                log_channel = "Services"
-            elif "lookingforgroup" in name or "looking for group" in name or "lfg" in name:
-                log_channel = "LookingForGroup"
-            elif "general" in name:
-                log_channel = "General"
-            else:
-                log_channel = "General"
-            t = time.localtime()
-            ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-            who = author if author else "Unknown"
-            return f"{ts}  [{log_channel}] {who}: {text}"
-
-        _ADDON_CHANNEL_TO_LOG = {
-            "SAY": "Say",
-            "YELL": "Yell",
-            "PARTY": "Party",
-            "PARTY_LEADER": "Party Leader",
-            "RAID": "Raid",
-            "RAID_LEADER": "Raid Leader",
-            "RAID_WARNING": "Raid Warning",
-            "GUILD": "Guild",
-            "OFFICER": "Officer",
-            "INSTANCE_CHAT": "Instance",
-            "INSTANCE_CHAT_LEADER": "Instance Leader",
-            "CHANNEL": "Say",
-            "EMOTE": "Say",
-            "BATTLEGROUND": "Instance",
-            "BATTLEGROUND_LEADER": "Instance Leader",
-        }
-        t = time.localtime()
-        ts = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-        if channel in ("WHISPER", "BN_WHISPER"):
-            return f"{ts}  [{author}] whispers: {text}"
-        if channel == "WHISPER_INFORM":
-            return f"{ts}  To [{author}]: {text}"
-        log_channel = _ADDON_CHANNEL_TO_LOG.get(channel)
-        if log_channel is None:
-            return None
-        who = author if author else "Unknown"
-        return f"{ts}  [{log_channel}] {who}: {text}"
 
 
 class MemoryChatWatcher:
@@ -518,6 +377,10 @@ class MemoryChatWatcher:
     @property
     def is_attached(self) -> bool:
         return self._reader.is_attached
+
+    @property
+    def problem(self) -> str:
+        return self._reader.problem
 
     @property
     def player_name(self) -> str:

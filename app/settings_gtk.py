@@ -17,9 +17,11 @@ from collections.abc import Callable  # noqa: E402
 import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gtk, PangoCairo  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk, PangoCairo  # noqa: E402
 
-from app.config import AppConfig  # noqa: E402
+from app.config import CHANNEL_TOGGLES, AppConfig  # noqa: E402
+from app.i18n import UI_LANGUAGES, tr  # noqa: E402
+from app.languages import LANGUAGES  # noqa: E402
 from app.overlay_theme import (  # noqa: E402
     PRESET_LABELS,
     PRESET_ORDER,
@@ -28,23 +30,16 @@ from app.overlay_theme import (  # noqa: E402
     SLOT_ORDER,
     resolve_theme,
 )
+from app.translators import all_providers  # noqa: E402
 
-# (label, attribute) pairs for the channel checkboxes.
-_CHANNELS: list[tuple[str, str]] = [
-    ("Say", "channels_say"),
-    ("Yell", "channels_yell"),
-    ("Party", "channels_party"),
-    ("Raid", "channels_raid"),
-    ("Guild", "channels_guild"),
-    ("Whisper", "channels_whisper"),
-    ("Instance", "channels_instance"),
-    ("Trade", "channels_trade"),
-    ("General", "channels_general"),
-    ("Services", "channels_services"),
-    ("LFG", "channels_lfg"),
-]
+# Languages messages can be translated into, named in themselves. The Qt
+# dialog has always shown all of them; this list held eleven bare codes.
+_LANGS = list(LANGUAGES)
 
-_LANGS = ["EN", "RU", "ES", "DE", "FR", "PT", "IT", "PL", "ZH", "KO", "JA"]
+# Languages the interface itself exists in. Offering more than these was a
+# checkbox that silently did nothing: anything outside RU/EN/ES falls back to
+# Russian in `tr`, so eight of the eleven entries here changed nothing at all.
+_UI_LANGS = list(UI_LANGUAGES)
 
 _DEFAULT_FONT = "System default"
 # Curated overlay-friendly fonts; only the ones actually installed are shown.
@@ -95,7 +90,7 @@ class SettingsWindowGtk:
         self._win = Gtk.Window()
         if app is not None:
             self._win.set_application(app)
-        self._win.set_title("BabelChat Settings")
+        self._win.set_title(tr("settings.title"))
         self._win.set_default_size(460, 640)
         self._build()
 
@@ -114,49 +109,68 @@ class SettingsWindowGtk:
         root.set_margin_end(16)
 
         # Channels
-        root.append(self._section("Channels"))
+        root.append(self._section(tr("settings.channels_group")))
         grid = Gtk.Grid()
         grid.set_row_spacing(4)
         grid.set_column_spacing(16)
-        for i, (label, attr) in enumerate(_CHANNELS):
-            cb = Gtk.CheckButton(label=label)
-            cb.set_active(bool(getattr(self._config, attr)))
-            self._checks[attr] = cb
+        for i, toggle in enumerate(CHANNEL_TOGGLES):
+            cb = Gtk.CheckButton(label=tr(toggle.label))
+            cb.set_active(bool(getattr(self._config, toggle.field)))
+            self._checks[toggle.field] = cb
             grid.attach(cb, i % 2, i // 2, 1, 1)
         root.append(grid)
 
         # Languages
-        root.append(self._section("Languages"))
-        self._own = self._combo_row(root, "Own language", self._config.own_language)
-        self._target = self._combo_row(root, "Target language", self._config.target_language)
-        self._ui = self._combo_row(root, "UI language", self._config.ui_language)
+        root.append(self._section(tr("settings.lang_group")))
+        self._own = self._combo_row(root, tr("settings.lang.own"), self._config.own_language)
+        self._target = self._combo_row(root, tr("settings.lang.target"), self._config.target_language)
+        self._ui = self._combo_row(root, tr("settings.lang.ui"), self._config.ui_language, options=_UI_LANGS)
 
         # Translation API
-        root.append(self._section("Translation API"))
+        root.append(self._section(tr("settings.api_group")))
         self._priority = self._combo_row(
-            root, "Priority", self._config.translator_priority, options=["deepl", "microsoft"]
+            root,
+            tr("settings.api.preferred"),
+            self._config.translator_priority,
+            options=[spec.id for spec in all_providers()],
         )
-        self._deepl = self._entry_row(root, "DeepL API key", self._config.deepl_api_key, secret=True)
-        self._ms_key = self._entry_row(root, "Microsoft API key", self._config.microsoft_api_key, secret=True)
-        self._ms_region = self._entry_row(root, "Microsoft region", self._config.microsoft_region)
+        # One row per credential the provider declares — nothing here names a
+        # provider, so a new one appears in these settings on its own.
+        saved = self._config.providers or {}
+        self._provider_entries: dict[str, dict[str, object]] = {}
+        for spec in all_providers():
+            values = saved.get(spec.id, {})
+            if spec.guide:
+                guide = Gtk.LinkButton(uri=spec.guide, label=f"{spec.display_name}: {tr('provider.guide')}")
+                guide.set_halign(Gtk.Align.START)
+                root.append(guide)
+            self._provider_entries[spec.id] = {
+                pfield.key: self._entry_row(
+                    root,
+                    f"{spec.display_name} — {pfield.label_text()}",
+                    values.get(pfield.key, ""),
+                    secret=pfield.secret,
+                )
+                for pfield in spec.fields
+            }
 
         # Appearance
-        root.append(self._section("Appearance"))
-        self._opacity = self._scale_row(root, "Opacity", self._config.overlay_opacity, 40, 255)
-        self._font = self._scale_row(root, "Font size", self._config.overlay_font_size, 8, 28)
+        root.append(self._section(tr("settings.appearance_group")))
+        self._opacity = self._scale_row(root, tr("settings.overlay.opacity"), self._config.overlay_opacity, 40, 255)
+        self._font = self._scale_row(root, tr("settings.overlay.font_size"), self._config.overlay_font_size, 8, 28)
         self._build_appearance(root)
 
         # Behavior
-        root.append(self._section("Behavior"))
-        self._skip_own = Gtk.CheckButton(label="Skip my own messages")
+        root.append(self._section(tr("settings.behavior_group")))
+        self._skip_own = Gtk.CheckButton(label=tr("settings.overlay.skip_own_messages"))
         self._skip_own.set_active(bool(self._config.skip_own_messages))
         root.append(self._skip_own)
 
         # Actions
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        save = Gtk.Button(label="Save")
+        save = Gtk.Button(label=tr("settings.save"))
         save.connect("clicked", self._on_save)
-        close = Gtk.Button(label="Close")
+        close = Gtk.Button(label=tr("settings.close"))
         close.connect("clicked", lambda _b: self._win.close())
         self._status = Gtk.Label(label="")
         self._status.set_hexpand(True)
@@ -178,7 +192,7 @@ class SettingsWindowGtk:
         # Preset dropdown
         labels = [PRESET_LABELS[p] for p in PRESET_ORDER]
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        lbl = Gtk.Label(label="Theme preset")
+        lbl = Gtk.Label(label=tr("settings.theme_preset"))
         lbl.set_xalign(0.0)
         lbl.set_size_request(140, -1)
         self._preset = Gtk.DropDown.new_from_strings(labels)
@@ -190,18 +204,18 @@ class SettingsWindowGtk:
         root.append(row)
 
         # Base colors
-        self._col_bg = self._color_row(root, "Background", theme.bg_color)
-        self._col_ts = self._color_row(root, "Timestamp", theme.timestamp_color)
-        self._col_orig = self._color_row(root, "Original text", theme.original_color)
-        self._col_tl = self._color_row(root, "Translated text", theme.translation_color)
+        self._col_bg = self._color_row(root, tr("settings.color.background"), theme.bg_color)
+        self._col_ts = self._color_row(root, tr("settings.color.timestamp"), theme.timestamp_color)
+        self._col_orig = self._color_row(root, tr("settings.color.original"), theme.original_color)
+        self._col_tl = self._color_row(root, tr("settings.color.translated"), theme.translation_color)
 
         # Corner radius
-        self._radius = self._scale_row(root, "Corner radius", theme.corner_radius, 0, 24)
+        self._radius = self._scale_row(root, tr("settings.overlay.corner_radius"), theme.corner_radius, 0, 24)
         self._radius.connect("value-changed", lambda _s: self._mark_custom())
 
         # Font family: dropdown of common installed fonts, still free-typable
         frow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        flbl = Gtk.Label(label="Font")
+        flbl = Gtk.Label(label=tr("settings.overlay.font"))
         flbl.set_xalign(0.0)
         flbl.set_size_request(140, -1)
         self._font_family = Gtk.ComboBoxText.new_with_entry()
@@ -221,7 +235,7 @@ class SettingsWindowGtk:
         root.append(frow)
 
         # Title bar button colors
-        bexp = Gtk.Expander(label="Title bar colors")
+        bexp = Gtk.Expander(label=tr("settings.titlebar_colors"))
         bgrid = Gtk.Grid()
         bgrid.set_row_spacing(4)
         bgrid.set_column_spacing(8)
@@ -243,7 +257,7 @@ class SettingsWindowGtk:
         root.append(bexp)
 
         # Per-channel colors
-        exp = Gtk.Expander(label="Channel colors")
+        exp = Gtk.Expander(label=tr("settings.channel_colors"))
         grid = Gtk.Grid()
         grid.set_row_spacing(4)
         grid.set_column_spacing(8)
@@ -386,10 +400,20 @@ class SettingsWindowGtk:
         c.own_language = self._dd_value(self._own)
         c.target_language = self._dd_value(self._target)
         c.ui_language = self._dd_value(self._ui)
+        # Applied immediately, the way the Qt dialog does it: a language you
+        # picked and saved that does not take hold reads as the setting being
+        # broken.
+        tr.set_language(c.ui_language)
         c.translator_priority = self._dd_value(self._priority)
-        c.deepl_api_key = self._deepl.get_text()
-        c.microsoft_api_key = self._ms_key.get_text()
-        c.microsoft_region = self._ms_region.get_text()
+        providers: dict[str, dict[str, str]] = {}
+        for spec in all_providers():
+            entries = self._provider_entries.get(spec.id, {})
+            values = {key: entry.get_text().strip() for key, entry in entries.items()}
+            values = {key: value for key, value in values.items() if value}
+            # Keyless providers are configured by existing — see the Qt copy.
+            if values or spec.keyless:
+                providers[spec.id] = values
+        c.providers = providers
         c.overlay_opacity = int(self._opacity.get_value())
         c.overlay_font_size = int(self._font.get_value())
         c.overlay_theme = PRESET_ORDER[self._preset.get_selected()]
@@ -409,9 +433,10 @@ class SettingsWindowGtk:
 
         try:
             c.save()
-            self._status.set_markup('<span foreground="#33aa33">Saved.</span>')
+            self._status.set_markup(f'<span foreground="#33aa33">{tr("settings.saved")}</span>')
         except Exception as exc:  # noqa: BLE001
-            self._status.set_markup(f'<span foreground="#cc3333">Save failed: {exc}</span>')
+            message = GLib.markup_escape_text(tr("settings.save_failed", detail=exc))
+            self._status.set_markup(f'<span foreground="#cc3333">{message}</span>')
             return
 
         if self._on_saved is not None:

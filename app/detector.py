@@ -31,7 +31,54 @@ _CYRILLIC_THRESHOLD = 0.5
 
 # Cyrillic sibling languages: lingua often confuses short Russian text
 # with Bulgarian or Ukrainian. On RU servers 99%+ Cyrillic is Russian.
-_CYRILLIC_SIBLING_LANGUAGES = frozenset({Language.BULGARIAN, Language.UKRAINIAN})
+#: Languages lingua reaches for when a short Russian word is not quite Russian
+#: enough. A Russian-speaking user gets nothing from having these translated:
+#: they read them already, and the detection is usually wrong anyway — "сука"
+#: came back as Belarusian and was sent to a translation service, which then
+#: refused it.
+#: The languages the detector is built from.
+#:
+#: All seventy-five cost 862 MB and 5.8 seconds to load, measured, and this app
+#: builds two detectors — most of the gigabyte it occupied at rest, and most of
+#: the wait before the overlay appeared. Twenty cost 305 MB and 1.8 seconds.
+#:
+#: The list is not arbitrary: it is every language the app can translate between
+#: (app/main.py's _LANG_CODE_TO_LINGUA), plus the ones a Russian-speaking realm
+#: actually produces and the Cyrillic neighbours lingua reaches for when a short
+#: Russian word is not quite Russian enough. Anything outside it is not lost —
+#: lingua answers "no idea", and an unidentified message is sent to the
+#: translation service to auto-detect, which is what it does best.
+SUPPORTED_LANGUAGES = (
+    Language.ENGLISH,
+    Language.RUSSIAN,
+    Language.GERMAN,
+    Language.FRENCH,
+    Language.SPANISH,
+    Language.ITALIAN,
+    Language.PORTUGUESE,
+    Language.POLISH,
+    Language.DUTCH,
+    Language.UKRAINIAN,
+    Language.TURKISH,
+    Language.CHINESE,
+    Language.JAPANESE,
+    Language.KOREAN,
+    # Not translation targets — these three are here because lingua reaches for
+    # them on short Russian text, and the detector has to recognise the mistake
+    # to correct it. See _CYRILLIC_SIBLING_LANGUAGES.
+    Language.BELARUSIAN,
+    Language.BULGARIAN,
+    Language.SERBIAN,
+    # Common on European realms, and close enough to the above that leaving them
+    # out makes the neighbours worse rather than better.
+    Language.CZECH,
+    Language.SWEDISH,
+    Language.ROMANIAN,
+)
+
+_CYRILLIC_SIBLING_LANGUAGES = frozenset(
+    {Language.BULGARIAN, Language.UKRAINIAN, Language.BELARUSIAN}
+)
 
 
 def _cyrillic_ratio(text: str) -> float:
@@ -56,13 +103,13 @@ class ChatLanguageDetector:
     def __init__(self, own_language: Language = Language.ENGLISH) -> None:
         self._own_language = own_language
         self._detector = (
-            LanguageDetectorBuilder.from_all_languages()
+            LanguageDetectorBuilder.from_languages(*SUPPORTED_LANGUAGES)
             .with_minimum_relative_distance(0.25)
             .build()
         )
         # Lenient detector for short text — lower confidence threshold
         self._detector_lenient = (
-            LanguageDetectorBuilder.from_all_languages()
+            LanguageDetectorBuilder.from_languages(*SUPPORTED_LANGUAGES)
             .with_minimum_relative_distance(0.1)
             .build()
         )

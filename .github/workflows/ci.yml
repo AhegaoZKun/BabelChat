@@ -19,6 +19,33 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # The scanner is a build artifact and deliberately not tracked, so a
+      # checkout does not have one — and the test that says "the Windows build
+      # ships this library" failed on every run for want of a file nothing here
+      # produced. Building it also makes this the only thing that would notice
+      # the crate stopped compiling.
+      - name: Cache the Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            babelchat_scanner_win/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('babelchat_scanner_win/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Build the native scanner
+        # -D warnings, because a warning nobody is shown is a warning nobody
+        # fixes: the unused-import one this step first produced had been sitting
+        # in the crate for as long as nothing built it.
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: |
+          cargo build --release --manifest-path babelchat_scanner_win/Cargo.toml
+          $built = "babelchat_scanner_win/target/release/babelchat_scanner_win.dll"
+          if (-not (Test-Path $built)) { throw "cargo reported success but produced no $built" }
+          Copy-Item $built -Destination app/
+
       - name: Lint
         run: ruff check app/ tests/ .github/scripts/
 
@@ -28,8 +55,10 @@ jobs:
       # A green pytest cannot tell "all tests pass" from "the tests are gone".
       # Ratchet: raising MIN_TESTS is free, lowering it has to be deliberate.
       # The number is junit's `tests` attribute — passed plus skipped, which is
-      # one more than pytest's "collected N items" line.
+      # one more than pytest's "collected N items" line. tests/test_suite_deps.py
+      # is what keeps this figure honest: without it a missing dependency turns
+      # tests into skips, and skips still count here.
       - name: Guard test count
         env:
-          MIN_TESTS: "169"
+          MIN_TESTS: "1015"
         run: python .github/scripts/check_test_count.py report.xml ${{ env.MIN_TESTS }}

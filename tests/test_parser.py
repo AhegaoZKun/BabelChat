@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.parser import _CHANNEL_MAP, Channel, parse_addon_line, parse_line
+from app.parser import _CHANNEL_MAP, Channel, parse_line
 
 
 class TestParseChannelMessages:
@@ -257,35 +257,4 @@ class TestParserRobustness:
     def test_missing_brackets(self):
         line = "2/15 21:30:45.123  Party Player-Server: hello"
         msg = parse_line(line)
-        assert msg is None
-
-
-class TestParseAddonLine:
-    """Tests for parse_addon_line (v2.1 and legacy formats)."""
-
-    def test_raw_v21_format(self):
-        line = "42|RAW|SAY|Thrall-Sargeras|Hello world"
-        msg, seq = parse_addon_line(line)
-        assert seq == 42
-        assert msg is not None
-        assert msg.channel == Channel.SAY
-        assert msg.author == "Thrall"
-        assert msg.text == "Hello world"
-
-    def test_dict_v21_format(self):
-        line = "5|DICT|GUILD|Player-Server|some text with terms"
-        msg, seq = parse_addon_line(line)
-        assert seq == 5
-        assert msg is not None
-        assert msg.channel == Channel.GUILD
-
-    def test_invalid_seq(self):
-        line = "abc|RAW|SAY|Player|hello"
-        msg, seq = parse_addon_line(line)
-        assert msg is None
-        assert seq == 0
-
-    def test_too_few_parts(self):
-        line = "1|RAW"
-        msg, seq = parse_addon_line(line)
         assert msg is None

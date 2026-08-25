@@ -209,34 +209,132 @@ jobs:
           draft: false
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
 
-  # ── CurseForge Upload ──────────────────────────────────────
-  # Uncomment after creating project on CurseForge and adding secrets:
-  #   CF_API_KEY: CurseForge API token (Authors > API Tokens)
+  # ── Addon: CurseForge and Wago ─────────────────────────────
   #
-  # curseforge:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: ${{ !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.event.inputs.tag || github.ref }}
+  # BigWigsMods/packager is the standard tool for WoW addons. It reads
+  # ## Interface, ## X-Curse-Project-ID and ## X-Wago-ID straight out of the
+  # TOC, so the game versions and the project ids live in exactly one place —
+  # the file that has to be correct anyway for the addon to load at all. The job
+  # this replaced carried its own copy of the game version and was two patches
+  # stale before anyone ran it.
   #
-  #     - name: Download addon artifact
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: release-package
-  #         path: release/
+  # Repository secrets, both optional:
+  #   CF_API_TOKEN    CurseForge → Authors → API Tokens
+  #   WAGO_API_TOKEN  wago.io → account settings → API keys
   #
-  #     - name: Upload to CurseForge
-  #       uses: itsmeow/curseforge-upload@v3
-  #       with:
-  #         token: ${{ secrets.CF_API_KEY }}
-  #         project_id: YOUR_PROJECT_ID_HERE
-  #         game_endpoint: wow
-  #         file_path: release/BabelChat-Addon.zip
-  #         display_name: "BabelChat ${{ github.ref_name }}"
-  #         game_versions: "Retail,12.0.5"
-  #         release_type: release
-  #         changelog: "See https://github.com/Yumash/BabelChat/releases"
-  #         changelog_type: text
+  # With neither set the packager runs with -d: it builds the zip and proves the
+  # addon packages cleanly, and uploads nothing. A store whose id is missing
+  # from the TOC is skipped the same way, so this is safe to run before either
+  # project exists.
+  #
+  # GITHUB_API_TOKEN is deliberately not passed: the `release` job above already
+  # creates the GitHub release, and handing the packager a token would have it
+  # create a second one.
+  #
+  # See docs/publishing.md.
+  publish-addon:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # The packager builds a changelog from the commits since the previous
+          # tag, and can do neither from a shallow clone.
+          fetch-depth: 0
+
+      # A tag can be created on any commit, including one on a feature branch or
+      # one that was never merged. Publishing that to a store puts a build in
+      # front of players that no review ever saw, and it cannot be taken back —
+      # CurseForge and Wago keep every uploaded file. `github.event.base_ref`
+      # looks like it answers this and does not: it reports the branch the tag
+      # was pushed alongside, which is whatever the pusher happened to have
+      # checked out. Ancestry is the fact.
+      # A job-level `if` on github.ref_name got this wrong twice over. It
+      # listed -beta and -alpha while the release job two jobs up treats -rc as
+      # a prerelease too, so v3.4.0-rc.1 would have been published to both
+      # stores. And on workflow_dispatch github.ref_name is the *branch*, so
+      # dispatching a beta tag from main evaluated contains('main', '-beta') as
+      # false and published the beta. Every other step already reads
+      # `inputs.tag || ref_name`; this reads the same thing, in one place.
+      # Skipped, not failed: a red build on a deliberate beta is a false alarm,
+      # and the next real one gets ignored.
+      - name: Is this a prerelease?
+        id: kind
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [[ "$TAG" =~ -(beta|rc|alpha) ]]; then
+            echo "::notice::$TAG is a prerelease — the stores keep every file ever uploaded, so it is not published there."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refuse to publish from outside main
+        if: steps.kind.outputs.publish == 'true'
+        run: |
+          # checkout with fetch-depth: 0 already fetched every branch, so
+          # origin/main is present. An extra `git fetch --depth=0` is not just
+          # redundant, it aborts: git rejects a depth of zero, and the default
+          # shell is `bash -e`, so the step dies before the guard below runs.
+          # The commit that is checked out, not the one that triggered the run.
+          # On workflow_dispatch those differ: GITHUB_SHA is the branch the
+          # workflow file came from, while the steps below package whatever
+          # `inputs.tag` checked out. Guarding the trigger would have approved
+          # main while publishing something else entirely.
+          sha=$(git rev-parse HEAD)
+          if git merge-base --is-ancestor "$sha" origin/main; then
+            echo "$sha is on main."
+          else
+            echo "::error::$sha is not an ancestor of origin/main."                  "Addons are published from main only — merge first, then tag the merge."
+            exit 1
+          fi
+
+      # Staged by hand rather than by the packager's own copy step. That step
+      # works from an ignore list, and this repository holds the companion app,
+      # its build outputs, the developer's config.json and their logs alongside
+      # the addon — a blacklist one entry out of date uploads whatever it did
+      # not know about to both stores, publicly and permanently. Copying the
+      # addon in explicitly means only the addon can ship.
+      - name: Stage the addon
+        if: steps.kind.outputs.publish == 'true'
+        run: |
+          mkdir -p .release/BabelChat
+          cp -r addon/BabelChat/. .release/BabelChat/
+          cp LICENSE .release/BabelChat/
+          test -f .release/BabelChat/BabelChat.toc
+
+      # The store notes are this release's section of the changelog, not all of
+      # it. Same extraction the GitHub release above uses.
+      - name: Write the release notes the stores will show
+        if: steps.kind.outputs.publish == 'true'
+        run: |
+          awk '/^## \[/{if(found) exit; found=1; next} found{print}' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
+
+      - name: Publish to CurseForge and Wago
+        if: steps.kind.outputs.publish == 'true'
+        uses: BigWigsMods/packager@v2
+        env:
+          # Both names, one secret, and the first one is the one that works.
+          #
+          # release.sh at the v2 tag reads the CurseForge token from CF_API_KEY
+          # and nowhere else; CF_API_TOKEN was added to it after that tag. So
+          # 3.4.0 passed a perfectly good token under a name this version never
+          # looks at, uploaded to Wago — whose variable name did not change —
+          # and skipped CurseForge without a word, in a job that went green.
+          #
+          # CF_API_TOKEN stays for when the action is bumped to a version that
+          # prefers it. Whichever is read, the value is the same secret.
+          CF_API_KEY: ${{ secrets.CF_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        with:
+          # -c packages what was staged above instead of copying the checkout.
+          # -o is not optional alongside it: without it the packager deletes the
+          # package directory before it starts, staged contents and all, and
+          # produces an empty zip that uploads without complaint.
+          args: >-
+            ${{ (secrets.CF_API_TOKEN == '' && secrets.WAGO_API_TOKEN == '') && '-d' || '' }}
+            -c -o
+            -r ${{ github.workspace }}/.release

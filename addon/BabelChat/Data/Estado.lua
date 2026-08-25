@@ -175,5 +175,53 @@ addonTable.EstadoDict = {
         plPL = "Uwolnij ducha",
         svSE = "Släpp andar",
         noNO = "Slipp ånd"
+    },
+    ["combat"] = {
+        esES = "En combate",
+        esMX = "En combate",
+        enUS = "In combat",
+        deDE = "Im Kampf",
+        frFR = "En combat",
+        itIT = "In combattimento",
+        koKR = "전투 중",
+        ptBR = "Em combate",
+        ruRU = "В бою",
+        zhCN = "战斗中",
+        zhTW = "戰鬥中",
+        plPL = "W walce",
+        svSE = "I strid",
+        noNO = "I kamp"
+    },
+    ["ooc"] = {
+        esES = "Fuera de combate",
+        esMX = "Fuera de combate",
+        enUS = "Out of combat",
+        deDE = "Außerhalb des Kampfes",
+        frFR = "Hors combat",
+        itIT = "Fuori combattimento",
+        koKR = "전투 종료",
+        ptBR = "Fora de combate",
+        ruRU = "Вне боя",
+        zhCN = "脱离战斗",
+        zhTW = "脫離戰鬥",
+        plPL = "Poza walką",
+        svSE = "Utanför strid",
+        noNO = "Utenfor kamp"
+    },
+    ["bio"] = {
+        esES = "Pausa (baño)",
+        esMX = "Pausa (baño)",
+        enUS = "Bio break (short AFK)",
+        deDE = "Kurze Pause",
+        frFR = "Pause rapide",
+        itIT = "Pausa bagno",
+        koKR = "잠깐 자리 비움",
+        ptBR = "Pausa rápida",
+        ruRU = "Отойду (перерыв)",
+        zhCN = "去下洗手间",
+        zhTW = "去下洗手間",
+        plPL = "Przerwa (WC)",
+        svSE = "Kort paus",
+        noNO = "Kort pause"
     }
 }

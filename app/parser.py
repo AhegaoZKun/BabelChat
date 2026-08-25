@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import time
 from dataclasses import dataclass
 from enum import Enum
 
@@ -26,6 +25,10 @@ class Channel(Enum):
     GENERAL = "General"
     SERVICES = "Services"
     LOOKING_FOR_GROUP = "LookingForGroup"
+    # A channel a player made. Previously these were filed as General,
+    # which put them under a toggle that says something else.
+    CUSTOM = "Custom"
+    EMOTE = "Emote"
 
 
 # Map raw log channel names to enum (English + Russian client)
@@ -45,6 +48,8 @@ _CHANNEL_MAP: dict[str, Channel] = {
     "General": Channel.GENERAL,
     "Services": Channel.SERVICES,
     "LookingForGroup": Channel.LOOKING_FOR_GROUP,
+    "Custom": Channel.CUSTOM,
+    "Emote": Channel.EMOTE,
     "LFG": Channel.LOOKING_FOR_GROUP,
     # Russian client channel names
     "Сказать": Channel.SAY,
@@ -263,7 +268,12 @@ def _clean_text(raw_text: str) -> str | None:
     return text
 
 
-_RE_COLOR_CODES = re.compile(r"\|c[0-9a-fA-F]{8}|\|r")
+#: WoW's colour escapes. The old form is `|c` plus eight hex digits; the newer
+#: one, which The War Within introduced for item quality and keystones, is `|cn`
+#: plus a colour NAME and a colon — `|cnIQ4:`. Only the first was stripped, so a
+#: keystone link arrived in chat as `|cnIQ4:[Ключ: Арена Шрама Бездны (2)]` and
+#: that is what the overlay showed.
+_RE_COLOR_CODES = re.compile(r"\|c[0-9a-fA-F]{8}|\|cn[A-Za-z0-9_]+:|\|r")
 
 
 def parse_line(line: str) -> ChatMessage | None:
@@ -426,78 +436,3 @@ def parse_line(line: str) -> ChatMessage | None:
 def _is_system_message(text: str) -> bool:
     """Check if the message text matches known system message patterns."""
     return any(p.search(text) for p in _SYSTEM_PATTERNS)
-
-
-# Map addon CHAT_MSG_* event channel names to Channel enum
-_ADDON_CHANNEL_MAP: dict[str, Channel] = {
-    "SAY": Channel.SAY,
-    "YELL": Channel.YELL,
-    "PARTY": Channel.PARTY,
-    "PARTY_LEADER": Channel.PARTY_LEADER,
-    "RAID": Channel.RAID,
-    "RAID_LEADER": Channel.RAID_LEADER,
-    "RAID_WARNING": Channel.RAID_WARNING,
-    "GUILD": Channel.GUILD,
-    "OFFICER": Channel.OFFICER,
-    "WHISPER": Channel.WHISPER_FROM,
-    "WHISPER_INFORM": Channel.WHISPER_TO,
-    "INSTANCE_CHAT": Channel.INSTANCE,
-    "INSTANCE_CHAT_LEADER": Channel.INSTANCE_LEADER,
-}
-
-
-def parse_addon_line(line: str) -> tuple[ChatMessage | None, int]:
-    """Parse a line from the addon's memory buffer.
-
-    Format v2.1: SEQ|KIND|EVENT|author|text
-    (KIND is RAW or DICT; actual parsing done in memory_reader.py)
-
-    Legacy format: SEQ|CHANNEL|Author-Server|MessageText
-
-    Returns (ChatMessage or None, sequence_number).
-    """
-    parts = line.split("|", 4)
-    if len(parts) < 4:
-        return None, 0
-
-    seq_str = parts[0]
-    # v2.1 format: skip KIND field, use EVENT as channel
-    if parts[1] in ("RAW", "DICT") and len(parts) >= 5:
-        channel_str = parts[2]
-        author_full = parts[3]
-        text = parts[4]
-    else:
-        # Legacy format
-        channel_str = parts[1]
-        author_full = parts[2]
-        text = parts[3] if len(parts) > 3 else ""
-
-    try:
-        seq = int(seq_str)
-    except ValueError:
-        return None, 0
-
-    channel = _ADDON_CHANNEL_MAP.get(channel_str)
-    if channel is None:
-        return None, seq
-
-    # Split author into name and server
-    if "-" in author_full:
-        author, server = author_full.split("-", 1)
-    else:
-        author, server = author_full, ""
-
-    text = _clean_text(text)
-    if text is None:
-        return None, seq
-
-    t = time.localtime()
-    timestamp = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}.000"
-
-    return ChatMessage(
-        timestamp=timestamp,
-        channel=channel,
-        author=author,
-        server=server,
-        text=text,
-    ), seq

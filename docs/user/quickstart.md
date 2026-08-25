@@ -4,7 +4,17 @@
 
 - Windows 10/11
 - World of Warcraft (Retail — The War Within / Midnight)
-- Free [DeepL API key](https://www.deepl.com/pro-api) (500K chars/month, takes 2 minutes to get)
+- Nothing else. Translation works out of the box: the in-game glossary needs no
+  account, and MyMemory translates full sentences without a key.
+
+A key only buys you better quality. In order of how easy each is to get:
+
+| Provider | What it needs | Allowance |
+| --- | --- | --- |
+| **GigaChat** (default) | a Sber ID; no card, no VPN | 1M tokens a year |
+| MyMemory | nothing | 5,000 words a day, 50,000 with an email |
+| DeepL | a card to verify identity; never charged | 500K characters a month |
+| Microsoft Translator | an Azure account | 2M characters a month |
 
 ## Step 1: Download
 
@@ -12,11 +22,14 @@ Download `BabelChat.zip` from [GitHub Releases](https://github.com/Yumash/BabelC
 
 Extract anywhere (Desktop, Downloads, wherever you like).
 
-## Step 2: Run as Administrator
+## Step 2: Run it
 
-Right-click `BabelChat.exe` → **Run as administrator**.
+Double-click `BabelChat.exe`.
 
-> BabelChat needs admin privileges to read WoW's process memory via `ReadProcessMemory` (Windows API).
+> Administrator rights are **not** needed. `ReadProcessMemory` against a process
+> owned by the same user works without them, and standing elevation turns an
+> ordinary library-planting bug into a full compromise. If older instructions
+> told you to run as administrator, they are out of date — don't.
 
 ## Step 3: Setup Wizard
 
@@ -25,12 +38,21 @@ On first launch, a wizard walks you through 5 steps:
 ### 3.1 Welcome
 Choose your interface language (English, Russian, or Spanish).
 
-### 3.2 DeepL API Key
-1. Click the link to open DeepL's registration page
-2. Sign up for a **free** account (no credit card required for Free tier)
-3. Go to your [DeepL Account](https://www.deepl.com/account/summary) → API Keys
-4. Copy your key and paste it into BabelChat
-5. Click "Validate" to verify it works
+### 3.2 Translation provider
+
+You can skip this step entirely: without a single key, MyMemory already
+translates and the in-game glossary always works.
+
+For better quality, fill in whichever provider you have. If you are in Russia,
+**GigaChat** is the one that works without a VPN or a card:
+
+1. Sign in to [Studio Sber](https://developers.sber.ru/studio/workspaces) with a Sber ID
+2. Create a GigaChat API project and get its **authorization key** (base64 of
+   `client_id:client_secret`)
+3. Paste it into the GigaChat field and press "Validate"
+
+Leave the root-certificate field empty — it is only for the case where the TLS
+handshake fails.
 
 ### 3.3 WoW Path
 BabelChat tries to auto-detect your WoW installation. If it doesn't find it, click "Browse" and select your `World of Warcraft` folder.
@@ -38,6 +60,7 @@ BabelChat tries to auto-detect your WoW installation. If it doesn't find it, cli
 ### 3.4 Language
 - **Your language** — the language you speak (messages in this language won't be translated)
 - **Target language** — the language you want foreign messages translated TO
+  (defaults to your interface language)
 
 ### 3.5 Install Addon
 Click "Install Addon" to copy BabelChat into your WoW AddOns folder. Alternatively, copy `addon/BabelChat/` manually to:

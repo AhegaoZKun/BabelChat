@@ -2,7 +2,9 @@
 
 ## Overview
 
-Every chat message goes through a multi-stage pipeline. The key innovation is **streaming** — the original message appears in the overlay immediately, and the translation is added when DeepL responds.
+Every chat message goes through a multi-stage pipeline. The key property is
+**streaming** — the original message appears in the overlay immediately, and the
+translation is added when the provider responds.
 
 ## Stages
 
@@ -16,7 +18,9 @@ Message from memory reader
 2. Dedup (author+text, 60s TTL, monotonic clock, thread-safe lock)
     │
     ▼
-3. Channel filter (configurable per channel)
+3. Channel filter (one toggle per channel; see `CHANNEL_TOGGLES` in `app/config.py`,
+   which is the single declaration both settings windows, both entry points and
+   the overlay's filter tabs read)
     │
     ▼
 4. NPC filter (names with spaces in Say/Yell)
@@ -55,7 +59,9 @@ Message from memory reader
 13. Strip URLs/markers → Expand slang → Expand WoW terms
     │
     ▼
-14. DeepL API call (0.5-2s, with retry + exception fallback)
+14. Provider call (0.5-2s, with retry). The configured providers are tried in
+    order — preferred first, then the rest — so a quota or an outage on one
+    does not drop the message. See `app/translators/`.
     │
     ▼
 15. Restore tokens → Cache result
@@ -100,5 +106,5 @@ Instant hits (phrasebook, cache) skip streaming — emit once with translation i
 | Abbreviation hit (gg, ty) | ~0ms | 0 |
 | Phrasebook hit ("hello") | ~1ms | 0 |
 | Cache hit | ~1ms | 0 |
-| DeepL translation | 500-2000ms | 1 |
+| Provider translation | 500-2000ms | 1 |
 | Own language | ~1ms | 0 |
