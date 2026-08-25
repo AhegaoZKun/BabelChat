@@ -13,6 +13,7 @@ Usage (from main_gtk):
 
 from __future__ import annotations
 
+import contextlib
 import threading  # noqa: E402
 
 import gi  # noqa: E402
@@ -130,10 +131,8 @@ class _WizardWindow(Gtk.ApplicationWindow):
     @staticmethod
     def _set_dd_code(dd: Gtk.DropDown, code: str) -> None:
         codes = getattr(dd, "_codes", [])
-        try:
+        with contextlib.suppress(ValueError):
             dd.set_selected(codes.index(code))
-        except ValueError:
-            pass
 
     def _on_ui_lang_changed(self, dd: Gtk.DropDown, _param: object) -> None:
         code = self._dd_code(dd)
