@@ -139,6 +139,13 @@ def main() -> int:
             # strings produced by tr() at construction time.
             tr.set_language(updated.ui_language)
             overlay.apply_language()
+            if tray is not None:
+                # The tray is built once at startup and there is no reopening
+                # it, so nothing else will ever bring it into the new language.
+                tray.update_item("overlay", label=_overlay_item_label())
+                tray.update_item("tr", label=tr("tray.toggle_translation"))
+                tray.update_item("settings", label=tr("tray.settings"))
+                tray.update_item("quit", label=tr("tray.quit"))
 
             # Apply live: rebuild pipeline config (channels/langs).
             pipeline.update_config(_build_pipeline_config(updated))
@@ -170,10 +177,18 @@ def main() -> int:
         path = os.path.join(base, "assets", "icon.png")
         return path if os.path.exists(path) else None
 
+    #: Whether the overlay is on screen, which decides what the first tray item
+    #: offers to do. Kept here so relabelling the menu after a language change
+    #: does not have to guess, and cannot offer to hide a hidden window.
+    overlay_visible = [True]
+
+    def _overlay_item_label() -> str:
+        return tr("tray.hide_overlay") if overlay_visible[0] else tr("tray.show_overlay")
+
     def _tray_toggle_overlay() -> None:
-        visible = overlay.toggle_visible()
+        overlay_visible[0] = overlay.toggle_visible()
         if tray is not None:
-            tray.update_item("overlay", label="Hide overlay" if visible else "Show overlay")
+            tray.update_item("overlay", label=_overlay_item_label())
 
     def _tray_toggle_tr() -> None:
         overlay.set_translation_active(not pipeline.translation_enabled)
@@ -191,12 +206,12 @@ def main() -> int:
             on_activate=_tray_toggle_overlay,
             on_secondary_activate=_tray_toggle_tr,
             items=[
-                MenuItem("overlay", "Hide overlay", _tray_toggle_overlay),
-                MenuItem("tr", "Translation", _tray_toggle_tr, checkable=True,
+                MenuItem("overlay", _overlay_item_label(), _tray_toggle_overlay),
+                MenuItem("tr", tr("tray.toggle_translation"), _tray_toggle_tr, checkable=True,
                          checked=bool(config.translation_enabled_default)),
-                MenuItem("settings", "Settings…", _open_settings),
+                MenuItem("settings", tr("tray.settings"), _open_settings),
                 MenuItem(),  # separator
-                MenuItem("quit", "Quit", _quit),
+                MenuItem("quit", tr("tray.quit"), _quit),
             ],
         )
     except Exception:  # noqa: BLE001 — tray is optional; never block startup

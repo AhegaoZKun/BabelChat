@@ -170,3 +170,53 @@ def test_the_language_table_has_the_shape_that_call_produces():
     for code, label in pairs:
         assert code == code.upper(), f"{code!r} is not the upper-case form the lookup uses"
         assert label and label != code, f"{code!r} has no name to show in the dropdown"
+
+
+# ── the tray on Linux, and what the wizard remembers ─────────────────────────
+
+
+def test_the_gtk_tray_menu_is_translated_at_all():
+    """It was five English literals. The keys existed and the Qt tray had been
+    using them since it was written; the GTK menu simply never went through
+    `tr`, so a Russian user got a Russian overlay above an English tray."""
+    text = source_of("main_gtk.py")
+    items = re.findall(r"MenuItem\(\s*\"[^\"]+\"\s*,\s*([^,)]+)", text)
+
+    assert items, "no menu items found — has the tray moved?"
+    for label in items:
+        assert "tr(" in label or label.strip().startswith("_"), f"hardcoded tray label: {label.strip()}"
+
+
+def test_the_gtk_tray_is_refreshed_when_settings_are_saved():
+    """Same reason as the Qt one: the tray is built once at startup and there
+    is no reopening it, so nothing else will ever bring it into the language
+    the user just picked."""
+    text = source_of("main_gtk.py")
+    saved = method_source("main_gtk.py", "_on_saved")
+
+    assert saved, "the settings callback has moved"
+    assert "tray.update_item" in saved, "the tray keeps the old language"
+    assert 'tr("tray.settings")' in text, "the menu is refreshed with something other than the table"
+
+
+def test_the_gtk_tray_overlay_item_is_written_from_state():
+    """It says Hide or Show depending on where the overlay is. Relabelling it
+    from the table alone would offer to hide a window that is already hidden —
+    the same trap as the translation badge."""
+    label = method_source("main_gtk.py", "_overlay_item_label")
+
+    assert label, "the label is not derived anywhere"
+    assert "tray.hide_overlay" in label and "tray.show_overlay" in label
+
+
+def test_the_qt_wizard_keeps_what_was_typed_across_a_language_change():
+    """Changing the language restarts this wizard, and the new one builds its
+    fields from the config — so anything not written to the config first is
+    gone: an API key pasted on page two, the WoW path browsed for on page
+    three. The GTK wizard snapshots and restores; the changelog describes the
+    carry-across without naming a platform."""
+    handler = method_source("setup_wizard.py", "_on_ui_lang_changed")
+
+    assert handler, "the language handler has moved"
+    assert "apply_to" in handler, "the entered credentials are dropped on restart"
+    assert "wow_path" in handler, "the entered WoW path is dropped on restart"
