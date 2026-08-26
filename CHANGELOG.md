@@ -8,6 +8,20 @@ ship under the same number.
 
 ---
 
+## [3.5.0] — 2026-08-26
+
+### Added
+
+- **The interface opens in the language of the machine it is installed on.** BabelChat defaults to Russian, which is right for the audience it was written for and wrong for everyone else at the one moment it matters most: the setup wizard is the first thing a new player reads, and it was in Russian whatever their system was set to. On a first run the OS locale now decides, falling back to Russian when it names a language the interface does not have. Both frontends ask the same function, and it reads the environment in the order gettext does — `LANGUAGE` first, which is the variable a user sets precisely to be obeyed and the one such code usually ignores.
+
+### Fixed
+
+- **Changing the interface language on Linux did nothing until the next launch.** The GTK entry point never applied the saved language at all, so it was Russian regardless of what Settings said; and even once applied, the windows already on screen kept the strings they were built with. The overlay relabels itself now, and the setup wizard rebuilds its pages the moment the language dropdown changes rather than at the next launch — carrying across whatever had already been typed into it.
+- **The setup wizard reopening no longer overwrites the language you chose.** It reopens whenever no provider is configured, which is not the same as a first run — an expired key does it, and so does a config file written before providers became a registry. Consulting the OS locale there put the machine's opinion over a real preference, and because the welcome page seeds its dropdown from what is on screen and finishing writes that back, clicking straight through would have saved Spanish as German.
+- **A GTK setting saved from an old-language window.** The settings window closes on save, as the Windows one always has, so the next opening is built in the language just chosen instead of showing labels in the previous one.
+
+---
+
 ## [3.4.0] — 2026-08-23
 
 ### Added

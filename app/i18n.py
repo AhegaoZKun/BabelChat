@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import locale
+import os
 from typing import ClassVar
 
 from app import locales
@@ -44,3 +46,68 @@ class tr:
         if kwargs:
             text = text.format(**kwargs)
         return text
+
+
+#: Environment variables that state the user's preferred UI language, in the
+#: order gettext resolves them: LANGUAGE wins outright, and only then do the
+#: LC_* variables and LANG get a say. Getting this order wrong is easy — LANG
+#: is the famous one — and it silently ignores whatever LANGUAGE asked for.
+_LOCALE_ENV_VARS = ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG")
+
+
+def _codes_in(value: str) -> list[str]:
+    """Language codes named by one locale environment variable.
+
+    LANGUAGE holds a colon-separated preference list ("es:ru"); the others hold
+    a single locale ("es_ES.UTF-8"). Both reduce to the leading language part,
+    upper-cased, which is what UI_LANGUAGES is keyed by.
+    """
+    codes = []
+    for item in value.split(":"):
+        code = item.split(".")[0].split("@")[0].split("_")[0].strip().upper()
+        if code:
+            codes.append(code)
+    return codes
+
+
+def guess_ui_language(default: str = "RU") -> str:
+    """The UI language to open with when nothing has been saved yet.
+
+    First run has no preference to honour, and defaulting to Russian for
+    everyone meant a first-time player anywhere else read the setup wizard in a
+    language they may not have. The OS locale is the only signal available, so
+    it decides — falling back to `default` when it is absent, unreadable, or
+    names a language this build has no UI for.
+
+    Only for a genuine first run: once a config file exists it carries a real
+    choice, and guessing over that replaces it with the machine's opinion.
+    """
+    for env_var in _LOCALE_ENV_VARS:
+        for code in _codes_in(os.environ.get(env_var, "")):
+            if code in UI_LANGUAGES:
+                return code
+
+    try:
+        loc = locale.getlocale()[0] or ""
+    except (ValueError, TypeError):  # a malformed locale setting, not our problem
+        return default
+    for code in _codes_in(loc):
+        if code in UI_LANGUAGES:
+            return code
+    return default
+
+
+def startup_ui_language(*, config_exists: bool, saved: str) -> str:
+    """The language to render in before the user has had a chance to say.
+
+    One rule, called by both entry points, because this is exactly the kind of
+    decision that has drifted between the Qt and GTK frontends every time it
+    was written twice: a saved choice is honoured, and only a machine that has
+    never run the app is asked what language it speaks.
+
+    `config_exists` is deliberately about the FILE, not about whether the app
+    is fully set up. The setup wizard also reopens when a provider stops being
+    configured, and treating that as a first run would let the OS locale
+    overwrite the language the user picked the last time round.
+    """
+    return saved if config_exists else guess_ui_language()

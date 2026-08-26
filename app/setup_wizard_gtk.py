@@ -370,7 +370,12 @@ class _WizardWindow(Gtk.ApplicationWindow):
             GLib.idle_add(done, valid, msg)
 
         def done(valid: bool, msg: str) -> bool:
-            btn.set_sensitive(True)
+            # Switching the interface language rebuilds every page, so the
+            # button this validation started from may no longer be in the
+            # window by the time the worker answers. Its replacement is
+            # sensitive already; poking the orphan only earns GTK criticals.
+            if btn.get_parent() is not None:
+                btn.set_sensitive(True)
             if valid:
                 extra = f" — {msg}" if msg and msg != "valid" else ""
                 self._api_status.set_markup(

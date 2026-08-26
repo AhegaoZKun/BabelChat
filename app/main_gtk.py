@@ -21,7 +21,7 @@ from lingua import Language
 
 from app import debug_log
 from app.config import CONFIG_FILE, AppConfig, enabled_channels, resolve_chatlog_path
-from app.i18n import tr
+from app.i18n import startup_ui_language, tr
 from app.overlay_gtk import ChatOverlayGtk
 from app.pipeline import PipelineConfig, TranslationPipeline
 from app.settings_gtk import SettingsWindowGtk
@@ -61,30 +61,6 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
     )
 
 
-def _guess_locale_lang() -> str:
-    """Tries to find the user's locale from the OS.
-
-    Falls back to RU if the locale can't be read
-    or doesn't map to a supported language.
-    """
-    import locale
-
-    for env_var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
-        val = os.environ.get(env_var, "")
-        if val:
-            code = val.split(".")[0].split("_")[0].upper()
-            if code in ("RU", "EN", "ES"):
-                return code
-    try:
-        loc = locale.getlocale()[0] or ""
-        code = loc.split("_")[0].upper()
-        if code in ("RU", "EN", "ES"):
-            return code
-    except Exception:  # noqa: BLE001
-        pass
-    return "RU"
-
-
 def main() -> int:
     load_dotenv()
     logging.basicConfig(
@@ -96,28 +72,25 @@ def main() -> int:
     # Off unless asked for: it records every chat line in full.
     debug_log.configure(config.debug_capture_trace)
 
+    # The Qt entry point has always applied the saved language and the GTK one
+    # never did, so every Linux user got the default — Russian — whatever they
+    # had picked in Settings. This has to happen before the wizard, because the
+    # wizard is what a first-time player reads first.
+    config_exists = os.path.exists(CONFIG_FILE)
+    tr.set_language(startup_ui_language(config_exists=config_exists, saved=config.ui_language))
+
     # First run: no config file yet, or no translation API configured →
     # run the setup wizard (its own blocking GTK loop) before normal startup.
-    if not os.path.exists(CONFIG_FILE) or not any_configured(config.providers):
-        # Give the wizard itself a reasonable display language BEFORE it opens.
-        # It has no config yet to base this on (config.ui_language is just the
-        # RU default, not a real signal), so guess from the OS locale instead —
-        # the wizard's own on-screen text otherwise defaults to Russian for
-        # every first-run user regardless of their system language.
-        tr.set_language(_guess_locale_lang())
-
+    if not config_exists or not any_configured(config.providers):
         from app.setup_wizard_gtk import run_setup_wizard
 
         config = run_setup_wizard(config)
         if config is None:  # user closed the wizard without finishing
             return 0
 
-    # The Qt entry point has always done this and the GTK one never did, so
-    # every Linux user got the default interface language regardless of what
-    # they picked — and the default is Russian. Must run AFTER the wizard:
-    # applying it first used the pre-wizard config and ignored the language
-    # the user had just chosen on first run.
-    tr.set_language(config.ui_language)
+        # The wizard saves a language of its own — adopt it, or the app starts
+        # in whatever was on screen before the user chose.
+        tr.set_language(config.ui_language)
 
     overlay = ChatOverlayGtk(config)
 

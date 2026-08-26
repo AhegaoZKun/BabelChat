@@ -15,9 +15,9 @@ from PyQt6.QtWidgets import QApplication
 
 from app import debug_log
 from app.about_dialog import AboutDialog
-from app.config import AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path
+from app.config import CONFIG_FILE, AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path
 from app.hotkeys import GlobalHotkeyManager
-from app.i18n import tr
+from app.i18n import startup_ui_language, tr
 from app.overlay import ChatOverlay
 from app.parser import Channel
 from app.pipeline import PipelineConfig, TranslationPipeline
@@ -349,8 +349,14 @@ def main() -> int:
     # other players' whispers included, so it is never on by default.
     debug_log.configure(config.debug_capture_trace)
 
-    # Set UI language from config
-    tr.set_language(config.ui_language)
+    # Set UI language from config — except on a genuine first run, where the
+    # config holds no choice yet and its RU default would show the wizard in
+    # Russian to a player anywhere in the world. The OS locale stands in until
+    # the wizard saves a real preference. Same rule as the GTK entry point,
+    # from the same function, so the two cannot drift apart again.
+    tr.set_language(
+        startup_ui_language(config_exists=os.path.exists(CONFIG_FILE), saved=config.ui_language)
+    )
 
     # First run — setup wizard if no API key
     if not any_configured(config.providers):

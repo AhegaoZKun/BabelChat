@@ -260,6 +260,7 @@ class ChatOverlayGtk:
         self._list: Gtk.Box | None = None
         self._scroller: Gtk.ScrolledWindow | None = None
         self._reply_entry: Gtk.Entry | None = None
+        self._grip: Gtk.DrawingArea | None = None
         self._reply_status: Gtk.Label | None = None
 
         # Callbacks wired by main (so this module stays UI-only).
@@ -556,7 +557,6 @@ class ChatOverlayGtk:
         title = Gtk.Label(label="BabelChat")
         title.set_xalign(0.0)
         title.set_hexpand(True)
-        self._title_label = title
         # WoW connection status ("WoW: ✔ / … / ✖"), polled via the checker
         # wired by main — same behavior as the PyQt overlay.
         self._wow_status = Gtk.Label(label="WoW: ?")
@@ -571,12 +571,10 @@ class ChatOverlayGtk:
         self._translate_toggle.set_cursor_from_name("pointer")
         self._translate_toggle.connect("toggled", self._on_translate_toggled)
         settings_btn = Gtk.Button(label="⚙")
-        self._settings_button = settings_btn
         settings_btn.add_css_class("bc-tool")
         settings_btn.set_cursor_from_name("pointer")
         settings_btn.connect("clicked", lambda _b: self.on_settings and self.on_settings())
         quit_btn = Gtk.Button(label="✕")
-        self._quit_button = quit_btn
         quit_btn.add_css_class("bc-close")
         quit_btn.set_cursor_from_name("pointer")
         quit_btn.connect("clicked", lambda _b: self.on_quit and self.on_quit())
@@ -724,6 +722,7 @@ class ChatOverlayGtk:
         grip.set_content_height(16)
         grip.add_css_class("bc-grip")
         grip.set_tooltip_text(tr("overlay.resize_hint"))
+        self._grip = grip
         grip.set_cursor_from_name("nwse-resize")
         grip.set_halign(Gtk.Align.END)
         grip.set_valign(Gtk.Align.END)
@@ -886,6 +885,8 @@ class ChatOverlayGtk:
         self._reply_lang_dd.set_tooltip_text(tr("overlay.reply.into"))
         self._copy_btn.set_label(tr("overlay.reply.copy"))
         self._copy_btn.set_tooltip_text(tr("overlay.reply.copy"))
+        if self._grip is not None:
+            self._grip.set_tooltip_text(tr("overlay.resize_hint"))
         self._update_filter_labels()
 
     def _update_filter_labels(self) -> None:
