@@ -434,3 +434,23 @@ class ChatOverlay(ReplyPanelMixin, FramelessDragResizeMixin, QWidget):
         self._bg_opacity = config.overlay_opacity
         self._opacity_slider.setValue(config.overlay_opacity)
         self._on_opacity_changed(config.overlay_opacity)
+
+    def apply_language(self) -> None:
+        """Relabel everything built when the window was, after a language change.
+
+        A Qt widget keeps the string it was constructed with, so setting the
+        language alone changes nothing that is already on screen — the setting
+        appeared to do nothing until the next launch, which reads as broken.
+
+        Only the persistent chrome belongs here. The reply panel's status line
+        is written afresh on every action, so it arrives in the new language by
+        itself, and relabelling it here would overwrite whatever it is saying.
+        """
+        self._toggle_btn.setText(
+            tr("overlay.badge.on") if self._translation_enabled else tr("overlay.badge.off")
+        )
+        self._settings_btn.setText(tr("overlay.settings"))
+        self._opacity_label.setText(tr("overlay.opacity"))
+        self._reply_input.setPlaceholderText(tr("overlay.reply.input_hint"))
+        self._reply_copy_btn.setText(tr("overlay.reply.copy"))
+        self._filter_bar.apply_language()

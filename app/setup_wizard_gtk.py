@@ -22,7 +22,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from app.config import AppConfig, detect_wow_path  # noqa: E402
-from app.i18n import tr  # noqa: E402
+from app.i18n import UI_LANGUAGES, tr  # noqa: E402
 from app.translators import all_providers  # noqa: E402
 from app.translators import get as provider_get  # noqa: E402
 
@@ -39,7 +39,10 @@ _LANGS = [
     ("KO", "한국어"),
     ("JA", "日本語"),
 ]
-_UI_LANGS = [("EN", "English"), ("RU", "Русский"), ("ES", "Español")]
+#: From the one table, not a fourth copy of it: a translation added there and
+#: missed here would leave the dropdown falling back to its first entry, and
+#: _finish would persist that over the language the guess had got right.
+_UI_LANGS = list(UI_LANGUAGES.items())
 
 
 class _WizardWindow(Gtk.ApplicationWindow):
