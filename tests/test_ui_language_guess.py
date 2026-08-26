@@ -347,3 +347,38 @@ def test_the_startup_rule_takes_that_answer(env, config_exists, expected):
     """Joining the two halves: a recovered config keeps its language, a machine
     with no config at all gets the guess (RU here, the environment is bare)."""
     assert startup_ui_language(config_exists=config_exists, saved="ES") == expected
+
+
+# ── the two halves agree on which languages exist ────────────────────────────
+
+
+def test_setting_a_language_accepts_every_language_the_guess_can_return():
+    """These were two lists: `tr.set_language` validated against a tuple while
+    the guess resolved against UI_LANGUAGES. A fourth translation added to the
+    table and not the tuple would be found by the guess and then silently
+    clamped back to Russian on the way in — the first-run bug again, wearing a
+    new hat, and silent because set_language reports nothing."""
+    from app.i18n import tr
+
+    previous = tr.get_language()
+    try:
+        for code in UI_LANGUAGES:
+            tr.set_language(code)
+
+            assert tr.get_language() == code, f"{code} is offered but not accepted"
+    finally:
+        tr.set_language(previous)
+
+
+def test_a_language_that_does_not_exist_is_still_refused():
+    """Widening the check must not turn it off: the fallback is what keeps a
+    stale config or a hand-edited one from blanking the interface."""
+    from app.i18n import tr
+
+    previous = tr.get_language()
+    try:
+        tr.set_language("ZZ")
+
+        assert tr.get_language() == "RU"
+    finally:
+        tr.set_language(previous)

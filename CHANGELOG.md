@@ -8,17 +8,12 @@ ship under the same number.
 
 ---
 
-## [3.5.0] — 2026-08-26
-
-### Added
-
-- **The interface opens in the language of the machine it is installed on.** BabelChat defaults to Russian, which is right for the audience it was written for and wrong for everyone else at the one moment it matters most: the setup wizard is the first thing a new player reads, and it was in Russian whatever their system was set to. On a first run the OS locale now decides, falling back to Russian when it names a language the interface does not have. Both frontends ask the same function, and it reads the environment in the order gettext does — `LANGUAGE` first, which is the variable a user sets precisely to be obeyed and the one such code usually ignores.
+## [3.4.1] — 2026-08-26
 
 ### Fixed
 
-- **Changing the interface language on Linux did nothing until the next launch.** The GTK entry point never applied the saved language at all, so it was Russian regardless of what Settings said; and even once applied, the windows already on screen kept the strings they were built with. The overlay relabels itself now, and the setup wizard rebuilds its pages the moment the language dropdown changes rather than at the next launch — carrying across whatever had already been typed into it.
-- **The setup wizard reopening no longer overwrites the language you chose.** It reopens whenever no provider is configured, which is not the same as a first run — an expired key does it, and so does a config file written before providers became a registry. Consulting the OS locale there put the machine's opinion over a real preference, and because the welcome page seeds its dropdown from what is on screen and finishing writes that back, clicking straight through would have saved Spanish as German.
-- **A GTK setting saved from an old-language window.** The settings window closes on save, as the Windows one always has, so the next opening is built in the language just chosen instead of showing labels in the previous one.
+- **The interface opened in Russian whatever language you had chosen.** On Linux the GTK entry point never applied the saved language at all, so the setting in Settings had no effect on anything; and on a first run, before there is a choice to apply, both frontends fell back to the Russian default — so a new player anywhere in the world read the setup wizard, the first thing they see, in a language they may not have. A saved choice is honoured now, and a first run takes its language from the operating system instead, falling back to Russian when the system names one the interface does not have. Windows is asked which language its *interface* is in, which is a different setting there from the one dates and numbers are formatted by, and the one that actually answers the question.
+- **Changing the language did not reach windows already on screen.** A widget keeps the string it was built with, so the change took hold only at the next launch. The overlay relabels itself now; the setup wizard rebuilds its pages the moment the language dropdown changes, carrying across whatever had already been typed into it; and saving a new language closes the settings window, because rebuilding it is what reopening it does — any other save leaves it open, with its confirmation where you can read it.
 
 ---
 

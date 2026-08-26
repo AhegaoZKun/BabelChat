@@ -280,7 +280,7 @@ alguno.
 | Caché               | SQLite + LRU                                                            |
 | Compilación         | PyInstaller → .exe (Windows) / AppImage, .deb, .rpm (Linux)             |
 | Addon               | Lua 5.1, WoW API                                                        |
-| Tests               | 1040 tests (pytest)                                                      |
+| Tests               | 1131 tests (pytest)                                                      |
 
 ## Desarrollo
 

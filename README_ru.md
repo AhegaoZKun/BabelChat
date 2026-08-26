@@ -278,7 +278,7 @@ BabelChat переводит, отправляя текст сообщений �
 | Кэш                | SQLite + LRU                                                                |
 | Сборка             | PyInstaller → .exe (Windows) / AppImage, .deb, .rpm (Linux)                 |
 | Аддон              | Lua 5.1, WoW API                                                            |
-| Тесты              | 1040 тестов (pytest)                                                        |
+| Тесты              | 1131 тестов (pytest)                                                        |
 
 ## Разработка
 

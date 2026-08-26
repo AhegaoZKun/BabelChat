@@ -110,23 +110,6 @@ def main() -> int:
         on_message=overlay.deliver_message,
     )
 
-    # Start the pipeline only once a translation provider is configured.
-    # Settings can configure the first provider while the application is
-    # already running, so this also acts as the startup failsafe used by the
-    # settings callback below.
-    pipeline_started = False
-
-    def _start_pipeline_if_ready(updated_config: AppConfig) -> None:
-        nonlocal pipeline_started
-        if pipeline_started:
-            return
-        if not any_configured(updated_config.providers):
-            logging.info("pipeline not started: no translation provider configured")
-            return
-
-        pipeline.start()
-        pipeline_started = True
-
     def _quit() -> None:
         try:
             if tray is not None:
@@ -159,9 +142,6 @@ def main() -> int:
 
             # Apply live: rebuild pipeline config (channels/langs).
             pipeline.update_config(_build_pipeline_config(updated))
-            # If this save is what FIRST configured a provider, this is the
-            # signal the startup failsafe was waiting on, start scanning now.
-            _start_pipeline_if_ready(updated)
             # Rebuild the reply translator so API key/priority changes take
             # effect without a restart.
             new_translator = TranslatorService.from_config(updated)
@@ -230,7 +210,7 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         logging.exception("history load failed (continuing without it)")
 
-    _start_pipeline_if_ready(config)
+    pipeline.start()
     try:
         return overlay.run()
     except KeyboardInterrupt:

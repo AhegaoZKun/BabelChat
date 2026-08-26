@@ -28,7 +28,11 @@ class tr:
 
     @classmethod
     def set_language(cls, lang: str) -> None:
-        cls._lang = lang if lang in ("RU", "EN", "ES") else "RU"
+        # Against UI_LANGUAGES, not a tuple repeating it: a fourth translation
+        # added to the table but not here would be resolved by the locale guess
+        # and then silently clamped back to Russian on the way in, which is the
+        # first-run bug this module exists to prevent, wearing a new hat.
+        cls._lang = lang if lang in UI_LANGUAGES else "RU"
 
     @classmethod
     def get_language(cls) -> str:
