@@ -454,3 +454,7 @@ class ChatOverlay(ReplyPanelMixin, FramelessDragResizeMixin, QWidget):
         self._reply_input.setPlaceholderText(tr("overlay.reply.input_hint"))
         self._reply_copy_btn.setText(tr("overlay.reply.copy"))
         self._filter_bar.apply_language()
+        # The clipboard dialog is created on demand and then kept, so it
+        # outlives the setting that was changed after it.
+        if self._reply_dialog is not None:
+            self._reply_dialog.apply_language()

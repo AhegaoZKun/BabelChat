@@ -84,6 +84,30 @@ def test_every_label_the_qt_chrome_builds_is_refreshed():
     assert missing == [], f"built by the chrome and never refreshed: {missing}"
 
 
+def test_the_clipboard_dialog_is_refreshed_too():
+    """It is a separate window, created on demand by the hotkey and then kept,
+    so it outlives the setting changed after it — and being separate is exactly
+    why it was missed."""
+    refresh = method_source("overlay.py", "apply_language")
+
+    assert "self._reply_dialog.apply_language()" in refresh
+    assert method_source("overlay_reply.py", "apply_language"), "the dialog cannot relabel itself"
+
+
+def test_the_tray_menu_is_refreshed_too():
+    """The tray is the one window a user cannot close and reopen to get the new
+    language — it is only ever built once, at startup."""
+    text = source_of("main.py")
+    calls = {
+        ast.get_source_segment(text, node)
+        for node in ast.walk(ast.parse(text))
+        if isinstance(node, ast.Call)
+    }
+
+    assert "tray.apply_language()" in calls, "the tray menu keeps the old language"
+    assert method_source("tray.py", "apply_language"), "the tray cannot relabel itself"
+
+
 def test_the_qt_refresh_reaches_the_filter_tabs():
     """They are built from the shared FILTER_TABS declaration, so their keys
     are not in the chrome's source to be matched above — the bar relabels
@@ -96,16 +120,20 @@ def test_the_widgets_the_qt_refresh_touches_are_kept_somewhere():
     """Two of them were locals in a builder function, so the refresh could
     name them but never reach them — an AttributeError on every settings
     save."""
-    chrome = source_of("overlay_chrome.py")
-    refresh = method_source("overlay.py", "apply_language")
+    # Assigned by the chrome builder as `overlay._x`, or by the overlay itself
+    # as `self._x` — the lazily created clipboard dialog is the second kind.
+    assigned = set(re.findall(r"overlay\.(_\w+)\s*=", source_of("overlay_chrome.py")))
+    assigned |= set(re.findall(r"self\.(_\w+)\s*=", source_of("overlay.py")))
 
+    refresh = method_source("overlay.py", "apply_language")
     # Widgets only — those the refresh calls a method on. `_translation_enabled`
-    # is read as a value and lives on the overlay itself, not in the chrome.
+    # is read as a value, not sent a message.
     attributes = set(re.findall(r"self\.(_\w+)\.", refresh))
 
+    assert attributes, "the refresh touches no widgets at all"
     for attribute in attributes:
-        assert f"overlay.{attribute} =" in chrome or f"overlay.{attribute}=" in chrome, (
-            f"apply_language reads self.{attribute}, which the chrome never assigns"
+        assert attribute in assigned, (
+            f"apply_language calls self.{attribute}, which nothing ever assigns"
         )
 
 

@@ -402,8 +402,10 @@ def main() -> int:
             overlay.update_channel_filters(_enabled_filter_names(config))
             overlay.apply_settings(config)
             # The dialog has already called tr.set_language; the widgets built
-            # before it did are still holding the old strings.
+            # before it did are still holding the old strings. The tray menu is
+            # the one the user cannot close and reopen to refresh.
             overlay.apply_language()
+            tray.apply_language()
             # Propagate language/channel settings to the pipeline thread
             new_pipeline_config = _build_pipeline_config(config)
             pipeline_thread.update_config(new_pipeline_config)
