@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from lingua import Language
 
 from app import debug_log
-from app.config import CONFIG_FILE, AppConfig, enabled_channels, resolve_chatlog_path
+from app.config import AppConfig, enabled_channels, resolve_chatlog_path, saved_config_exists
 from app.i18n import startup_ui_language, tr
 from app.overlay_gtk import ChatOverlayGtk
 from app.pipeline import PipelineConfig, TranslationPipeline
@@ -76,7 +76,10 @@ def main() -> int:
     # never did, so every Linux user got the default — Russian — whatever they
     # had picked in Settings. This has to happen before the wizard, because the
     # wizard is what a first-time player reads first.
-    config_exists = os.path.exists(CONFIG_FILE)
+    # Whether a saved config exists is config.py's question to answer, not a
+    # stat of one filename: load() reads config.json.bak too, so the main file
+    # being gone does not mean the user's language preference is.
+    config_exists = saved_config_exists()
     tr.set_language(startup_ui_language(config_exists=config_exists, saved=config.ui_language))
 
     # First run: no config file yet, or no translation API configured →

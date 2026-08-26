@@ -16,9 +16,18 @@ mislabel a window, it overwrites the choice the user made.
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import pytest
 
-from app.i18n import UI_LANGUAGES, guess_ui_language, startup_ui_language
+from app.config import AppConfig, saved_config_exists
+from app.i18n import (
+    UI_LANGUAGES,
+    _windows_ui_language,
+    guess_ui_language,
+    startup_ui_language,
+)
 
 #: Every variable the guesser reads. Cleared wholesale per test so the machine
 #: running the suite cannot answer for the machine being simulated.
@@ -33,6 +42,10 @@ def env(monkeypatch):
     # getlocale() reads the process's own setting, which pytest inherits from
     # whoever ran it. Neutralise it; the tests that care set it themselves.
     monkeypatch.setattr("app.i18n.locale.getlocale", lambda *a: (None, None))
+    # Same for Windows: CI runs on a Windows runner whose interface is English,
+    # so leaving this live would have every "no locale anywhere" test answered
+    # by the runner's own machine.
+    monkeypatch.setattr("app.i18n._windows_ui_language", lambda: "")
     return monkeypatch
 
 
@@ -186,7 +199,6 @@ def test_both_entry_points_ask_the_same_question():
     which is how Linux users ended up unable to change the interface language
     at all. Whatever it grows into, both callers get the same answer."""
     import ast
-    import pathlib
 
     root = pathlib.Path(__file__).resolve().parent.parent
     for entry in ("main.py", "main_gtk.py"):
@@ -200,3 +212,138 @@ def test_both_entry_points_ask_the_same_question():
 
         assert "startup_ui_language" in called, f"{entry} decides the startup language by itself"
         assert "guess_ui_language" not in called, f"{entry} reaches past the shared rule"
+        assert "saved_config_exists" in called, (
+            f"{entry} decides what a first run is without asking config.py"
+        )
+
+        # os.path.exists(CONFIG_FILE) is the wrong question and was asked here
+        # twice: load() also reads config.json.bak, so the main file's absence
+        # is not proof there is no saved language.
+        segments = [ast.get_source_segment(source, node) or "" for node in ast.walk(tree)]
+        stats = [seg for seg in segments if "CONFIG_FILE" in seg and "exists" in seg]
+        assert stats == [], f"{entry} still stats the config path: {stats}"
+
+
+# ── Windows answers this question differently ────────────────────────────────
+
+
+def test_windows_says_which_language_its_interface_is_in(env):
+    """The env vars are a POSIX convention; Windows sets none of them."""
+    env.setattr("app.i18n._windows_ui_language", lambda: "en_US")
+
+    assert guess_ui_language() == "EN"
+
+
+def test_the_c_runtime_locale_name_is_not_an_iso_code(env):
+    """What `getlocale()` returns on Windows, measured: `('Russian_Russia',
+    '1252')`. It is the C runtime's name for the locale, not a language code,
+    and reading it as one is why every Windows first run answered RU whatever
+    the machine was set to — including the English ones this was written for.
+    A machine whose interface is English must not be talked out of it by the
+    formats locale next door."""
+    env.setattr("app.i18n.locale.getlocale", lambda *a: ("English_United States", "1252"))
+    env.setattr("app.i18n._windows_ui_language", lambda: "en_US")
+
+    assert guess_ui_language() == "EN"
+
+
+def test_the_windows_lookup_stays_on_windows(monkeypatch):
+    """It is called unconditionally, so it has to be inert everywhere else —
+    `ctypes.windll` does not exist on Linux and reaching for it would raise
+    during startup on the platform this app was ported to."""
+    monkeypatch.setattr("app.i18n.sys.platform", "linux")
+
+    assert _windows_ui_language() == ""
+
+
+def test_an_lcid_python_has_no_name_for_says_nothing(monkeypatch):
+    """`windows_locale` is a fixed table shipped with Python; a language ID
+    added to Windows after that table was written is simply absent from it,
+    and must read as "no answer" rather than as a crash."""
+    monkeypatch.setattr("app.i18n.sys.platform", "win32")
+    monkeypatch.setattr("app.i18n.locale.windows_locale", {}, raising=False)
+
+    assert _windows_ui_language() == ""
+
+
+def test_the_environment_still_outranks_windows(env):
+    """A user who sets LANGUAGE on Windows — through a launcher script, say —
+    is asking for something specific, and asked first."""
+    env.setenv("LANGUAGE", "es")
+    env.setattr("app.i18n._windows_ui_language", lambda: "en_US")
+
+    assert guess_ui_language() == "ES"
+
+
+# ── what counts as having run this app before ────────────────────────────────
+
+
+def _write(path, **fields) -> None:
+    path.write_text(json.dumps(fields), encoding="utf-8")
+
+
+def test_a_config_only_in_the_backup_still_counts(tmp_path):
+    """`AppConfig.load` reads config.json.bak when the main file is gone — and
+    hands back the language saved in it. Asking `os.path.exists(CONFIG_FILE)`
+    instead calls that a first run, so the guess overrides a preference that
+    was successfully loaded one line earlier; on GTK the wizard opens too,
+    seeds its dropdown from the guess and writes it back on finish, which
+    deletes the recovered choice for good."""
+    main = tmp_path / "config.json"
+    _write(main.with_suffix(".json.bak"), ui_language="ES")
+
+    assert not main.exists()
+    assert saved_config_exists(str(main)) is True
+    assert AppConfig.load(str(main)).ui_language == "ES"
+
+
+def test_a_corrupt_config_with_no_backup_is_a_first_run(tmp_path):
+    """The other direction. `load` falls back to defaults here, so the RU it
+    returns is not a choice anybody made — treating the file's presence as one
+    shows the wizard in Russian to someone who has never used the app."""
+    main = tmp_path / "config.json"
+    main.write_text("{ this is not json", encoding="utf-8")
+
+    assert saved_config_exists(str(main)) is False
+    assert AppConfig.load(str(main)).ui_language == "RU"
+
+
+def test_nothing_on_disk_is_a_first_run(tmp_path):
+    assert saved_config_exists(str(tmp_path / "config.json")) is False
+
+
+def test_the_question_and_the_answer_read_the_same_files(tmp_path):
+    """These drifted the moment they were written apart: one stats a filename,
+    the other has a fallback list. They share the list now."""
+    from app.config import _config_candidates
+
+    main = tmp_path / "config.json"
+    candidates = [str(p) for p in _config_candidates(str(main))]
+
+    assert candidates == [str(main), str(main.with_suffix(".json.bak"))]
+
+    for candidate in candidates:
+        pathlib.Path(candidate).write_text(json.dumps({"ui_language": "ES"}), encoding="utf-8")
+        assert saved_config_exists(str(main)) is True
+        pathlib.Path(candidate).unlink()
+
+
+def test_asking_does_not_rewrite_anything(tmp_path):
+    """`load` runs migrations that write backups of their own. A question that
+    quietly does that is not a question."""
+    main = tmp_path / "config.json"
+    _write(main, deepl_api_key="secret-from-before-the-registry", ui_language="ES")
+    before = {p.name for p in tmp_path.iterdir()}
+
+    assert saved_config_exists(str(main)) is True
+    assert {p.name for p in tmp_path.iterdir()} == before
+
+
+@pytest.mark.parametrize(
+    ("config_exists", "expected"),
+    [(True, "ES"), (False, "RU")],
+)
+def test_the_startup_rule_takes_that_answer(env, config_exists, expected):
+    """Joining the two halves: a recovered config keeps its language, a machine
+    with no config at all gets the guess (RU here, the environment is bare)."""
+    assert startup_ui_language(config_exists=config_exists, saved="ES") == expected

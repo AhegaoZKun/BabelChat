@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication
 
 from app import debug_log
 from app.about_dialog import AboutDialog
-from app.config import CONFIG_FILE, AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path
+from app.config import AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path, saved_config_exists
 from app.hotkeys import GlobalHotkeyManager
 from app.i18n import startup_ui_language, tr
 from app.overlay import ChatOverlay
@@ -355,7 +355,7 @@ def main() -> int:
     # the wizard saves a real preference. Same rule as the GTK entry point,
     # from the same function, so the two cannot drift apart again.
     tr.set_language(
-        startup_ui_language(config_exists=os.path.exists(CONFIG_FILE), saved=config.ui_language)
+        startup_ui_language(config_exists=saved_config_exists(), saved=config.ui_language)
     )
 
     # First run — setup wizard if no API key

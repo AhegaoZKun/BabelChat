@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import locale
 import os
+import sys
 from typing import ClassVar
 
 from app import locales
@@ -70,6 +71,33 @@ def _codes_in(value: str) -> list[str]:
     return codes
 
 
+def _windows_ui_language() -> str:
+    """The display language Windows itself is set to, as an ISO locale name.
+
+    `locale.getlocale()` cannot answer this on Windows: it reports the C
+    runtime's name for the locale — "Russian_Russia", "English_United States" —
+    which is not an ISO code and which nothing here can key on. Measured on a
+    Russian Windows 11: `getlocale()` gives `('Russian_Russia', '1252')`, so
+    every guess fell through to the default and the first-run language was
+    Russian for the whole world, which is the bug this was written to fix.
+
+    Windows also separates the language the interface is in from the locale
+    dates and numbers are formatted by — a machine can be English with Russian
+    formats — and it is the first of those we are trying to match. That is
+    `GetUserDefaultUILanguage`, not the format locale `getdefaultlocale` reads
+    (and which is deprecated for removal besides).
+    """
+    if sys.platform != "win32":
+        return ""
+    try:
+        import ctypes
+
+        lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+    except (AttributeError, OSError, ValueError):  # not the Windows we expected
+        return ""
+    return getattr(locale, "windows_locale", {}).get(lcid, "")
+
+
 def guess_ui_language(default: str = "RU") -> str:
     """The UI language to open with when nothing has been saved yet.
 
@@ -86,6 +114,13 @@ def guess_ui_language(default: str = "RU") -> str:
         for code in _codes_in(os.environ.get(env_var, "")):
             if code in UI_LANGUAGES:
                 return code
+
+    # Windows sets none of those variables, and its C-runtime locale name is
+    # not something `_codes_in` can read. Ask Win32 directly before falling
+    # back to the POSIX path below.
+    for code in _codes_in(_windows_ui_language()):
+        if code in UI_LANGUAGES:
+            return code
 
     try:
         loc = locale.getlocale()[0] or ""
