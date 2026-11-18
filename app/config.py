@@ -58,6 +58,15 @@ class AppConfig:
     wow_path: str = ""
     chatlog_path: str = ""
 
+    # Where chat comes from. "ocr" reads the chat area off the screen and never
+    # touches the game process; "memory" reads the addon's buffer out of it.
+    capture_source: str = "ocr"
+    ocr_region: dict = field(default_factory=dict)  # see app.ocr_capture.OcrRegion
+    ocr_interval: float = 1.0
+    ocr_script: str = "auto"  # "auto" follows own_language; see app.ocr_engine.SCRIPTS
+    # Wayland: lets the desktop skip its screen-share dialog on later runs.
+    ocr_portal_token: str = ""
+
     # Languages
     ui_language: str = "RU"
     own_language: str = "RU"
@@ -156,6 +165,7 @@ class AppConfig:
             try:
                 data = json.loads(try_path.read_text(encoding="utf-8"))
                 _migrate_provider_keys(data, try_path)
+                _migrate_capture_source(data)
                 _migrate_split_channels(data)
                 _migrate_gigachat_credential(data)
                 defaults = asdict(cls())
@@ -180,6 +190,28 @@ def _config_candidates(path: str = CONFIG_FILE) -> list[Path]:
     """
     target = Path(path)
     return [target, target.with_suffix(".json.bak")]
+
+
+def capture_fields(config: AppConfig, on_token=None) -> dict:
+    """PipelineConfig keyword arguments describing where chat comes from.
+
+    Shared by both entry points so the Qt and GTK builds cannot drift apart on
+    how a setting becomes a source. "auto" is resolved here, once, to the script
+    the user's own language is written in.
+    """
+    script = config.ocr_script
+    if script == "auto":
+        from app.ocr_engine import script_for_language
+
+        script = script_for_language(config.own_language)
+    return {
+        "capture_source": config.capture_source,
+        "ocr_region": dict(config.ocr_region or {}),
+        "ocr_interval": config.ocr_interval,
+        "ocr_script": script,
+        "ocr_portal_token": config.ocr_portal_token,
+        "ocr_on_token": on_token,
+    }
 
 
 def saved_config_exists(path: str = CONFIG_FILE) -> bool:
@@ -274,7 +306,14 @@ def enabled_channels(config: AppConfig) -> set:
 
 
 def enabled_filter_tabs(config: AppConfig) -> set[str]:
-    """The overlay filter tabs the user's toggles add up to."""
+    """The overlay filter tabs the user's toggles add up to.
+
+    The screen source is not filtered by the toggles (see
+    `TranslationPipeline._channel_allowed`), so every channel can arrive and every
+    channel gets its tab.
+    """
+    if config.capture_source == "ocr":
+        return {toggle.tab for toggle in CHANNEL_TOGGLES}
     return {toggle.tab for toggle in CHANNEL_TOGGLES if getattr(config, toggle.field)}
 
 
@@ -305,6 +344,16 @@ def _migrate_gigachat_credential(data: dict) -> None:
     settings["client_id"] = client_id
     settings["client_secret"] = client_secret
     settings.pop("authorization_key", None)
+
+
+def _migrate_capture_source(data: dict) -> None:
+    """A config written before screen capture existed keeps reading the game.
+
+    New installs default to "ocr", but someone who already has a working setup
+    must not wake up to an app that has stopped producing messages because it
+    now wants a chat area selected.
+    """
+    data.setdefault("capture_source", "memory")
 
 
 def _migrate_split_channels(data: dict) -> None:

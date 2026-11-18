@@ -15,7 +15,14 @@ from PyQt6.QtWidgets import QApplication
 
 from app import debug_log
 from app.about_dialog import AboutDialog
-from app.config import AppConfig, enabled_channels, enabled_filter_tabs, resolve_chatlog_path, saved_config_exists
+from app.config import (
+    AppConfig,
+    capture_fields,
+    enabled_channels,
+    enabled_filter_tabs,
+    resolve_chatlog_path,
+    saved_config_exists,
+)
 from app.hotkeys import GlobalHotkeyManager
 from app.i18n import startup_ui_language, tr
 from app.overlay import ChatOverlay
@@ -115,7 +122,7 @@ class PipelineThread(QThread):
         return self._pipeline
 
 
-def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
+def _build_pipeline_config(config: AppConfig, on_token=None) -> PipelineConfig:
     """Convert AppConfig to PipelineConfig."""
     chatlog = resolve_chatlog_path(config)
     own_lang = _LANG_CODE_TO_LINGUA.get(config.own_language, Language.ENGLISH)
@@ -131,6 +138,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         enabled_channels=channels,
         skip_own_messages=config.skip_own_messages,
         translation_enabled=config.translation_enabled_default,
+        **capture_fields(config, on_token),
     )
 
 
@@ -251,6 +259,12 @@ def main() -> int:
     overlay.show()
     logger.info("Overlay shown")
 
+    def _remember_portal_token(token: str) -> None:
+        # Only the Wayland screen-share portal issues one, so on Windows this is
+        # never called; it is here so both entry points build the source alike.
+        config.ocr_portal_token = token
+        config.save()
+
     # Create system tray
     tray = TrayIcon()
     tray.show_overlay_requested.connect(overlay.show)
@@ -273,7 +287,7 @@ def main() -> int:
             overlay.apply_language()
             tray.apply_language()
             # Propagate language/channel settings to the pipeline thread
-            new_pipeline_config = _build_pipeline_config(config)
+            new_pipeline_config = _build_pipeline_config(config, _remember_portal_token)
             pipeline_thread.update_config(new_pipeline_config)
             # Toggle debug console if setting changed
             if config.show_debug_console != old_console:
@@ -307,7 +321,7 @@ def main() -> int:
     hotkey_mgr.start()
 
     # Start pipeline
-    pipeline_config = _build_pipeline_config(config)
+    pipeline_config = _build_pipeline_config(config, _remember_portal_token)
     pipeline_thread = PipelineThread(pipeline_config)
     pipeline_thread.message_ready.connect(overlay.add_message)
 
@@ -336,18 +350,10 @@ def main() -> int:
         pipeline = pipeline_thread.pipeline
         if pipeline is None:
             return "searching"
-        mw = pipeline._memory_watcher
-        if mw is None:
-            return "offline"
-        # A named problem outranks both of the other answers: "attached" used to
-        # mean only that a process called Wow.exe existed, so a reader Windows
-        # was refusing showed the same green tick as a working one.
-        problem = getattr(mw, "problem", "")
-        if problem:
-            return problem
-        if mw.is_attached:
-            return "attached"
-        return "searching"
+        # One answer for every source: a named problem outranks "attached", which
+        # used to mean only that a process called Wow.exe existed, so a reader
+        # Windows was refusing showed the same green tick as a working one.
+        return pipeline.source_status()
 
     overlay.set_wow_status_checker(wow_status_checker)
 

@@ -19,9 +19,12 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk, PangoCairo  # noqa: E402
 
+from app.capture_source_gtk import CaptureSourceWidget  # noqa: E402
 from app.config import CHANNEL_TOGGLES, AppConfig  # noqa: E402
 from app.i18n import UI_LANGUAGES, tr  # noqa: E402
 from app.languages import LANGUAGES  # noqa: E402
+from app.ocr_capture import OcrRegion  # noqa: E402
+from app.ocr_engine import script_for_language  # noqa: E402
 from app.overlay_theme import (  # noqa: E402
     PRESET_LABELS,
     PRESET_ORDER,
@@ -108,6 +111,19 @@ class SettingsWindowGtk:
         root.set_margin_start(16)
         root.set_margin_end(16)
 
+        # Chat source: the screen (OCR) or the game's memory
+        root.append(self._section(tr("settings.capture_group")))
+        self._source = self._config.capture_source if self._config.capture_source in ("ocr", "memory") else "ocr"
+        self._region = OcrRegion.from_dict(self._config.ocr_region)
+        self._portal_token = self._config.ocr_portal_token
+        self._capture = CaptureSourceWidget(
+            self._win, self._source, self._region, self._portal_token,
+            script_for_test=self._script_for_test,
+            on_source=self._set_source, on_region=self._set_region, on_token=self._set_token,
+            interval=self._config.ocr_interval, script=self._config.ocr_script,
+        )
+        root.append(self._capture)
+
         # Channels
         root.append(self._section(tr("settings.channels_group")))
         grid = Gtk.Grid()
@@ -119,6 +135,16 @@ class SettingsWindowGtk:
             self._checks[toggle.field] = cb
             grid.attach(cb, i % 2, i // 2, 1, 1)
         root.append(grid)
+        # The screen source translates whatever channels the game's chat window
+        # shows, so these toggles do nothing while it is selected. Say so, and
+        # grey them out, rather than leave switches that appear to matter.
+        self._channels_grid = grid
+        self._channels_note = Gtk.Label(label=tr("settings.channels_ocr_note"))
+        self._channels_note.set_wrap(True)
+        self._channels_note.set_xalign(0.0)
+        self._channels_note.add_css_class("dim-label")
+        root.append(self._channels_note)
+        self._show_channels_for(self._source)
 
         # Languages
         root.append(self._section(tr("settings.lang_group")))
@@ -393,8 +419,33 @@ class SettingsWindowGtk:
         idx = dd.get_selected()
         return opts[idx] if 0 <= idx < len(opts) else opts[0]
 
+    def _show_channels_for(self, source: str) -> None:
+        reading_screen = source == "ocr"
+        self._channels_grid.set_sensitive(not reading_screen)
+        self._channels_note.set_visible(reading_screen)
+
+    def _set_source(self, source: str) -> None:
+        self._source = source
+        self._show_channels_for(source)
+
+    def _set_region(self, region: OcrRegion) -> None:
+        self._region = region
+
+    def _set_token(self, token: str) -> None:
+        self._portal_token = token
+
+    def _script_for_test(self) -> str:
+        """The script the test should read with: the chosen one, or the language's."""
+        chosen = self._capture.script
+        return script_for_language(self._dd_value(self._own)) if chosen == "auto" else chosen
+
     def _on_save(self, _btn: Gtk.Button) -> None:
         c = self._config
+        c.capture_source = self._source
+        c.ocr_region = self._region.to_dict() if self._region else {}
+        c.ocr_portal_token = self._portal_token
+        c.ocr_interval = self._capture.interval
+        c.ocr_script = self._capture.script
         for attr, cb in self._checks.items():
             setattr(c, attr, cb.get_active())
         c.own_language = self._dd_value(self._own)

@@ -151,15 +151,17 @@ def test_the_wizard_fits_the_screen_it_declares_it_fits(wizard):
 
 
 def test_every_credential_field_on_the_provider_page_is_usable(wizard):
-    """This is step two of five on every fresh install. The fields rendered at
-    6-14px against a 32px minimum, and the Validate buttons came out as blank
-    slivers."""
+    """This is the third step of five on every fresh install (after choosing the
+    chat source). The fields rendered at 6-14px against a 32px minimum, and the
+    Validate buttons came out as blank slivers."""
     from PyQt6.QtWidgets import QLineEdit
+
+    from app.setup_wizard import PAGE_API_KEY
 
     wizard.resize(560, 500)
     wizard.show()
     QApplication.processEvents()
-    wizard._stack.setCurrentIndex(1)
+    wizard._stack.setCurrentIndex(PAGE_API_KEY)
     QApplication.processEvents()
 
     fields = [edit for edit in wizard.findChildren(QLineEdit) if edit.isVisible()]

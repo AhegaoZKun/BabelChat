@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from lingua import Language
 
 from app import debug_log
-from app.config import AppConfig, enabled_channels, resolve_chatlog_path, saved_config_exists
+from app.config import AppConfig, capture_fields, enabled_channels, resolve_chatlog_path, saved_config_exists
 from app.i18n import startup_ui_language, tr
 from app.overlay_gtk import ChatOverlayGtk
 from app.pipeline import PipelineConfig, TranslationPipeline
@@ -43,7 +43,7 @@ _LANG_CODE_TO_LINGUA: dict[str, Language] = {
 }
 
 
-def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
+def _build_pipeline_config(config: AppConfig, on_token=None) -> PipelineConfig:
     chatlog = resolve_chatlog_path(config)
     own_lang = _LANG_CODE_TO_LINGUA.get(config.own_language, Language.ENGLISH)
 
@@ -58,6 +58,7 @@ def _build_pipeline_config(config: AppConfig) -> PipelineConfig:
         enabled_channels=channels,
         skip_own_messages=config.skip_own_messages,
         translation_enabled=config.translation_enabled_default,
+        **capture_fields(config, on_token),
     )
 
 
@@ -104,11 +105,21 @@ def main() -> int:
 
     tray = None  # created below; referenced by _quit
 
+    def _remember_portal_token(token: str) -> None:
+        # Called from the capture thread when the desktop issues a screen-share
+        # restore token, so the next launch does not show the dialog again.
+        config.ocr_portal_token = token
+        try:
+            config.save()
+        except OSError:
+            logging.warning("could not save the screen-share token", exc_info=True)
+
     # Pipeline: deliver each TranslatedMessage to the overlay (thread-safe).
     pipeline = TranslationPipeline(
-        config=_build_pipeline_config(config),
+        config=_build_pipeline_config(config, _remember_portal_token),
         on_message=overlay.deliver_message,
     )
+    overlay.set_wow_status_checker(pipeline.source_status)
 
     def _quit() -> None:
         try:
@@ -148,7 +159,7 @@ def main() -> int:
                 tray.update_item("quit", label=tr("tray.quit"))
 
             # Apply live: rebuild pipeline config (channels/langs).
-            pipeline.update_config(_build_pipeline_config(updated))
+            pipeline.update_config(_build_pipeline_config(updated, _remember_portal_token))
             # Rebuild the reply translator so API key/priority changes take
             # effect without a restart.
             new_translator = TranslatorService.from_config(updated)

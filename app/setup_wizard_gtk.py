@@ -21,10 +21,18 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
+from app.capture_source_gtk import CaptureSourceWidget  # noqa: E402
 from app.config import AppConfig, detect_wow_path  # noqa: E402
 from app.i18n import UI_LANGUAGES, tr  # noqa: E402
+from app.ocr_capture import OcrRegion  # noqa: E402
+from app.ocr_engine import script_for_language  # noqa: E402
 from app.translators import all_providers  # noqa: E402
 from app.translators import get as provider_get  # noqa: E402
+
+#: Position of the WoW-path page. It exists to find the game's folder for the
+#: addon and the chat log, neither of which the screen source uses, so the
+#: wizard skips it when the screen source is chosen.
+_WOW_PAGE = 3
 
 _LANGS = [
     ("EN", "English"),
@@ -55,6 +63,11 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._stack = Gtk.Stack()
         self._stack.set_vexpand(True)
         self._pages: list[Gtk.Widget] = []
+        # Plain attributes, not widget state: they must survive the page rebuild
+        # that follows a change of interface language.
+        self._source = config.capture_source if config.capture_source in ("ocr", "memory") else "ocr"
+        self._region = OcrRegion.from_dict(config.ocr_region)
+        self._portal_token = config.ocr_portal_token
         self._build_pages()
         self._index = 0
 
@@ -92,8 +105,10 @@ class _WizardWindow(Gtk.ApplicationWindow):
             self._stack.remove(page)
         self._pages = []
 
-        for builder in (self._page_welcome, self._page_api, self._page_wow,
-                        self._page_langs, self._page_ready):
+        for builder in (
+            self._page_welcome, self._page_source, self._page_api,
+            self._page_wow, self._page_langs, self._page_ready,
+        ):
             page = builder()
             self._pages.append(page)
             self._stack.add_child(page)
@@ -150,21 +165,32 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self.set_title(tr("wizard.title"))
 
     # ── navigation ────────────────────────────────────────────────────────
+    def _active_pages(self) -> list[int]:
+        """Indices of the pages the user will actually see, in order."""
+        everything = list(range(len(self._pages)))
+        if self._source == "ocr":
+            return [i for i in everything if i != _WOW_PAGE]
+        return everything
+
     def _go(self, delta: int) -> None:
-        self._index = max(0, min(len(self._pages) - 1, self._index + delta))
+        active = self._active_pages()
+        position = active.index(self._index) if self._index in active else 0
+        self._index = active[max(0, min(len(active) - 1, position + delta))]
         self._stack.set_visible_child(self._pages[self._index])
         self._sync_nav()
 
     def _sync_nav(self) -> None:
-        last = self._index == len(self._pages) - 1
-        self._back.set_sensitive(self._index > 0)
+        active = self._active_pages()
+        position = active.index(self._index) if self._index in active else 0
+        last = position == len(active) - 1
+        self._back.set_sensitive(position > 0)
         self._back.set_label(tr("wizard.back"))
         self._next.set_label(tr("wizard.start") if last else tr("wizard.next"))
         # Same step names the Qt wizard uses, from the one string that holds
         # them; the key wants a name as well as the numbers.
         names = tr("wizard.steps").split("|")
         name = names[self._index] if self._index < len(names) else ""
-        step = tr("wizard.step_of", current=self._index + 1, total=len(self._pages), name=name)
+        step = tr("wizard.step_of", current=position + 1, total=len(active), name=name)
         self._step_lbl.set_markup(
             f'<span foreground="#888">{GLib.markup_escape_text(step)}</span>'
         )
@@ -172,7 +198,8 @@ class _WizardWindow(Gtk.ApplicationWindow):
             self._refresh_summary()
 
     def _on_next(self, _btn: Gtk.Button) -> None:
-        if self._index == len(self._pages) - 1:
+        active = self._active_pages()
+        if self._index == active[-1]:
             self._finish()
             return
         self._go(+1)
@@ -227,6 +254,31 @@ class _WizardWindow(Gtk.ApplicationWindow):
         self._ui_lang.connect("notify::selected", self._on_ui_lang_changed)
         row.append(self._ui_lang)
         box.append(row)
+        return box
+
+    def _page_source(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.append(self._title(GLib.markup_escape_text(tr("wizard.source.title"))))
+        box.append(self._body(tr("wizard.source.intro")))
+
+        def source_changed(source: str) -> None:
+            self._source = source
+            self._sync_nav()  # the number of steps depends on the choice
+
+        def region_changed(region: OcrRegion) -> None:
+            self._region = region
+
+        def token_changed(token: str) -> None:
+            self._portal_token = token
+
+        box.append(
+            CaptureSourceWidget(
+                self, self._source, self._region, self._portal_token,
+                # The language page comes later but is already built.
+                script_for_test=lambda: script_for_language(self._dd_code(self._own_lang)),
+                on_source=source_changed, on_region=region_changed, on_token=token_changed,
+            )
+        )
         return box
 
     def _page_api(self) -> Gtk.Widget:
@@ -342,7 +394,13 @@ class _WizardWindow(Gtk.ApplicationWindow):
             f"<b>{'set' if spec.is_configured(self._entered(spec.id)) else 'not set'}</b>"
             for spec in all_providers()
         ]
-        rows.append(f"WoW path: <b>{GLib.markup_escape_text(self._wow_entry.get_text().strip() or 'not set')}</b>")
+        if self._source == "ocr":
+            state = tr("wizard.source.area_set" if self._region else "wizard.source.area_none")
+            rows.append(GLib.markup_escape_text(tr("wizard.summary.source_ocr")))
+            rows.append(GLib.markup_escape_text(tr("wizard.summary.area", state=state)))
+        else:
+            rows.append(GLib.markup_escape_text(tr("wizard.summary.source_memory")))
+            rows.append(f"WoW path: <b>{GLib.markup_escape_text(self._wow_entry.get_text().strip() or 'not set')}</b>")
         rows.append(f"Own language: <b>{self._dd_code(self._own_lang)}</b>")
         rows.append(f"Target language: <b>{self._dd_code(self._target_lang)}</b>")
         self._summary.set_markup("\n".join(rows))
@@ -429,6 +487,9 @@ class _WizardWindow(Gtk.ApplicationWindow):
                 providers[spec.id] = values
         c.providers = providers
         c.translator_priority = self._dd_code(self._priority)
+        c.capture_source = self._source
+        c.ocr_region = self._region.to_dict() if self._region else {}
+        c.ocr_portal_token = self._portal_token
         c.wow_path = self._wow_entry.get_text().strip()
         c.own_language = self._dd_code(self._own_lang)
         c.target_language = self._dd_code(self._target_lang)

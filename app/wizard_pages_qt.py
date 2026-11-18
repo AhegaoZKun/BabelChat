@@ -19,7 +19,10 @@ from PyQt6.QtWidgets import (
 )
 
 from app.about_dialog import _create_logo_pixmap
+from app.capture_source_qt import CaptureSourceWidget
 from app.i18n import UI_LANGUAGES, tr
+from app.ocr_capture import OcrRegion
+from app.ocr_engine import script_for_language
 from app.wizard_style import GOLD_BTN_STYLE as _GOLD_BTN_STYLE
 
 
@@ -74,6 +77,35 @@ def build_welcome_page(wizard) -> QWidget:
     return page
 
 
+def build_source_page(wizard) -> QWidget:
+    """Where chat comes from: the screen (recommended) or the game's memory."""
+    page = QWidget()
+    layout = QVBoxLayout(page)
+
+    title = QLabel(tr("wizard.source.title"))
+    title.setStyleSheet("color: #FFD200; font-size: 20px; font-weight: bold;")
+    layout.addWidget(title)
+
+    intro = QLabel(tr("wizard.source.intro"))
+    intro.setStyleSheet("color: #ccc; font-size: 13px;")
+    intro.setWordWrap(True)
+    layout.addWidget(intro)
+    layout.addSpacing(8)
+
+    config = wizard._config
+    wizard._capture = CaptureSourceWidget(
+        config.capture_source,
+        OcrRegion.from_dict(config.ocr_region),
+        config.ocr_portal_token,
+        # The language page comes later but is already built.
+        script_for_test=lambda: script_for_language(wizard._own_lang.currentData()),
+    )
+    wizard._capture.source_changed.connect(wizard._on_source_changed)
+    layout.addWidget(wizard._capture)
+    layout.addStretch()
+    return page
+
+
 def build_ready_page(wizard) -> QWidget:
     page = QWidget()
     layout = QVBoxLayout(page)
@@ -114,6 +146,8 @@ def build_ready_page(wizard) -> QWidget:
     addon_layout.addWidget(wizard._addon_status_label)
 
     layout.addWidget(addon_group)
+    # The addon feeds the memory source only; reading the screen does not use it.
+    wizard._addon_group = addon_group
 
     layout.addSpacing(8)
 

@@ -33,6 +33,13 @@ LOCALISED_MODULES = (
     # is the only check it gets — which is the reason to keep it honest.
     "settings_gtk.py",
     "setup_wizard_gtk.py",
+    # The screen-capture controls: one widget per front end, shared by the wizard
+    # and the settings window, plus the full-screen area pickers.
+    "ocr_report.py",
+    "capture_source_qt.py",
+    "region_picker_qt.py",
+    "capture_source_gtk.py",
+    "region_picker_gtk.py",
 )
 
 

@@ -4,7 +4,19 @@ lingua-language-detector>=2.1.0
 deepl>=1.18.0
 requests>=2.31.0
 
-# Windows only
+# Screen (OCR) chat source — the default way BabelChat reads chat. It looks at the
+# chat area of the screen and never touches the game. RapidOCR ships its
+# Chinese/English models in the wheel; models for other scripts (Cyrillic, Latin
+# accents, Korean, Japanese) are fetched on first use, or bundled by
+# tools/fetch_ocr_models.py for an offline build.
+numpy>=1.26
+mss>=9.0.0
+rapidocr>=3.0.0
+onnxruntime>=1.18
+# Optional fallback engine if RapidOCR cannot run (also needs the `tesseract` binary):
+# pytesseract>=0.3.10
+
+# Windows only (the opt-in memory source)
 pymem>=1.14.0; sys_platform == "win32"
 
 # Linux only (global hotkeys — optional, gracefully skipped if absent)

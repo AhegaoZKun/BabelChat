@@ -241,7 +241,25 @@ None of that is permission. Blizzard's [End User License Agreement](https://www.
 
 Whether Blizzard ever makes that determination about this program, nobody outside Blizzard can say. We know of no account action over BabelChat, and that is all we know — it is not the same as being allowed. **Run the companion at your own risk.** If that is not a risk you want, the addon alone still glosses gaming terms in your chat and asks nothing of the game process.
 
-There is no process-free real-time mode today. When memory reading is unavailable — access denied, no buffer found — the companion falls back to `WoWChatLog.txt`, and messages then arrive minutes late, in bursts: WoW buffers that file and nothing on our side can hurry it. It is a fallback, not a mode to choose. A transport that reads the buffer from screen pixels instead, with no handle to the process at all, is planned for 3.5.0 — [#17](https://github.com/Yumash/BabelChat/issues/17).
+### Screen mode (OCR)
+
+There is a process-free real-time mode: the companion can read your chat **off the screen** instead of out of the game. You drag a box around the WoW chat window once; about once a second it captures that box and recognises the text in it.
+
+| In screen mode the companion… | Exactly |
+| ----------------------------- | ------- |
+| Opens the game process | Never. There is no handle, no `ReadProcessMemory`, no `process_vm_readv`. A test over the source asserts it, rather than this table promising it |
+| Looks at | The pixels of the box you chose, the way a screenshot or a streaming capture does. On most Wayland desktops the desktop asks you once to share a screen; the portal then hands over that whole screen's frames, and the companion keeps only the box, in memory |
+| Sends | No picture ever leaves your machine. Recognition runs locally; only the recognised chat text goes to the translation provider, exactly as before |
+| Needs the addon | No. It reads whatever your chat window shows |
+| Writes to the game or sends input | Never. Your reply still goes to the clipboard |
+
+That is a different kind of thing from reading the game's memory — screen output, not process memory — and **that is all it is**. It is not Blizzard's permission, and nobody outside Blizzard can say how they would regard it. It is the default for new installs, and reading game memory stays available as an explicit choice.
+
+It is not filtered by channel: it translates whatever your chat window shows, so choose what is visible in WoW's own chat settings. (The channel switches in Settings are for the memory source and are greyed out in screen mode.)
+
+What it costs you: it is only as good as the text on screen. Turn off chat fading in WoW so lines stay visible, keep the box clear of the BabelChat overlay, and expect the occasional misread word; text in a script other than the one your language is written in is read badly. Memory reading is exact; this is not. It also needs one thing installed on Wayland desktops that are not wlroots-based: GStreamer's PipeWire plugin (`gst-plugin-pipewire` on Arch, `gstreamer1.0-pipewire` on Debian/Ubuntu).
+
+When neither source is available the companion falls back to `WoWChatLog.txt`, and messages then arrive minutes late, in bursts: WoW buffers that file and nothing on our side can hurry it. It is a fallback, not a mode to choose. A second process-free transport, where the addon draws its buffer as pixels, is still planned — [#17](https://github.com/Yumash/BabelChat/issues/17).
 
 ## Privacy — what leaves your machine
 

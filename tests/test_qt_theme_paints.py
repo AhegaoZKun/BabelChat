@@ -104,7 +104,7 @@ def test_no_settings_tab_paints_a_light_page(tab, qt_app, monkeypatch):
         dialog.deleteLater()
 
 
-@pytest.mark.parametrize("page", [0, 1, 2, 3, 4])
+@pytest.mark.parametrize("page", range(6))  # every wizard page; see TOTAL_PAGES
 def test_no_wizard_page_paints_a_light_page(page, qt_app, monkeypatch):
     """The wizard is what every fresh install sees first, and it was wrapped in
     the same scroll areas on the same day."""

@@ -388,6 +388,12 @@ class ChatOverlay(ReplyPanelMixin, FramelessDragResizeMixin, QWidget):
         "access_denied": ("WoW: \U0001f512", "#FF6B6B", "overlay.wow.access_denied"),
         "no_buffer": ("WoW: ?", "#FF9F40", "overlay.wow.no_buffer"),
         "chat_locked": ("WoW: \U0001f512", "#FFD200", "overlay.wow.chat_locked"),
+        # Screen capture (OCR) source.
+        "ocr_no_region": ("WoW: ?", "#FFD200", "overlay.wow.ocr_no_region"),
+        "ocr_capture": ("WoW: \u2716", "#FF6B6B", "overlay.wow.ocr_capture"),
+        "ocr_no_engine": ("WoW: \u2716", "#FF6B6B", "overlay.wow.ocr_no_engine"),
+        "ocr_black": ("WoW: ?", "#FF9F40", "overlay.wow.ocr_black"),
+        "ocr_unrecognised": ("WoW: ?", "#FF9F40", "overlay.wow.ocr_unrecognised"),
     }
 
     def _update_wow_status(self) -> None:

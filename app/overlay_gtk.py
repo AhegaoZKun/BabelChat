@@ -853,9 +853,19 @@ class ChatOverlayGtk:
         elif status == "searching":
             label.set_label("WoW: \u2026")
             label.add_css_class("bc-wow-search")
+        elif status in ("ocr_no_region", "ocr_black", "ocr_unrecognised"):
+            # Something the user can fix, not a failure: same "waiting" look.
+            label.set_label("WoW: ?")
+            label.add_css_class("bc-wow-search")
         else:
             label.set_label("WoW: \u2716")
             label.add_css_class("bc-wow-off")
+        # A named problem explains itself on hover, as it does in the Qt overlay.
+        tip = ""
+        if status not in ("attached", "searching", "offline"):
+            text = tr(f"overlay.wow.{status}")
+            tip = "" if text == f"overlay.wow.{status}" else text
+        label.set_tooltip_text(tip or None)
         return True  # keep the GLib timer running
 
     def toggle_visible(self) -> bool:

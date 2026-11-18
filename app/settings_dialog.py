@@ -31,12 +31,15 @@ from PyQt6.QtWidgets import (
 
 from app import debug_log
 from app.about_tab_qt import build_about_tab
+from app.capture_source_qt import CaptureSourceWidget
 from app.config import CHANNEL_TOGGLES, AppConfig, detect_wow_path
 
 # DeepL supported target languages
 # WoW-inspired dark theme stylesheet
 from app.hotkey_edit import HotkeyEdit  # noqa: E402  (re-export)
 from app.i18n import UI_LANGUAGES, tr
+from app.ocr_capture import OcrRegion
+from app.ocr_engine import script_for_language
 from app.provider_settings_qt import ProviderSettingsGroup
 
 
@@ -138,6 +141,9 @@ class SettingsDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
+        # Chat source: the screen (OCR) or the game's memory
+        layout.addWidget(self._create_capture_group())
+
         # API Key
         layout.addWidget(self._create_api_group())
 
@@ -205,12 +211,47 @@ class SettingsDialog(QDialog):
             box.setChecked(getattr(self._config, toggle.field))
             ch_grid.addWidget(box, index // 3, index % 3)
             self._channel_boxes[toggle.field] = box
+        # The screen source translates whatever channels the game's chat window
+        # shows, so these toggles do nothing while it is selected. Say so, and
+        # grey them out, rather than leave switches that appear to matter.
+        self._channels_note = QLabel(tr("settings.channels_ocr_note"))
+        self._channels_note.setWordWrap(True)
+        self._channels_note.setStyleSheet("color: #999; font-size: 11px;")
+        ch_grid.addWidget(self._channels_note, (len(CHANNEL_TOGGLES) + 2) // 3, 0, 1, 3)
+        self._channels_group = ch_group
+        self._capture.source_changed.connect(self._show_channels_for)
+        self._show_channels_for(self._capture.source)
         layout.addWidget(ch_group)
 
         layout.addStretch()
         return tab
 
     # ── Translation providers ────────────────────────────────────
+
+    def _create_capture_group(self) -> QGroupBox:
+        group = QGroupBox(tr("settings.capture_group"))
+        layout = QVBoxLayout(group)
+        self._capture = CaptureSourceWidget(
+            self._config.capture_source,
+            OcrRegion.from_dict(self._config.ocr_region),
+            self._config.ocr_portal_token,
+            script_for_test=self._script_for_test,
+            interval=self._config.ocr_interval,
+            script=self._config.ocr_script,
+        )
+        layout.addWidget(self._capture)
+        return group
+
+    def _show_channels_for(self, source: str) -> None:
+        reading_screen = source == "ocr"
+        for box in self._channel_boxes.values():
+            box.setEnabled(not reading_screen)
+        self._channels_note.setVisible(reading_screen)
+
+    def _script_for_test(self) -> str:
+        """The script a test read should use: the chosen one, or the language's."""
+        chosen = self._capture.script
+        return script_for_language(self._own_lang.currentData()) if chosen == "auto" else chosen
 
     def _create_api_group(self) -> QGroupBox:
         """Credential fields for every registered provider.
@@ -383,6 +424,12 @@ class SettingsDialog(QDialog):
         # apply_to writes both the credentials and the preferred provider.
         self._provider_group.apply_to(self._config)
         self._config.wow_path = self._wow_path_input.text().strip()
+        self._config.capture_source = self._capture.source
+        region = self._capture.region
+        self._config.ocr_region = region.to_dict() if region else {}
+        self._config.ocr_portal_token = self._capture.portal_token
+        self._config.ocr_interval = self._capture.interval
+        self._config.ocr_script = self._capture.script
         self._config.ui_language = self._ui_lang.currentData()
         self._config.own_language = self._own_lang.currentData()
         self._config.target_language = self._target_lang.currentData()

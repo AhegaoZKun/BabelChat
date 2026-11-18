@@ -51,3 +51,11 @@ built the companion app.
 
 MIT License. Full description, provider comparison and privacy notes:
 <https://github.com/Yumash/BabelChat>
+
+
+## WoW: Forever
+
+For WoW: Forever (Camelot), use the `BabelChat_Camelot.toc` manifest in the
+addon folder. It targets interface `16001` and loads the same addon code and
+libraries as the Retail manifest. Install the `BabelChat` folder in Forever's
+`Interface/AddOns` directory.

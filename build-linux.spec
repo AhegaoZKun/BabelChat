@@ -76,6 +76,22 @@ for _ns in ("Gtk-4.0", "Gdk-4.0", "Graphene-1.0", "Gsk-4.0"):
 # PyGObject + GTK collection (typelibs, libs, data) via the gi hooks.
 gi_datas, gi_binaries, gi_hidden = collect_all("gi")[:3]
 
+# The screen (OCR) chat source. RapidOCR ships its model files and YAML config as
+# package data, and onnxruntime its native library; neither is found by import
+# analysis, so without these the default chat source cannot start in the bundle.
+ocr_datas, ocr_binaries, ocr_hidden = [], [], []
+for _pkg in ("rapidocr", "onnxruntime"):
+    _d, _b, _h = collect_all(_pkg)
+    ocr_datas += _d
+    ocr_binaries += _b
+    ocr_hidden += _h
+
+# Per-script recognition models fetched by tools/fetch_ocr_models.py, if the
+# build machine ran it. The default (Chinese/English) model already rides in the
+# rapidocr wheel, so only the other scripts are listed.
+import glob as _glob
+_ocr_models = [(_p, "ocr_models") for _p in _glob.glob("ocr_models/*_PP-OCR*_rec_*.onnx")]
+
 a = Analysis(
     ["app/main_gtk.py"],
     pathex=["."],
@@ -83,6 +99,7 @@ a = Analysis(
         ("app/libbabelchat_scanner.so", "."),
         *_extra_binaries,
         *gi_binaries,
+        *ocr_binaries,
     ],
     datas=[
         ("assets/icon.png", "assets"),
@@ -92,6 +109,8 @@ a = Analysis(
         ("addon/BabelChat", "addon/BabelChat"),
         *_extra_datas,
         *gi_datas,
+        *ocr_datas,
+        *_ocr_models,
     ],
     hiddenimports=[
         # Engine / non-UI
@@ -122,6 +141,18 @@ a = Analysis(
         "app.main_gtk",
         "app.overlay_gtk",
         "app.settings_gtk",
+        "app.setup_wizard_gtk",
+        "app.capture_source_gtk",
+        "app.region_picker_gtk",
+        # Screen (OCR) chat source
+        "numpy",
+        "PIL",
+        "mss",
+        "app.ocr_parse",
+        "app.ocr_engine",
+        "app.ocr_capture",
+        "app.ocr_reader",
+        *ocr_hidden,
         # PyGObject / GTK
         "gi",
         "gi.repository.Gtk",
@@ -140,9 +171,7 @@ a = Analysis(
     excludes=[
         "tkinter",
         "matplotlib",
-        "numpy",
         "scipy",
-        "PIL",
         "pymem",
         "pymem.process",
         "pymem.exception",

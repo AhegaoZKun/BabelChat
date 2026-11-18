@@ -8,6 +8,60 @@ ship under the same number.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Screen (OCR) chat source — now the default for new installs.** BabelChat can
+  read chat off the screen instead of out of the game: you drag a box around your
+  WoW chat window once, and it recognises the text in that box about once a second.
+  It never opens the game process. This is the process-free mode the README has
+  been waiting on ([#17](https://github.com/Yumash/BabelChat/issues/17)); where #17
+  has the addon draw the buffer as pixels, this source needs no addon at all and
+  works with whatever the chat window shows. The two share the capture, area-picker
+  and wizard plumbing, so the pixel transport can be added beside it.
+  - Capture: direct on Windows and X11, `grim` on wlroots compositors, and on other
+    Wayland desktops the ScreenCast portal (the desktop asks once; the answer is
+    remembered). GStreamer's PipeWire plugin is needed for that last case.
+  - Text recognition: RapidOCR (ONNX) with a model per script, chosen from your own
+    language; Tesseract as a fallback. `tools/fetch_ocr_models.py` bundles the
+    models for an offline build.
+  - Recognition only runs when the area's pixels changed, and the wait after each
+    pass grows with how long recognition took.
+  - Tolerant of what OCR gets wrong: stray marks on channel tags, near-miss
+    spellings, wrapped lines joined back into one message, and the overlay's own
+    rows ignored if the area overlaps it. A channel a player made is Custom even
+    if its name contains "Trade".
+  - The setup wizard has a new "Chat source" step that labels the screen source as
+    recommended and the default, and skips the WoW-path step when it is chosen.
+    Settings has the same control, with a Test button that shows what it can read.
+  - Reading game memory stays available, chosen explicitly, with the Terms of
+    Service warning beside it.
+  - Not filtered by channel: it translates whatever your WoW chat window shows, and
+    you choose what is visible in the game's own chat settings. The channel toggles
+    are greyed out in Settings while it is selected, and the overlay gets a filter
+    tab for every channel.
+  - The chat already on screen when reading starts is shown in the overlay,
+    untranslated, so it is clear it works before anyone speaks. The reader works out
+    for itself whether new lines enter the chat at the bottom or the top.
+  - The Test button lists what it read line by line (a chat message, or text that is
+    not one), and the overlay says so when text is read but none of it looks like chat.
+
+### Changed
+
+- An existing config keeps reading game memory (`capture_source` is written as
+  `memory` on upgrade); only new installs default to the screen source.
+- The overlay's connection indicator now comes from the live source, so it can name
+  what is wrong with the screen source (no area chosen, no screen access, no
+  recognition engine, a black capture) the way it already names memory problems.
+
+### Notes
+
+- This is not Blizzard's permission. Reading the screen is a different kind of
+  thing from reading process memory, and that is all it is; see the README.
+
+---
+
 ## [3.4.1] — 2026-08-26
 
 ### Fixed

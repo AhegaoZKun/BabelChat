@@ -53,6 +53,8 @@ tools/*
 # docs/tech/addon.md points at this one, and an ignored generator makes the
 # committed icon impossible for anyone else to regenerate.
 !tools/make_addon_icon.py
+# Run before packaging so a build works offline; the specs bundle what it fetches.
+!tools/fetch_ocr_models.py
 
 # Rust build artifacts
 babelchat_scanner/target/
@@ -110,3 +112,6 @@ babelchat_scanner_*/target/
 # extracted from CHANGELOG.md for the version being published.
 /.release
 /RELEASE_NOTES.md
+
+# OCR recognition models (downloaded; see tools/fetch_ocr_models.py)
+ocr_models/

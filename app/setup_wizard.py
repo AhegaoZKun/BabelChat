@@ -30,15 +30,16 @@ from app.settings_dialog import (
 )
 from app.translators import all_providers
 from app.translators import get as provider_get
-from app.wizard_pages_qt import build_ready_page, build_welcome_page
+from app.wizard_pages_qt import build_ready_page, build_source_page, build_welcome_page
 from app.wizard_style import GOLD_BTN_STYLE as _GOLD_BTN_STYLE
 
 PAGE_WELCOME = 0
-PAGE_API_KEY = 1
-PAGE_WOW_PATH = 2
-PAGE_LANGUAGE = 3
-PAGE_READY = 4
-TOTAL_PAGES = 5
+PAGE_SOURCE = 1
+PAGE_API_KEY = 2
+PAGE_WOW_PATH = 3
+PAGE_LANGUAGE = 4
+PAGE_READY = 5
+TOTAL_PAGES = 6
 
 # Gold-styled primary action button
 
@@ -70,6 +71,7 @@ class SetupWizard(QDialog):
         # Validate buttons came out as blank slivers. On step 2 of 5, on every
         # fresh install.
         self._stack.addWidget(scrollable(self._create_welcome_page()))
+        self._stack.addWidget(scrollable(self._create_source_page()))
         self._stack.addWidget(scrollable(self._create_api_key_page()))
         self._stack.addWidget(scrollable(self._create_wow_path_page()))
         self._stack.addWidget(scrollable(self._create_language_page()))
@@ -128,9 +130,23 @@ class SetupWizard(QDialog):
         layout.addStretch()
         return widget
 
+    def _active_pages(self) -> list[int]:
+        """Indices of the pages the user will actually see, in order.
+
+        The WoW-path page finds the game's folder for the addon and the chat log,
+        neither of which the screen source uses, so it is skipped when reading
+        the screen.
+        """
+        pages = list(range(TOTAL_PAGES))
+        if self._capture.source == "ocr":
+            pages.remove(PAGE_WOW_PATH)
+        return pages
+
     def _update_step_indicator(self) -> None:
         current = self._stack.currentIndex()
+        active = self._active_pages()
         for i, dot in enumerate(self._step_dots):
+            dot.setVisible(i in active)
             if i < current:
                 dot.setStyleSheet("background: #997D00; border-radius: 6px;")
             elif i == current:
@@ -140,12 +156,20 @@ class SetupWizard(QDialog):
 
         step_names = tr("wizard.steps").split("|")
         name = step_names[current] if current < len(step_names) else ""
-        self._step_text.setText(tr("wizard.step_of", current=current + 1, total=TOTAL_PAGES, name=name))
+        position = active.index(current) + 1 if current in active else 1
+        self._step_text.setText(tr("wizard.step_of", current=position, total=len(active), name=name))
 
     # ── Page 1: Welcome ──────────────────────────────────────────
 
     def _create_welcome_page(self) -> QWidget:
         return build_welcome_page(self)
+
+    def _create_source_page(self) -> QWidget:
+        return build_source_page(self)
+
+    def _on_source_changed(self, _source: str) -> None:
+        # The number of steps depends on the choice.
+        self._update_navigation()
 
     def _on_ui_lang_changed(self) -> None:
         lang = self._ui_lang_combo.currentData()
@@ -159,6 +183,7 @@ class SetupWizard(QDialog):
             # page three. Same two calls _finish makes, for the same reason.
             self._provider_group.apply_to(self._config)
             self._config.wow_path = self._wow_path_input.text().strip()
+            self._apply_capture_to(self._config)
             # Signal main to restart wizard with new language
             self._restart_requested = True
             self.done(2)  # Custom result code: restart
@@ -384,9 +409,19 @@ class SetupWizard(QDialog):
             if spec is not None:
                 preferred = f"<br><b>{tr('settings.api.preferred')}</b> {spec.display_name}"
 
+        if self._capture.source == "ocr":
+            state = tr("wizard.source.area_set" if self._capture.region else "wizard.source.area_none")
+            source_rows = (
+                f"{tr('wizard.summary.source_ocr')}<br>{tr('wizard.summary.area', state=state)}<br>"
+            )
+            self._addon_group.setVisible(False)
+        else:
+            source_rows = f"{tr('wizard.summary.source_memory')}<br><b>{tr('wizard.ready.wow_path')}</b> {wow}<br>"
+            self._addon_group.setVisible(True)
+
         self._summary_label.setText(
             f"<b>{tr('wizard.ready.translation')}</b> {backend_str}{preferred}<br>"
-            f"<b>{tr('wizard.ready.wow_path')}</b> {wow}<br>"
+            f"{source_rows}"
             f"<b>{tr('wizard.ready.own_lang')}</b> {own}<br>"
             f"<b>{tr('wizard.ready.target_lang')}</b> {target}"
         )
@@ -394,19 +429,24 @@ class SetupWizard(QDialog):
     # ── Navigation ────────────────────────────────────────────────
 
     def _go_next(self) -> None:
+        active = self._active_pages()
         current = self._stack.currentIndex()
-        if current == TOTAL_PAGES - 1:
+        if current == active[-1]:
             self._finish()
             return
-        self._stack.setCurrentIndex(current + 1)
-        self._on_page_entered(current + 1)
+        target = active[active.index(current) + 1] if current in active else current + 1
+        self._stack.setCurrentIndex(target)
+        self._on_page_entered(target)
         self._update_navigation()
 
     def _go_back(self) -> None:
+        active = self._active_pages()
         current = self._stack.currentIndex()
-        if current > 0:
-            self._stack.setCurrentIndex(current - 1)
-            self._on_page_entered(current - 1)
+        position = active.index(current) if current in active else 0
+        if position > 0:
+            target = active[position - 1]
+            self._stack.setCurrentIndex(target)
+            self._on_page_entered(target)
             self._update_navigation()
 
     def _on_page_entered(self, index: int) -> None:
@@ -437,7 +477,7 @@ class SetupWizard(QDialog):
 
         self._back_btn.setVisible(current > 0)
 
-        if current == TOTAL_PAGES - 1:
+        if current == self._active_pages()[-1]:
             self._next_btn.setText(tr("wizard.start"))
         else:
             self._next_btn.setText(tr("wizard.next"))
@@ -458,11 +498,18 @@ class SetupWizard(QDialog):
     def _finish(self) -> None:
         self._provider_group.apply_to(self._config)
         self._config.wow_path = self._wow_path_input.text().strip()
+        self._apply_capture_to(self._config)
         self._config.own_language = self._own_lang.currentData()
         self._config.target_language = self._target_lang.currentData()
         self._config.ui_language = tr.get_language()
         self._config.save()
         self.accept()
+
+    def _apply_capture_to(self, config: AppConfig) -> None:
+        config.capture_source = self._capture.source
+        region = self._capture.region
+        config.ocr_region = region.to_dict() if region else {}
+        config.ocr_portal_token = self._capture.portal_token
 
     def get_config(self) -> AppConfig:
         return self._config

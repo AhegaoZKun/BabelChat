@@ -107,6 +107,14 @@ class PipelineConfig:
     translation_enabled: bool = True
     db_path: str = field(default_factory=lambda: DEFAULT_DB_PATH)
     use_memory_reader: bool = True  # Reads addon buffer from WoW process memory
+    # Which source feeds the pipeline: "memory" (addon buffer, read out of the
+    # game process) or "ocr" (the chat area, read off the screen).
+    capture_source: str = "memory"
+    ocr_region: dict = field(default_factory=dict)
+    ocr_interval: float = 1.0
+    ocr_script: str = "default"  # concrete script; the entry points resolve "auto"
+    ocr_portal_token: str = ""
+    ocr_on_token: Callable[[str], None] | None = None
 
 
 class TranslationPipeline:
@@ -146,9 +154,126 @@ class TranslationPipeline:
         #: rather than on every message.
         self._reported_off_channels: set = set()
         self._memory_watcher = None
+        self._ocr_watcher = None
+        self._started = False
+        self._build_source(config)
+
+    # ── chat source ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _ocr_settings(config: PipelineConfig):
+        from app.ocr_capture import OcrRegion
+        from app.ocr_reader import OcrSettings
+
+        return OcrSettings(
+            region=OcrRegion.from_dict(config.ocr_region),
+            script=config.ocr_script,
+            interval=max(0.25, float(config.ocr_interval or 1.0)),
+            restore_token=config.ocr_portal_token,
+        )
+
+    def _build_source(self, config: PipelineConfig) -> None:
+        """Create the one live chat source the config asks for.
+
+        Exactly one of the two exists at a time. Running both would deliver every
+        message twice, and the screen source in particular must be a choice, not
+        something that quietly runs alongside reading the game.
+        """
+        if config.capture_source == "ocr":
+            try:
+                from app.ocr_reader import OcrChatWatcher
+
+                self._ocr_watcher = OcrChatWatcher(
+                    self._on_new_line,
+                    self._ocr_settings(config),
+                    on_token=config.ocr_on_token,
+                    on_history=self._on_ocr_history,
+                )
+                logger.info("Screen capture (OCR) selected as the chat source")
+            except ImportError as exc:
+                logger.warning("OCR source unavailable (%s); falling back to the chat log file", exc)
+            return
         if config.use_memory_reader and HAS_MEMORY_READER:
             self._memory_watcher = MemoryChatWatcher(self._on_new_line)
             logger.info("Memory reader available, will try real-time mode")
+
+    @staticmethod
+    def _channel_allowed(config: PipelineConfig, channel: Channel) -> bool:
+        """Whether a message from `channel` is wanted.
+
+        Reading the screen takes whatever the chat window shows: the player
+        already chooses which channels are visible in the game's own chat
+        settings, and a second, invisible filter here could only make a message
+        they can see on screen silently fail to arrive. The toggles are for the
+        memory and log sources, which see every channel whether it is shown or not.
+        """
+        return config.capture_source == "ocr" or channel in config.enabled_channels
+
+    def _on_ocr_history(self, lines: list[str]) -> None:
+        """Show the chat that was already on screen when reading began.
+
+        The same thing `load_history` does for the log file: shown as it is, not
+        translated, and only for channels that are switched on. They are also
+        remembered by the duplicate filter, so a line that scrolls by again is not
+        sent to the translator as if it were new.
+        """
+        for line in lines:
+            msg = parse_line(line)
+            if msg is None or not self._channel_allowed(self._config, msg.channel):
+                continue
+            self._dedup.is_duplicate((msg.author, msg.text))
+            self._on_message(TranslatedMessage(original=msg, translation=None, msg_id=next(self._msg_id_counter)))
+
+    def _stop_source(self, *, clear: bool = True) -> None:
+        for watcher in (self._memory_watcher, self._ocr_watcher):
+            if watcher is not None:
+                watcher.stop()
+        if clear:
+            self._memory_watcher = None
+            self._ocr_watcher = None
+
+    def _switch_source(self, config: PipelineConfig) -> None:
+        """Settings changed the source: swap it without restarting the app."""
+        self._stop_source()
+        self._build_source(config)
+        if self._started:
+            self._start_source()
+
+    def _start_source(self) -> bool:
+        """Start whichever source exists. False means fall back to the file watcher."""
+        if self._ocr_watcher is not None:
+            self._ocr_watcher.start()  # problems are reported through .problem, never raised
+            logger.info("Pipeline started (screen capture)")
+            return True
+        if self._memory_watcher is not None:
+            try:
+                self._memory_watcher.start()
+                logger.info("Pipeline started (memory reader only)")
+                return True
+            except (RuntimeError, OSError) as e:
+                logger.warning("Memory reader failed to start: %s", e)
+        return False
+
+    def source_status(self) -> str:
+        """What the overlay's connection indicator should say about the source.
+
+        "attached" and "searching" are the ordinary answers, "offline" means there
+        is no live source, and anything else is the NAME of a specific problem the
+        overlay can explain. A named problem outranks "attached": that is the
+        whole point of naming them.
+        """
+        source = self.chat_source
+        if source is None:
+            return "offline"
+        problem = getattr(source, "problem", "")
+        if problem:
+            return problem
+        return "attached" if source.is_attached else "searching"
+
+    @property
+    def chat_source(self):
+        """The live source (screen or memory), for status display. May be None."""
+        return self._ocr_watcher or self._memory_watcher
 
     @property
     def translation_enabled(self) -> bool:
@@ -171,8 +296,13 @@ class TranslationPipeline:
         # carries translation_enabled_default, which would silently override a
         # user's live TL toggle (and desync the toggle button) on settings save.
         config.translation_enabled = self._config.translation_enabled
+        old_source = self._config.capture_source
         self._config = config
         self._detector.own_language = config.own_language
+        if config.capture_source != old_source:
+            self._switch_source(config)
+        elif self._ocr_watcher is not None:
+            self._ocr_watcher.configure(self._ocr_settings(config))
         if old_own != config.own_language:
             logger.info("Own language changed: %s -> %s", old_own, config.own_language)
         if old_target != config.target_lang:
@@ -186,7 +316,7 @@ class TranslationPipeline:
             msg = parse_line(line)
             if msg is None:
                 continue
-            if msg.channel not in self._config.enabled_channels:
+            if not self._channel_allowed(self._config, msg.channel):
                 continue
             messages.append(TranslatedMessage(original=msg, translation=None))
         return messages
@@ -199,16 +329,11 @@ class TranslationPipeline:
         Running both causes duplicate messages (WoW buffers chatlog writes
         for minutes, then flushes a huge batch that bypasses dedup TTL).
         """
-        # Try memory reader first (real-time, preferred)
-        if self._memory_watcher:
-            try:
-                self._memory_watcher.start()
-                logger.info("Pipeline started (memory reader only)")
-                return
-            except (RuntimeError, OSError) as e:
-                logger.warning("Memory reader failed to start: %s", e)
-
-        # Fallback: file watcher only
+        self._started = True
+        # A live source (screen or memory) first; the file watcher only as the
+        # fallback when neither is available.
+        if self._start_source():
+            return
         self._watcher.start()
         logger.info("Pipeline started (file watcher only)")
 
@@ -224,8 +349,8 @@ class TranslationPipeline:
 
     def stop(self) -> None:
         """Stop the pipeline."""
-        if self._memory_watcher:
-            self._memory_watcher.stop()
+        self._started = False
+        self._stop_source(clear=False)
         self._watcher.stop()  # safe even if not started
         self._cache.close()
         logger.info("Pipeline stopped")
@@ -263,7 +388,7 @@ class TranslationPipeline:
             return
 
         # Filter by channel
-        if msg.channel not in cfg.enabled_channels:
+        if not self._channel_allowed(cfg, msg.channel):
             # Once per channel, at a level the user will actually see. A tester
             # joined a channel, typed in it, and got nothing — the reason was
             # here, at DEBUG, behind a console that is off by default. The

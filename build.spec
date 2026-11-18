@@ -1,11 +1,31 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for BabelChat single .exe build."""
 
+from PyInstaller.utils.hooks import collect_all
+
+# The screen (OCR) chat source. RapidOCR ships its model files and YAML config as
+# package data, and onnxruntime its native library; neither is found by import
+# analysis, so without these the default chat source cannot start in the .exe.
+_ocr_datas, _ocr_binaries, _ocr_hidden = [], [], []
+for _pkg in ("rapidocr", "onnxruntime"):
+    _d, _b, _h = collect_all(_pkg)
+    _ocr_datas += _d
+    _ocr_binaries += _b
+    _ocr_hidden += _h
+
+# Per-script recognition models fetched by tools/fetch_ocr_models.py, if the
+# build machine ran it. The default (Chinese/English) model already rides in the
+# rapidocr wheel, so only the other scripts are listed.
+import glob as _glob
+_ocr_models = [(_p, "ocr_models") for _p in _glob.glob("ocr_models/*_PP-OCR*_rec_*.onnx")]
+
 a = Analysis(
     ["app/main.py"],
     pathex=["."],
-    binaries=[('app/babelchat_scanner_win.dll', '.')],
+    binaries=[('app/babelchat_scanner_win.dll', '.'), *_ocr_binaries],
     datas=[
+        *_ocr_datas,
+        *_ocr_models,
         ("assets/icon.ico", "assets"),
         ("assets/icon.png", "assets"),
         # GigaChat is served behind a root certifi does not carry, so
@@ -49,6 +69,17 @@ a = Analysis(
         "app.phrasebook",
         "app.slang",
         "requests",
+        # Screen (OCR) chat source
+        "numpy",
+        "PIL",
+        "mss",
+        "app.ocr_parse",
+        "app.ocr_engine",
+        "app.ocr_capture",
+        "app.ocr_reader",
+        "app.capture_source_qt",
+        "app.region_picker_qt",
+        *_ocr_hidden,
     ],
     hookspath=[],
     hooksconfig={},
@@ -56,9 +87,7 @@ a = Analysis(
     excludes=[
         "tkinter",
         "matplotlib",
-        "numpy",
         "scipy",
-        "PIL",
         "pynput",
         "app.memory_reader_linux",
         "app.hotkeys_linux",
